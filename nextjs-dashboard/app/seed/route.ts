@@ -103,15 +103,22 @@ async function seedRevenue() {
 
 export async function GET() {
   try {
-    const result = await sql.begin((sql) => [
-      seedUsers(),
-      seedCustomers(),
-      seedInvoices(),
-      seedRevenue(),
-    ]);
+    // Run seed steps sequentially. Running them inside sql.begin with
+    // the existing helper functions caused the transaction wrapper to be
+    // misused (the helpers use the top-level `sql`), and could surface
+    // unhelpful errors. Sequential execution is simpler and reliable
+    // for initial seeding.
+    await seedUsers();
+    await seedCustomers();
+    await seedInvoices();
+    await seedRevenue();
 
     return Response.json({ message: 'Database seeded successfully' });
   } catch (error) {
-    return Response.json({ error }, { status: 500 });
+    // Log the error server-side and return a plain message so the
+    // response JSON is serializable and helpful.
+    console.error('Seed route error:', error);
+    const msg = (error as any)?.message ?? String(error);
+    return Response.json({ error: msg }, { status: 500 });
   }
 }
