@@ -1,3 +1,4 @@
+// @ts-ignore: side-effect CSS import without type declarations
 import '@/app/ui/global.css';
 import { inter } from '@/app/ui/fonts';
 
