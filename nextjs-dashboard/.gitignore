@@ -34,3 +34,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Editor directories and files
+.vscode/
+.idea/
+
+# logs
+*.log
+
+# pnpm
+node_modules/.pnpm-debug.log
+
+# optionally ignore local env examples
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+/.turbo
