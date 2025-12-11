@@ -20,7 +20,7 @@
     "react-server-dom-parcel": "^19.2.1",
     "react-server-dom-turbopack": "^19.2.1",
     "react-server-dom-webpack": "^19.2.1",
-    "tailwindcss": "4.1.17",
+    "tailwindcss": "3.4.17",
     "typescript": "5.7.3",
     "use-debounce": "^10.0.4",
     "zod": "^3.25.17"
@@ -30,7 +30,7 @@
     "@types/node": "22.10.7",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
-    "@tailwindcss/postcss": "4.1.17",
+    
     "cross-env": "^7.0.3"
   },
   "pnpm": {
