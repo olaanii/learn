@@ -7,7 +7,7 @@
 
 ## Equb Pool Operations
 - [x] Pool creation with tier limits (contract + backend stub)
-- [ ] Streamed payout schedule
+- [x] Streamed payout schedule (contract + backend stub)
 - [ ] Contribution tracking by round
 - [ ] Auto-freeze on missed contributions
 

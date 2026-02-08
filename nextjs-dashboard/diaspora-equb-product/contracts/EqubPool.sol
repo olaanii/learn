@@ -31,6 +31,7 @@ contract EqubPool {
     event JoinedPool(uint256 indexed poolId, address indexed member);
     event ContributionReceived(uint256 indexed poolId, address indexed member, uint256 round);
     event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round);
+    event PayoutStreamScheduled(uint256 indexed poolId, address indexed beneficiary, uint256 total, uint256 rounds);
 
     constructor(
         PayoutStream _payoutStream,
@@ -97,5 +98,18 @@ contract EqubPool {
         creditRegistry.updateScore(member, -10);
 
         emit DefaultTriggered(poolId, member, pool.currentRound);
+    }
+
+    function schedulePayoutStream(
+        uint256 poolId,
+        address beneficiary,
+        uint256 total,
+        uint256 upfrontPercent,
+        uint256 totalRounds
+    ) external {
+        Pool storage pool = pools[poolId];
+        require(pool.isMember[beneficiary], "not member");
+        payoutStream.createStream(poolId, beneficiary, total, upfrontPercent, totalRounds);
+        emit PayoutStreamScheduled(poolId, beneficiary, total, totalRounds);
     }
 }

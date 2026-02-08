@@ -14,4 +14,24 @@ export class PoolsController {
   createPool(@Body() body: { tier: number; contributionAmount: number; maxMembers: number }) {
     return this.poolsService.createPool(body.tier, body.contributionAmount, body.maxMembers);
   }
+
+  @Post('payouts/stream')
+  scheduleStream(
+    @Body()
+    body: {
+      poolId: string;
+      beneficiary: string;
+      total: number;
+      upfrontPercent: number;
+      totalRounds: number;
+    }
+  ) {
+    return this.poolsService.scheduleStream(
+      body.poolId,
+      body.beneficiary,
+      body.total,
+      body.upfrontPercent,
+      body.totalRounds
+    );
+  }
 }

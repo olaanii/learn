@@ -24,6 +24,9 @@
 - beneficiary: address
 - total: uint256
 - upfrontPercent: uint8
+- roundAmount: uint256
+- totalRounds: uint256
+- releasedRounds: uint256
 - released: uint256
 - frozen: bool
 

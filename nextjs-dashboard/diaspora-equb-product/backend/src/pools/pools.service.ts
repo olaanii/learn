@@ -19,4 +19,21 @@ export class PoolsService {
       status: 'pending-onchain',
     };
   }
+
+  scheduleStream(
+    poolId: string,
+    beneficiary: string,
+    total: number,
+    upfrontPercent: number,
+    totalRounds: number
+  ) {
+    return {
+      poolId,
+      beneficiary,
+      total,
+      upfrontPercent,
+      totalRounds,
+      status: 'pending-onchain',
+    };
+  }
 }

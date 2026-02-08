@@ -33,6 +33,10 @@
 - Input: tier, contributionAmount, maxMembers
 - Output: poolId, status
 
+### POST /payouts/stream
+- Input: poolId, beneficiary, total, upfrontPercent, totalRounds
+- Output: status
+
 ### POST /notifications/missed-payment
 - Input: walletAddress, poolId, round
 - Output: notification status
