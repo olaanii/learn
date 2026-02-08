@@ -34,4 +34,14 @@ export class PoolsController {
       body.totalRounds
     );
   }
+
+  @Post('rounds/close')
+  closeRound(@Body() body: { poolId: string; round: number }) {
+    return this.poolsService.closeRound(body.poolId, body.round);
+  }
+
+  @Post('contributions')
+  recordContribution(@Body() body: { poolId: string; walletAddress: string; round: number }) {
+    return this.poolsService.recordContribution(body.poolId, body.walletAddress, body.round);
+  }
 }

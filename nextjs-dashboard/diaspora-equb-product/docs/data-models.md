@@ -12,6 +12,7 @@
 - maxMembers: uint16
 - currentRound: uint16
 - members: address[]
+- contributedInRound: mapping(uint256 => mapping(address => bool))
 
 ## Tier Config
 - tier: uint8

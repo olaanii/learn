@@ -16,6 +16,7 @@ contract EqubPool {
         address[] members;
         mapping(address => bool) isMember;
         mapping(address => bool) hasReceivedPayout;
+        mapping(uint256 => mapping(address => bool)) contributedInRound;
     }
 
     PayoutStream public payoutStream;
@@ -32,6 +33,7 @@ contract EqubPool {
     event ContributionReceived(uint256 indexed poolId, address indexed member, uint256 round);
     event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round);
     event PayoutStreamScheduled(uint256 indexed poolId, address indexed beneficiary, uint256 total, uint256 rounds);
+    event RoundClosed(uint256 indexed poolId, uint256 round);
 
     constructor(
         PayoutStream _payoutStream,
@@ -85,7 +87,9 @@ contract EqubPool {
         Pool storage pool = pools[poolId];
         require(pool.isMember[msg.sender], "not member");
         require(msg.value == pool.contributionAmount, "invalid amount");
+        require(!pool.contributedInRound[pool.currentRound][msg.sender], "already contributed");
 
+        pool.contributedInRound[pool.currentRound][msg.sender] = true;
         emit ContributionReceived(poolId, msg.sender, pool.currentRound);
     }
 
@@ -98,6 +102,28 @@ contract EqubPool {
         creditRegistry.updateScore(member, -10);
 
         emit DefaultTriggered(poolId, member, pool.currentRound);
+    }
+
+    function closeRound(uint256 poolId) external {
+        Pool storage pool = pools[poolId];
+        uint256 memberCount = pool.members.length;
+        for (uint256 i = 0; i < memberCount; i++) {
+            address member = pool.members[i];
+            if (!pool.contributedInRound[pool.currentRound][member]) {
+                payoutStream.freezeRemaining(poolId, member);
+                collateralVault.slashCollateral(member, pool.contributionAmount);
+                creditRegistry.updateScore(member, -10);
+                emit DefaultTriggered(poolId, member, pool.currentRound);
+            }
+        }
+
+        emit RoundClosed(poolId, pool.currentRound);
+        pool.currentRound += 1;
+    }
+
+    function hasContributed(uint256 poolId, uint256 round, address member) external view returns (bool) {
+        Pool storage pool = pools[poolId];
+        return pool.contributedInRound[round][member];
     }
 
     function schedulePayoutStream(

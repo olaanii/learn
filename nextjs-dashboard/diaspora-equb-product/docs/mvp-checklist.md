@@ -8,8 +8,8 @@
 ## Equb Pool Operations
 - [x] Pool creation with tier limits (contract + backend stub)
 - [x] Streamed payout schedule (contract + backend stub)
-- [ ] Contribution tracking by round
-- [ ] Auto-freeze on missed contributions
+- [x] Contribution tracking by round (contract + backend stub)
+- [x] Auto-freeze on missed contributions (round close logic)
 
 ## Collateral & Slashing
 - [ ] Partial collateral based on remaining obligation

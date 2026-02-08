@@ -33,6 +33,14 @@
 - Input: tier, contributionAmount, maxMembers
 - Output: poolId, status
 
+### POST /pools/rounds/close
+- Input: poolId, round
+- Output: status
+
+### POST /pools/contributions
+- Input: poolId, walletAddress, round
+- Output: status
+
 ### POST /payouts/stream
 - Input: poolId, beneficiary, total, upfrontPercent, totalRounds
 - Output: status

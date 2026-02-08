@@ -36,4 +36,21 @@ export class PoolsService {
       status: 'pending-onchain',
     };
   }
+
+  recordContribution(poolId: string, walletAddress: string, round: number) {
+    return {
+      poolId,
+      walletAddress,
+      round,
+      status: 'pending-onchain',
+    };
+  }
+
+  closeRound(poolId: string, round: number) {
+    return {
+      poolId,
+      round,
+      status: 'pending-onchain',
+    };
+  }
 }
