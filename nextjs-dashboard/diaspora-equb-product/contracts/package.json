@@ -1,0 +1,16 @@
+{
+  "name": "diaspora-equb-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "deploy:creditcoin": "hardhat run scripts/deploy.ts --network creditcoin",
+    "deploy:localhost": "hardhat run scripts/deploy.ts --network localhost"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}
