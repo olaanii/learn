@@ -35,6 +35,7 @@
 - walletAddress: address
 - lockedAmount: uint256
 - slashedAmount: uint256
+- availableBalance: uint256
 
 ## Credit Score
 - walletAddress: address

@@ -41,6 +41,14 @@
 - Input: poolId, walletAddress, round
 - Output: status
 
+### POST /collateral/lock
+- Input: walletAddress, amount, poolId
+- Output: status
+
+### POST /collateral/slash
+- Input: walletAddress, amount, poolId
+- Output: status
+
 ### POST /payouts/stream
 - Input: poolId, beneficiary, total, upfrontPercent, totalRounds
 - Output: status

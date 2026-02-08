@@ -34,6 +34,7 @@ contract EqubPool {
     event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round);
     event PayoutStreamScheduled(uint256 indexed poolId, address indexed beneficiary, uint256 total, uint256 rounds);
     event RoundClosed(uint256 indexed poolId, uint256 round);
+    event CollateralLocked(uint256 indexed poolId, address indexed member, uint256 amount);
 
     constructor(
         PayoutStream _payoutStream,
@@ -137,5 +138,16 @@ contract EqubPool {
         require(pool.isMember[beneficiary], "not member");
         payoutStream.createStream(poolId, beneficiary, total, upfrontPercent, totalRounds);
         emit PayoutStreamScheduled(poolId, beneficiary, total, totalRounds);
+    }
+
+    function lockPartialCollateral(uint256 poolId, address member) external {
+        Pool storage pool = pools[poolId];
+        require(pool.isMember[member], "not member");
+        PayoutStream.Stream memory stream = payoutStream.streamDetails(poolId, member);
+        uint256 remaining = stream.total - stream.released;
+        TierRegistry.TierConfig memory config = tierRegistry.tierConfig(pool.tier);
+        uint256 requiredCollateral = (remaining * config.collateralRateBps) / 10000;
+        collateralVault.lockCollateral(member, requiredCollateral);
+        emit CollateralLocked(poolId, member, requiredCollateral);
     }
 }

@@ -12,8 +12,8 @@
 - [x] Auto-freeze on missed contributions (round close logic)
 
 ## Collateral & Slashing
-- [ ] Partial collateral based on remaining obligation
-- [ ] Collateral slashing on default
+- [x] Partial collateral based on remaining obligation (contract + backend stub)
+- [x] Collateral slashing on default (contract + backend stub)
 - [ ] Pool compensation from slashed funds
 
 ## Credit & Reputation
