@@ -1,9 +1,9 @@
 # MVP Completion Checklist
 
 ## Identity & Access
-- [ ] Fayda verification flow integrated
+- [x] Fayda verification flow stubbed in backend
 - [ ] Identity hash stored on-chain
-- [ ] Wallet bound to identity hash (one-to-one)
+- [x] Wallet bound to identity hash (one-to-one) in backend
 
 ## Equb Pool Operations
 - [ ] Pool creation with tier limits

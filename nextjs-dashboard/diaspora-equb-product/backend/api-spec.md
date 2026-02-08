@@ -11,7 +11,7 @@
 ## Endpoints (MVP)
 ### POST /auth/fayda/verify
 - Input: Fayda verification token
-- Output: identityHash (keccak256), walletBindingStatus
+- Output: identityHash (sha256 hash), walletBindingStatus
 
 ### POST /wallet/bind
 - Input: identityHash, walletAddress
