@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "./PayoutStream.sol";
 import "./CollateralVault.sol";
 import "./CreditRegistry.sol";
+import "./IdentityRegistry.sol";
 
 contract EqubPool {
     struct Pool {
@@ -18,6 +19,7 @@ contract EqubPool {
     PayoutStream public payoutStream;
     CollateralVault public collateralVault;
     CreditRegistry public creditRegistry;
+    IdentityRegistry public identityRegistry;
 
     mapping(uint256 => Pool) private pools;
     uint256 public poolCount;
@@ -30,11 +32,13 @@ contract EqubPool {
     constructor(
         PayoutStream _payoutStream,
         CollateralVault _collateralVault,
-        CreditRegistry _creditRegistry
+        CreditRegistry _creditRegistry,
+        IdentityRegistry _identityRegistry
     ) {
         payoutStream = _payoutStream;
         collateralVault = _collateralVault;
         creditRegistry = _creditRegistry;
+        identityRegistry = _identityRegistry;
     }
 
     function createPool(uint256 contributionAmount, uint256 maxMembers) external returns (uint256) {
@@ -55,6 +59,7 @@ contract EqubPool {
         Pool storage pool = pools[poolId];
         require(pool.members.length < pool.maxMembers, "pool full");
         require(!pool.isMember[msg.sender], "already member");
+        require(identityRegistry.identityOf(msg.sender) != bytes32(0), "identity not bound");
 
         pool.members.push(msg.sender);
         pool.isMember[msg.sender] = true;
