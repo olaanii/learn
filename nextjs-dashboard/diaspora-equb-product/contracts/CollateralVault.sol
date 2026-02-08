@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract CollateralVault {
+    mapping(address => uint256) private collateralBalances;
+
+    event CollateralDeposited(address indexed user, uint256 amount);
+    event CollateralSlashed(address indexed user, uint256 amount);
+    event CollateralReleased(address indexed user, uint256 amount);
+
+    function depositCollateral() external payable {
+        require(msg.value > 0, "invalid amount");
+        collateralBalances[msg.sender] += msg.value;
+        emit CollateralDeposited(msg.sender, msg.value);
+    }
+
+    function slashCollateral(address user, uint256 amount) external {
+        uint256 balance = collateralBalances[user];
+        uint256 slashAmount = amount > balance ? balance : amount;
+        collateralBalances[user] -= slashAmount;
+        emit CollateralSlashed(user, slashAmount);
+    }
+
+    function releaseCollateral(address user, uint256 amount) external {
+        uint256 balance = collateralBalances[user];
+        require(amount <= balance, "insufficient collateral");
+        collateralBalances[user] -= amount;
+        payable(user).transfer(amount);
+        emit CollateralReleased(user, amount);
+    }
+
+    function collateralOf(address user) external view returns (uint256) {
+        return collateralBalances[user];
+    }
+}
