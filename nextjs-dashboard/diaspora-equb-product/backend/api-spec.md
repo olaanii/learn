@@ -53,6 +53,10 @@
 - Input: poolId, beneficiary, total, upfrontPercent, totalRounds
 - Output: status
 
+### POST /credit/update
+- Input: walletAddress, delta, reason
+- Output: status
+
 ### POST /notifications/missed-payment
 - Input: walletAddress, poolId, round
 - Output: notification status

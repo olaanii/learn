@@ -17,7 +17,7 @@
 - [x] Pool compensation from slashed funds (contract stub)
 
 ## Credit & Reputation
-- [ ] On-chain credit score updates per round
+- [x] On-chain credit score updates per round (contract + backend stub)
 - [ ] Tier upgrade rules enforced
 - [ ] Default penalties reflected in eligibility
 

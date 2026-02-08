@@ -122,6 +122,8 @@ contract EqubPool {
                 creditRegistry.updateScore(member, -10);
                 emit DefaultTriggered(poolId, member, pool.currentRound);
                 emit PoolCompensated(poolId, member, pool.contributionAmount);
+            } else {
+                creditRegistry.updateScore(member, 1);
             }
         }
 
