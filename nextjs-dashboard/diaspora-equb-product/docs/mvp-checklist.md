@@ -2,7 +2,7 @@
 
 ## Identity & Access
 - [x] Fayda verification flow stubbed in backend
-- [ ] Identity hash stored on-chain
+- [x] Identity hash stored on-chain (backend stub + IdentityRegistry contract)
 - [x] Wallet bound to identity hash (one-to-one) in backend
 
 ## Equb Pool Operations

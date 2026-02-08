@@ -33,4 +33,13 @@ export class IdentityService {
       status: 'bound',
     };
   }
+
+  storeOnChain(identityHash: string, walletAddress: string) {
+    return {
+      identityHash,
+      walletAddress,
+      status: 'queued-for-onchain',
+      registryContract: 'IdentityRegistry',
+    };
+  }
 }

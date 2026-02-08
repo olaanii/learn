@@ -17,6 +17,10 @@
 - Input: identityHash, walletAddress
 - Output: binding confirmation
 
+### POST /wallet/store-onchain
+- Input: identityHash, walletAddress
+- Output: queued on-chain storage confirmation
+
 ### GET /tiers/eligibility
 - Input: walletAddress
 - Output: eligibleTier, collateralRate

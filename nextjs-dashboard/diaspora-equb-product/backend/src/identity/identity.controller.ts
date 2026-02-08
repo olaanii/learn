@@ -9,4 +9,9 @@ export class IdentityController {
   bindWallet(@Body() body: { identityHash: string; walletAddress: string }) {
     return this.identityService.bindWallet(body.identityHash, body.walletAddress);
   }
+
+  @Post('store-onchain')
+  storeOnChain(@Body() body: { identityHash: string; walletAddress: string }) {
+    return this.identityService.storeOnChain(body.identityHash, body.walletAddress);
+  }
 }
