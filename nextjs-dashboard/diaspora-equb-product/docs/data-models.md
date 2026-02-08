@@ -11,6 +11,7 @@
 - contributionAmount: uint256
 - maxMembers: uint16
 - currentRound: uint16
+- treasury: address
 - members: address[]
 - contributedInRound: mapping(uint256 => mapping(address => bool))
 

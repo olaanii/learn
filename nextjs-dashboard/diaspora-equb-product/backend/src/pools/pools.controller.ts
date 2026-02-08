@@ -11,8 +11,15 @@ export class PoolsController {
   }
 
   @Post('create')
-  createPool(@Body() body: { tier: number; contributionAmount: number; maxMembers: number }) {
-    return this.poolsService.createPool(body.tier, body.contributionAmount, body.maxMembers);
+  createPool(
+    @Body() body: { tier: number; contributionAmount: number; maxMembers: number; treasury: string }
+  ) {
+    return this.poolsService.createPool(
+      body.tier,
+      body.contributionAmount,
+      body.maxMembers,
+      body.treasury
+    );
   }
 
   @Post('payouts/stream')

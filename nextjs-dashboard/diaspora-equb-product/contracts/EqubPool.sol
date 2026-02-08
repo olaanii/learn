@@ -13,6 +13,7 @@ contract EqubPool {
         uint256 contributionAmount;
         uint256 maxMembers;
         uint256 currentRound;
+        address treasury;
         address[] members;
         mapping(address => bool) isMember;
         mapping(address => bool) hasReceivedPayout;
@@ -35,6 +36,7 @@ contract EqubPool {
     event PayoutStreamScheduled(uint256 indexed poolId, address indexed beneficiary, uint256 total, uint256 rounds);
     event RoundClosed(uint256 indexed poolId, uint256 round);
     event CollateralLocked(uint256 indexed poolId, address indexed member, uint256 amount);
+    event PoolCompensated(uint256 indexed poolId, address indexed member, uint256 amount);
 
     constructor(
         PayoutStream _payoutStream,
@@ -53,10 +55,12 @@ contract EqubPool {
     function createPool(
         uint8 tier,
         uint256 contributionAmount,
-        uint256 maxMembers
+        uint256 maxMembers,
+        address treasury
     ) external returns (uint256) {
         require(contributionAmount > 0, "invalid contribution");
         require(maxMembers > 1, "invalid members");
+        require(treasury != address(0), "invalid treasury");
         TierRegistry.TierConfig memory config = tierRegistry.tierConfig(tier);
         require(config.enabled, "tier disabled");
         require(contributionAmount <= config.maxPoolSize, "pool size exceeds tier");
@@ -67,6 +71,7 @@ contract EqubPool {
         pool.contributionAmount = contributionAmount;
         pool.maxMembers = maxMembers;
         pool.currentRound = 1;
+        pool.treasury = treasury;
 
         emit PoolCreated(poolCount, contributionAmount, maxMembers);
         return poolCount;
@@ -99,10 +104,11 @@ contract EqubPool {
         require(pool.isMember[member], "not member");
 
         payoutStream.freezeRemaining(poolId, member);
-        collateralVault.slashCollateral(member, pool.contributionAmount);
+        collateralVault.compensatePool(pool.treasury, member, pool.contributionAmount);
         creditRegistry.updateScore(member, -10);
 
         emit DefaultTriggered(poolId, member, pool.currentRound);
+        emit PoolCompensated(poolId, member, pool.contributionAmount);
     }
 
     function closeRound(uint256 poolId) external {
@@ -112,9 +118,10 @@ contract EqubPool {
             address member = pool.members[i];
             if (!pool.contributedInRound[pool.currentRound][member]) {
                 payoutStream.freezeRemaining(poolId, member);
-                collateralVault.slashCollateral(member, pool.contributionAmount);
+                collateralVault.compensatePool(pool.treasury, member, pool.contributionAmount);
                 creditRegistry.updateScore(member, -10);
                 emit DefaultTriggered(poolId, member, pool.currentRound);
+                emit PoolCompensated(poolId, member, pool.contributionAmount);
             }
         }
 

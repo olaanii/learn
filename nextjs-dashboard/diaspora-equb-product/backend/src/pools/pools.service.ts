@@ -10,12 +10,13 @@ export class PoolsService {
     };
   }
 
-  createPool(tier: number, contributionAmount: number, maxMembers: number) {
+  createPool(tier: number, contributionAmount: number, maxMembers: number, treasury: string) {
     return {
       poolId: 'pending',
       tier,
       contributionAmount,
       maxMembers,
+      treasury,
       status: 'pending-onchain',
     };
   }

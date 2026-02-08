@@ -30,7 +30,7 @@
 - Output: join status
 
 ### POST /pools/create
-- Input: tier, contributionAmount, maxMembers
+- Input: tier, contributionAmount, maxMembers, treasury
 - Output: poolId, status
 
 ### POST /pools/rounds/close

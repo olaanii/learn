@@ -14,7 +14,7 @@
 ## Collateral & Slashing
 - [x] Partial collateral based on remaining obligation (contract + backend stub)
 - [x] Collateral slashing on default (contract + backend stub)
-- [ ] Pool compensation from slashed funds
+- [x] Pool compensation from slashed funds (contract stub)
 
 ## Credit & Reputation
 - [ ] On-chain credit score updates per round

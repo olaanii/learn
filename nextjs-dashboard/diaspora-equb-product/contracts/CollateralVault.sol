@@ -9,6 +9,7 @@ contract CollateralVault {
     event CollateralSlashed(address indexed user, uint256 amount);
     event CollateralReleased(address indexed user, uint256 amount);
     event CollateralLocked(address indexed user, uint256 amount);
+    event CollateralCompensated(address indexed poolTreasury, address indexed user, uint256 amount);
 
     function depositCollateral() external payable {
         require(msg.value > 0, "invalid amount");
@@ -36,6 +37,13 @@ contract CollateralVault {
         uint256 slashAmount = amount > locked ? locked : amount;
         lockedBalances[user] -= slashAmount;
         emit CollateralSlashed(user, slashAmount);
+    }
+
+    function compensatePool(address poolTreasury, address user, uint256 amount) external {
+        uint256 locked = lockedBalances[user];
+        uint256 compensation = amount > locked ? locked : amount;
+        lockedBalances[user] -= compensation;
+        emit CollateralCompensated(poolTreasury, user, compensation);
     }
 
     function releaseCollateral(address user, uint256 amount) external {
