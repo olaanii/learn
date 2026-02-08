@@ -29,6 +29,10 @@
 - Input: poolId, walletAddress
 - Output: join status
 
+### POST /pools/create
+- Input: tier, contributionAmount, maxMembers
+- Output: poolId, status
+
 ### POST /notifications/missed-payment
 - Input: walletAddress, poolId, round
 - Output: notification status

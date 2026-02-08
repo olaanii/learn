@@ -13,6 +13,12 @@
 - currentRound: uint16
 - members: address[]
 
+## Tier Config
+- tier: uint8
+- maxPoolSize: uint256
+- collateralRateBps: uint256
+- enabled: bool
+
 ## Payout Stream
 - poolId: uint256
 - beneficiary: address

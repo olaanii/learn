@@ -6,7 +6,7 @@
 - [x] Wallet bound to identity hash (one-to-one) in backend
 
 ## Equb Pool Operations
-- [ ] Pool creation with tier limits
+- [x] Pool creation with tier limits (contract + backend stub)
 - [ ] Streamed payout schedule
 - [ ] Contribution tracking by round
 - [ ] Auto-freeze on missed contributions

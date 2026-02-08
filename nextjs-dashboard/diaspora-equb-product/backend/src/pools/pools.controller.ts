@@ -9,4 +9,9 @@ export class PoolsController {
   joinPool(@Body() body: { poolId: string; walletAddress: string }) {
     return this.poolsService.joinPool(body.poolId, body.walletAddress);
   }
+
+  @Post('create')
+  createPool(@Body() body: { tier: number; contributionAmount: number; maxMembers: number }) {
+    return this.poolsService.createPool(body.tier, body.contributionAmount, body.maxMembers);
+  }
 }

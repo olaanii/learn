@@ -5,9 +5,11 @@ import "./PayoutStream.sol";
 import "./CollateralVault.sol";
 import "./CreditRegistry.sol";
 import "./IdentityRegistry.sol";
+import "./TierRegistry.sol";
 
 contract EqubPool {
     struct Pool {
+        uint8 tier;
         uint256 contributionAmount;
         uint256 maxMembers;
         uint256 currentRound;
@@ -20,6 +22,7 @@ contract EqubPool {
     CollateralVault public collateralVault;
     CreditRegistry public creditRegistry;
     IdentityRegistry public identityRegistry;
+    TierRegistry public tierRegistry;
 
     mapping(uint256 => Pool) private pools;
     uint256 public poolCount;
@@ -33,20 +36,30 @@ contract EqubPool {
         PayoutStream _payoutStream,
         CollateralVault _collateralVault,
         CreditRegistry _creditRegistry,
-        IdentityRegistry _identityRegistry
+        IdentityRegistry _identityRegistry,
+        TierRegistry _tierRegistry
     ) {
         payoutStream = _payoutStream;
         collateralVault = _collateralVault;
         creditRegistry = _creditRegistry;
         identityRegistry = _identityRegistry;
+        tierRegistry = _tierRegistry;
     }
 
-    function createPool(uint256 contributionAmount, uint256 maxMembers) external returns (uint256) {
+    function createPool(
+        uint8 tier,
+        uint256 contributionAmount,
+        uint256 maxMembers
+    ) external returns (uint256) {
         require(contributionAmount > 0, "invalid contribution");
         require(maxMembers > 1, "invalid members");
+        TierRegistry.TierConfig memory config = tierRegistry.tierConfig(tier);
+        require(config.enabled, "tier disabled");
+        require(contributionAmount <= config.maxPoolSize, "pool size exceeds tier");
 
         poolCount += 1;
         Pool storage pool = pools[poolCount];
+        pool.tier = tier;
         pool.contributionAmount = contributionAmount;
         pool.maxMembers = maxMembers;
         pool.currentRound = 1;
