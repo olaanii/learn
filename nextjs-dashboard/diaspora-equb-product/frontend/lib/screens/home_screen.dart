@@ -65,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     children: [
                       _buildBalanceCard(context, wallet),
+                      _buildTokenSelector(context, wallet, auth),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                         child: _buildQuickActions(context),
@@ -150,6 +151,63 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── Balance card (yellow) ──────────────────────────────────────────
+  Widget _buildTokenSelector(BuildContext context, WalletProvider wallet, AuthProvider auth) {
+    final tokens = ['USDC', 'USDT'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: tokens.map((t) {
+          final isSelected = wallet.token == t;
+          final bal = wallet.balanceOf(t);
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => wallet.selectToken(t, walletAddress: auth.walletAddress),
+              child: Container(
+                margin: EdgeInsets.only(
+                  right: t == tokens.first ? 6 : 0,
+                  left: t == tokens.last ? 6 : 0,
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppTheme.accentYellow.withValues(alpha: 0.3)
+                      : Colors.grey.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppTheme.accentYellow
+                        : Colors.grey.withValues(alpha: 0.15),
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      t,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '\$$bal',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textPrimary.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildBalanceCard(BuildContext context, WalletProvider wallet) {
     // Format balance with commas
     final rawBalance = wallet.balance;
@@ -274,8 +332,8 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () => context.push('/pay'),
         ),
         _buildActionButton(
-          icon: Icons.add_circle_outline_rounded,
-          label: 'Fund',
+          icon: Icons.show_chart_rounded,
+          label: 'Transfer',
           onTap: () => context.push('/fund-wallet'),
         ),
         _buildActionButton(
@@ -473,38 +531,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Currency section ───────────────────────────────────────────────
   Widget _buildCurrencySection(BuildContext context, WalletProvider wallet) {
-    // Build currency cards from provider rates
-    final currencies = <Map<String, dynamic>>[];
-    final rateConfig = {
-      'EUR': {'symbol': '€', 'name': 'Euro', 'color': const Color(0xFF22C55E)},
-      'GBP': {'symbol': '£', 'name': 'British pound', 'color': const Color(0xFF6366F1)},
-      'CHF': {'symbol': 'F', 'name': 'Swiss Franc', 'color': const Color(0xFFF59E0B)},
-      'ETB': {'symbol': 'Br', 'name': 'Eth. Birr', 'color': const Color(0xFF3B82F6)},
-      'KES': {'symbol': 'KSh', 'name': 'Kenya Shill.', 'color': const Color(0xFFEF4444)},
-    };
+    final balanceNum = double.tryParse(wallet.balance) ?? 0.0;
 
-    if (wallet.rates.isNotEmpty) {
-      for (final entry in wallet.rates.entries) {
-        final config = rateConfig[entry.key];
-        if (config != null) {
-          currencies.add({
-            'symbol': config['symbol'],
-            'name': config['name'],
-            'rate': entry.value.toStringAsFixed(2),
-            'color': config['color'],
-          });
-        }
-      }
-    } else {
-      // Fallback static data
-      currencies.addAll([
-        {'symbol': '€', 'name': 'Euro', 'rate': '0.95', 'color': const Color(0xFF22C55E)},
-        {'symbol': '£', 'name': 'British pound', 'rate': '0.79', 'color': const Color(0xFF6366F1)},
-      ]);
-    }
+    // 3 currencies matching the design: Euro, Pound, Swiss Franc
+    final currencyConfig = [
+      {'code': 'EUR', 'symbol': '€', 'name': 'Euro', 'color': const Color(0xFF22C55E)},
+      {'code': 'GBP', 'symbol': '£', 'name': 'Pound', 'color': const Color(0xFF6366F1)},
+      {'code': 'CHF', 'symbol': 'F', 'name': 'Swiss Franc', 'color': const Color(0xFFF59E0B)},
+    ];
 
-    // Only show first 2 currency cards to leave room for the "Add" card
-    final displayCurrencies = currencies.take(2).toList();
+    // Default fallback rates
+    final fallbackRates = {'EUR': 0.95, 'GBP': 0.79, 'CHF': 0.91};
+
+    final currencies = currencyConfig.map((cfg) {
+      final code = cfg['code'] as String;
+      final rate = wallet.rates[code] ?? fallbackRates[code] ?? 1.0;
+      final convertedValue = balanceNum * rate;
+      return {
+        'symbol': cfg['symbol'],
+        'name': cfg['name'],
+        'value': _formatBalance(convertedValue),
+        'color': cfg['color'],
+      };
+    }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,44 +563,13 @@ class _HomeScreenState extends State<HomeScreen> {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 112,
-          child: Row(
-            children: [
-              ...displayCurrencies.map((c) {
-                return Expanded(child: _buildCurrencyCard(c));
-              }),
-              const SizedBox(width: 10),
-              // Add Currency card
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkButton,
-                    borderRadius:
-                        BorderRadius.circular(AppTheme.cardRadiusSmall),
-                    boxShadow: AppTheme.subtleShadow,
-                  ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add, size: 26, color: Colors.white),
-                      SizedBox(height: 6),
-                      Text(
-                        'Add\nCurrency',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+        Row(
+          children: [
+            for (int i = 0; i < currencies.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: _buildCurrencyCard(currencies[i])),
             ],
-          ),
+          ],
         ),
       ],
     );
@@ -559,15 +577,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCurrencyCard(Map<String, dynamic> c) {
     return Container(
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
         color: AppTheme.cardWhite,
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
         boxShadow: AppTheme.subtleShadow,
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 36,
@@ -587,7 +604,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             c['name'] as String,
             style: const TextStyle(
@@ -595,10 +612,11 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w400,
               color: AppTheme.textTertiary,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
-            c['rate'] as String,
+            c['value'] as String,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,

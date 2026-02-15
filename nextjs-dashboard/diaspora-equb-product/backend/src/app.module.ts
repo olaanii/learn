@@ -18,6 +18,7 @@ import { TiersModule } from './tiers/tiers.module';
 import { Web3Module } from './web3/web3.module';
 import { TokenModule } from './token/token.module';
 import { HealthModule } from './health/health.module';
+import { IndexerModule } from './indexer/indexer.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { HealthModule } from './health/health.module';
     Web3Module,
     TokenModule,
     HealthModule,
+    IndexerModule,
   ],
   providers: [
     // Global JWT authentication guard

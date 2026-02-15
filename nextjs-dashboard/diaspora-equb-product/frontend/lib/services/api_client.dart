@@ -98,17 +98,25 @@ class ApiClient {
     return response.data;
   }
 
+  /// Get token info for a pool (ERC-20 vs native CTC).
+  Future<Map<String, dynamic>> getPoolToken(String poolId) async {
+    final response = await _dio.get('/pools/$poolId/token');
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> createPool({
     required int tier,
     required String contributionAmount,
     required int maxMembers,
     required String treasury,
+    String? token,
   }) async {
     final response = await _dio.post('/pools/create', data: {
       'tier': tier,
       'contributionAmount': contributionAmount,
       'maxMembers': maxMembers,
       'treasury': treasury,
+      if (token != null) 'token': token,
     });
     return response.data;
   }
@@ -128,6 +136,112 @@ class ApiClient {
       'poolId': poolId,
       'walletAddress': walletAddress,
       'round': round,
+    });
+    return response.data;
+  }
+
+  // ── Pool TX Builders (non-custodial) ──────────
+  Future<Map<String, dynamic>> buildCreatePool({
+    required int tier,
+    required String contributionAmount,
+    required int maxMembers,
+    required String treasury,
+    String? token,
+  }) async {
+    final response = await _dio.post('/pools/build/create', data: {
+      'tier': tier,
+      'contributionAmount': contributionAmount,
+      'maxMembers': maxMembers,
+      'treasury': treasury,
+      if (token != null) 'token': token,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildJoinPool(int onChainPoolId) async {
+    final response = await _dio.post('/pools/build/join', data: {
+      'onChainPoolId': onChainPoolId,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildContribute({
+    required int onChainPoolId,
+    required String contributionAmount,
+    String? tokenAddress,
+  }) async {
+    final response = await _dio.post('/pools/build/contribute', data: {
+      'onChainPoolId': onChainPoolId,
+      'contributionAmount': contributionAmount,
+      if (tokenAddress != null) 'tokenAddress': tokenAddress,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildCloseRound(int onChainPoolId) async {
+    final response = await _dio.post('/pools/build/close-round', data: {
+      'onChainPoolId': onChainPoolId,
+    });
+    return response.data;
+  }
+
+  /// Build approve TX so EqubPool can spend ERC-20 tokens on user's behalf.
+  /// Must be signed before contributing to an ERC-20 pool.
+  Future<Map<String, dynamic>> buildApproveToken({
+    required String tokenAddress,
+    required String amount,
+  }) async {
+    final response = await _dio.post('/pools/build/approve-token', data: {
+      'tokenAddress': tokenAddress,
+      'amount': amount,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildScheduleStream({
+    required int onChainPoolId,
+    required String beneficiary,
+    required String total,
+    required int upfrontPercent,
+    required int totalRounds,
+  }) async {
+    final response = await _dio.post('/pools/build/schedule-stream', data: {
+      'onChainPoolId': onChainPoolId,
+      'beneficiary': beneficiary,
+      'total': total,
+      'upfrontPercent': upfrontPercent,
+      'totalRounds': totalRounds,
+    });
+    return response.data;
+  }
+
+  // ── Collateral TX Builders ──────────────────────
+  Future<Map<String, dynamic>> buildDepositCollateral(String amount) async {
+    final response = await _dio.post('/collateral/build/deposit', data: {
+      'amount': amount,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildReleaseCollateral({
+    required String userAddress,
+    required String amount,
+  }) async {
+    final response = await _dio.post('/collateral/build/release', data: {
+      'userAddress': userAddress,
+      'amount': amount,
+    });
+    return response.data;
+  }
+
+  // ── Identity TX Builders ────────────────────────
+  Future<Map<String, dynamic>> buildStoreOnChain({
+    required String identityHash,
+    required String walletAddress,
+  }) async {
+    final response = await _dio.post('/wallet/build/store-onchain', data: {
+      'identityHash': identityHash,
+      'walletAddress': walletAddress,
     });
     return response.data;
   }

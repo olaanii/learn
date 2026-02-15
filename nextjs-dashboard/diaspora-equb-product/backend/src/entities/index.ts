@@ -6,3 +6,4 @@ export { PayoutStreamEntity } from './payout-stream.entity';
 export { Collateral } from './collateral.entity';
 export { CreditScore } from './credit-score.entity';
 export { TierConfig } from './tier-config.entity';
+export { IndexedBlock } from './indexed-block.entity';

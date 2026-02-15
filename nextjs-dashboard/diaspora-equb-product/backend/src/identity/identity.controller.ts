@@ -15,9 +15,26 @@ export class IdentityController {
     return this.identityService.bindWallet(dto.identityHash, dto.walletAddress);
   }
 
+  @Post('build/store-onchain')
+  @ApiOperation({
+    summary:
+      'Build unsigned TX to bind identity on-chain via IdentityRegistry',
+  })
+  buildStoreOnChain(@Body() dto: StoreOnChainDto) {
+    return this.identityService.buildStoreOnChain(
+      dto.identityHash,
+      dto.walletAddress,
+    );
+  }
+
   @Post('store-onchain')
-  @ApiOperation({ summary: 'Queue identity binding for on-chain storage' })
+  @ApiOperation({
+    summary: '[Legacy] Queue identity binding for on-chain storage (dev/test)',
+  })
   storeOnChain(@Body() dto: StoreOnChainDto) {
-    return this.identityService.storeOnChain(dto.identityHash, dto.walletAddress);
+    return this.identityService.storeOnChain(
+      dto.identityHash,
+      dto.walletAddress,
+    );
   }
 }

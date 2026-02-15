@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collateral_provider.dart';
+import '../providers/wallet_provider.dart';
 
 class CollateralScreen extends StatefulWidget {
   const CollateralScreen({super.key});
@@ -32,8 +33,10 @@ class _CollateralScreenState extends State<CollateralScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final collateral = context.read<CollateralProvider>();
+    final wallet = context.read<WalletProvider>();
     if (auth.walletAddress != null) {
       collateral.loadCollateral(auth.walletAddress!);
+      wallet.loadAllBalances(auth.walletAddress!);
     }
   }
 
@@ -43,6 +46,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
 
     final auth = context.read<AuthProvider>();
     final collateral = context.read<CollateralProvider>();
+    final wallet = context.read<WalletProvider>();
 
     if (auth.walletAddress == null) return;
 
@@ -54,6 +58,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
     if (mounted) {
       if (success) {
         _amountController.clear();
+        wallet.loadAllBalances(auth.walletAddress!);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Collateral locked successfully'),
@@ -84,8 +89,8 @@ class _CollateralScreenState extends State<CollateralScreen> {
           ),
           title: const Text('Collateral'),
         ),
-        body: Consumer<CollateralProvider>(
-          builder: (context, collateral, _) {
+        body: Consumer2<CollateralProvider, WalletProvider>(
+          builder: (context, collateral, wallet, _) {
             if (collateral.isLoading && collateral.collaterals.isEmpty) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -96,6 +101,10 @@ class _CollateralScreenState extends State<CollateralScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Wallet balance card
+                  _buildWalletBalanceCard(wallet),
+                  const SizedBox(height: 20),
+
                   // Summary cards
                   _buildSummaryCards(collateral),
                   const SizedBox(height: 28),
@@ -116,6 +125,180 @@ class _CollateralScreenState extends State<CollateralScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildWalletBalanceCard(WalletProvider wallet) {
+    final usdcBalance = double.tryParse(wallet.balanceOf('USDC')) ?? 0.0;
+    final usdtBalance = double.tryParse(wallet.balanceOf('USDT')) ?? 0.0;
+    final totalBalance = usdcBalance + usdtBalance;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.accentYellow,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.textPrimary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 22,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Wallet Balance',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    wallet.isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(
+                            '\$${totalBalance.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, size: 22),
+                color: AppTheme.textPrimary.withValues(alpha: 0.6),
+                onPressed: () {
+                  final auth = context.read<AuthProvider>();
+                  if (auth.walletAddress != null) {
+                    context
+                        .read<WalletProvider>()
+                        .loadAllBalances(auth.walletAddress!);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Individual token breakdown
+          Row(
+            children: [
+              Expanded(
+                child: _buildTokenBalanceChip(
+                  symbol: 'USDC',
+                  balance: usdcBalance,
+                  isLoading: wallet.isLoading,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildTokenBalanceChip(
+                  symbol: 'USDT',
+                  balance: usdtBalance,
+                  isLoading: wallet.isLoading,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTokenBalanceChip({
+    required String symbol,
+    required double balance,
+    required bool isLoading,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.textPrimary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: symbol == 'USDC'
+                  ? const Color(0xFF2775CA)
+                  : const Color(0xFF26A17B),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                symbol == 'USDC' ? '\$' : '₮',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  symbol,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                isLoading
+                    ? const Text(
+                        '...',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      )
+                    : Text(
+                        '\$${balance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

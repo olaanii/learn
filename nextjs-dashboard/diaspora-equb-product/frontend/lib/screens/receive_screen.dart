@@ -241,7 +241,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 ],
               ),
             ),
-            Icon(Icons.content_copy_rounded,
+            const Icon(Icons.content_copy_rounded,
                 size: 18, color: AppTheme.textTertiary),
           ],
         ),
@@ -469,7 +469,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           fontWeight: FontWeight.w500,
           color: AppTheme.textPrimary,
         ),
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           labelText: 'Reference ID (optional)',
           labelStyle: TextStyle(
             fontSize: 13,

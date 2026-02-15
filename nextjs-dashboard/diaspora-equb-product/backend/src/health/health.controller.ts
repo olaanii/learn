@@ -6,6 +6,7 @@ import {
 } from '@nestjs/terminus';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Web3Service } from '../web3/web3.service';
+import { IndexerService } from '../indexer/indexer.service';
 import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('Health')
@@ -16,6 +17,7 @@ export class HealthController {
     private health: HealthCheckService,
     private db: TypeOrmHealthIndicator,
     private web3: Web3Service,
+    private indexer: IndexerService,
   ) {}
 
   @Get()
@@ -32,5 +34,11 @@ export class HealthController {
         throw new Error('RPC node unreachable');
       },
     ]);
+  }
+
+  @Get('indexer')
+  @ApiOperation({ summary: 'Event indexer status and sync progress' })
+  async indexerStatus() {
+    return this.indexer.getStatus();
   }
 }

@@ -70,7 +70,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
             final members = pool['members'] as List? ?? [];
             final memberCount = members.length;
             final totalAmount = contributionAmount * memberCount;
-            final upfrontPercent = 20; // default 20%
+            const upfrontPercent = 20; // default 20%
             final upfrontAmount = totalAmount * upfrontPercent / 100;
             final streamAmount = totalAmount - upfrontAmount;
             final perRound =

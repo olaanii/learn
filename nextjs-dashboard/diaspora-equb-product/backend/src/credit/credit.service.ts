@@ -14,9 +14,49 @@ export class CreditService {
     private readonly web3Service: Web3Service,
   ) {}
 
+  /**
+   * Get credit score: tries on-chain CreditRegistry first, falls back to DB cache.
+   */
+  async getScore(walletAddress: string) {
+    // Try reading from on-chain CreditRegistry
+    try {
+      const creditRegistry = this.web3Service.getCreditRegistry();
+      const onChainScore: bigint =
+        await creditRegistry.scoreOf(walletAddress);
+
+      return {
+        walletAddress,
+        score: Number(onChainScore),
+        source: 'on-chain',
+        lastUpdated: new Date().toISOString(),
+      };
+    } catch (e) {
+      this.logger.warn(
+        `On-chain credit score read failed, falling back to DB: ${e.message}`,
+      );
+    }
+
+    // Fall back to DB cache
+    const creditScore = await this.creditScoreRepo.findOne({
+      where: { walletAddress },
+    });
+
+    return {
+      walletAddress,
+      score: creditScore?.score ?? 0,
+      source: 'cache',
+      lastUpdated: creditScore?.lastUpdated ?? null,
+    };
+  }
+
+  /**
+   * Legacy: update credit score in DB cache only (kept for dev/test).
+   * In production, scores are updated on-chain by the EqubPool contract
+   * during closeRound / triggerDefault, and synced by the indexer.
+   */
   async updateScore(walletAddress: string, delta: number, reason?: string) {
     this.logger.log(
-      `Updating credit score: wallet=${walletAddress}, delta=${delta}, reason=${reason || 'N/A'}`,
+      `Updating credit score (DB): wallet=${walletAddress}, delta=${delta}, reason=${reason || 'N/A'}`,
     );
 
     let creditScore = await this.creditScoreRepo.findOne({
@@ -33,10 +73,6 @@ export class CreditService {
     creditScore.score += delta;
     await this.creditScoreRepo.save(creditScore);
 
-    // In production: call CreditRegistry.updateScore on-chain
-    // const contract = this.web3Service.getCreditRegistry();
-    // const tx = await contract.updateScore(walletAddress, delta);
-
     return {
       walletAddress,
       previousScore: creditScore.score - delta,
@@ -44,18 +80,6 @@ export class CreditService {
       newScore: creditScore.score,
       reason,
       status: 'updated',
-    };
-  }
-
-  async getScore(walletAddress: string) {
-    const creditScore = await this.creditScoreRepo.findOne({
-      where: { walletAddress },
-    });
-
-    return {
-      walletAddress,
-      score: creditScore?.score ?? 0,
-      lastUpdated: creditScore?.lastUpdated ?? null,
     };
   }
 }

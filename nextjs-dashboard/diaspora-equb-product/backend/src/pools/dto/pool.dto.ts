@@ -3,12 +3,13 @@ import {
   IsNotEmpty,
   IsNumber,
   IsPositive,
+  IsOptional,
   Min,
   Max,
   Matches,
   IsUUID,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePoolDto {
   @ApiProperty({ description: 'Pool tier (0-3)', example: 0, minimum: 0, maximum: 3 })
@@ -33,6 +34,15 @@ export class CreatePoolDto {
   @IsNotEmpty()
   @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'treasury must be a valid EVM address' })
   treasury: string;
+
+  @ApiPropertyOptional({
+    description: 'ERC-20 token address for contributions. Omit or pass zero address for native CTC.',
+    example: '0x0000000000000000000000000000000000000000',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'token must be a valid EVM address' })
+  token?: string;
 }
 
 export class JoinPoolDto {

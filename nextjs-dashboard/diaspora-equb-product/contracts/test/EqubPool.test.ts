@@ -73,42 +73,42 @@ describe('EqubPool', () => {
   describe('createPool', () => {
     it('should create a pool and return pool ID', async () => {
       await expect(
-        equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address),
+        equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address),
       )
         .to.emit(equbPool, 'PoolCreated')
-        .withArgs(1, CONTRIBUTION, MAX_MEMBERS);
+        .withArgs(1, CONTRIBUTION, MAX_MEMBERS, ethers.ZeroAddress);
 
       expect(await equbPool.poolCount()).to.equal(1);
     });
 
     it('should revert with zero contribution', async () => {
       await expect(
-        equbPool.createPool(TIER, 0, MAX_MEMBERS, treasury.address),
+        equbPool['createPool(uint8,uint256,uint256,address)'](TIER, 0, MAX_MEMBERS, treasury.address),
       ).to.be.revertedWith('invalid contribution');
     });
 
     it('should revert with 1 member', async () => {
       await expect(
-        equbPool.createPool(TIER, CONTRIBUTION, 1, treasury.address),
+        equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, 1, treasury.address),
       ).to.be.revertedWith('invalid members');
     });
 
     it('should revert with zero treasury', async () => {
       await expect(
-        equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, ethers.ZeroAddress),
+        equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, ethers.ZeroAddress),
       ).to.be.revertedWith('invalid treasury');
     });
 
     it('should revert if tier is disabled', async () => {
       await tierRegistry.configureTier(1, ethers.parseEther('50'), 500, false);
       await expect(
-        equbPool.createPool(1, CONTRIBUTION, MAX_MEMBERS, treasury.address),
+        equbPool['createPool(uint8,uint256,uint256,address)'](1, CONTRIBUTION, MAX_MEMBERS, treasury.address),
       ).to.be.revertedWith('tier disabled');
     });
 
     it('should revert if contribution exceeds tier max pool size', async () => {
       await expect(
-        equbPool.createPool(TIER, ethers.parseEther('200'), MAX_MEMBERS, treasury.address),
+        equbPool['createPool(uint8,uint256,uint256,address)'](TIER, ethers.parseEther('200'), MAX_MEMBERS, treasury.address),
       ).to.be.revertedWith('pool size exceeds tier');
     });
   });
@@ -117,7 +117,7 @@ describe('EqubPool', () => {
     let poolId: number;
 
     beforeEach(async () => {
-      await equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
       poolId = 1;
     });
 
@@ -145,7 +145,7 @@ describe('EqubPool', () => {
     let poolId: number;
 
     beforeEach(async () => {
-      await equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
       poolId = 1;
       await equbPool.connect(user1).joinPool(poolId);
       await equbPool.connect(user2).joinPool(poolId);
@@ -189,7 +189,7 @@ describe('EqubPool', () => {
     let poolId: number;
 
     beforeEach(async () => {
-      await equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
       poolId = 1;
       await equbPool.connect(user1).joinPool(poolId);
       await equbPool.connect(user2).joinPool(poolId);
@@ -215,7 +215,7 @@ describe('EqubPool', () => {
     let poolId: number;
 
     beforeEach(async () => {
-      await equbPool.createPool(TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
       poolId = 1;
       await equbPool.connect(user1).joinPool(poolId);
     });
@@ -242,10 +242,66 @@ describe('EqubPool', () => {
     });
   });
 
+  describe('ERC-20 pool contributions', () => {
+    let poolId: number;
+    let testToken: any;
+    const TOKEN_CONTRIBUTION = ethers.parseUnits('100', 6); // 100 USDC
+
+    beforeEach(async () => {
+      // Deploy a test ERC-20 token
+      const TestTokenFactory = await ethers.getContractFactory('TestToken');
+      testToken = await TestTokenFactory.deploy('Test USDC', 'USDC', 6);
+
+      // Mint tokens to users
+      await testToken.mint(user1.address, ethers.parseUnits('10000', 6));
+      await testToken.mint(user2.address, ethers.parseUnits('10000', 6));
+
+      // Create an ERC-20 pool
+      const tokenAddr = await testToken.getAddress();
+      await equbPool['createPool(uint8,uint256,uint256,address,address)'](
+        TIER, TOKEN_CONTRIBUTION, MAX_MEMBERS, treasury.address, tokenAddr,
+      );
+      poolId = 1;
+
+      await equbPool.connect(user1).joinPool(poolId);
+      await equbPool.connect(user2).joinPool(poolId);
+    });
+
+    it('should accept ERC-20 contributions after approval', async () => {
+      const equbAddr = await equbPool.getAddress();
+
+      // Approve the EqubPool to spend tokens
+      await testToken.connect(user1).approve(equbAddr, TOKEN_CONTRIBUTION);
+
+      // Contribute (no msg.value needed)
+      await expect(equbPool.connect(user1).contribute(poolId))
+        .to.emit(equbPool, 'ContributionReceived')
+        .withArgs(poolId, user1.address, 1);
+    });
+
+    it('should revert if user sends CTC to an ERC-20 pool', async () => {
+      await expect(
+        equbPool.connect(user1).contribute(poolId, { value: TOKEN_CONTRIBUTION }),
+      ).to.be.revertedWith('do not send CTC for token pool');
+    });
+
+    it('should revert if allowance is insufficient', async () => {
+      // No approve call
+      await expect(
+        equbPool.connect(user1).contribute(poolId),
+      ).to.be.revertedWith('insufficient token allowance');
+    });
+
+    it('should report the correct pool token', async () => {
+      const tokenAddr = await testToken.getAddress();
+      expect(await equbPool.poolToken(poolId)).to.equal(tokenAddr);
+    });
+  });
+
   describe('Full lifecycle integration', () => {
     it('should complete a full pool lifecycle', async () => {
       // 1. Create pool
-      await equbPool.createPool(TIER, CONTRIBUTION, 3, treasury.address);
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, 3, treasury.address);
       const poolId = 1;
 
       // 2. Users join

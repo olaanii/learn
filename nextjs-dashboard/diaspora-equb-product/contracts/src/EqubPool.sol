@@ -6,7 +6,18 @@ import "./CollateralVault.sol";
 import "./CreditRegistry.sol";
 import "./IdentityRegistry.sol";
 import "./TierRegistry.sol";
+import "./IERC20.sol";
 
+/**
+ * @title EqubPool
+ * @notice Core rotating-savings pool contract for Diaspora Equb.
+ *
+ * v2 Changes:
+ *  - Pools can now accept an ERC-20 token (e.g. USDC/USDT) for contributions.
+ *  - If `token` is address(0), the pool uses native CTC (backward compatible).
+ *  - For ERC-20 pools, users must `approve()` this contract before calling `contribute()`.
+ *  - A new `approveToken()` helper builds the approve TX for the frontend.
+ */
 contract EqubPool {
     struct Pool {
         uint8 tier;
@@ -14,6 +25,7 @@ contract EqubPool {
         uint256 maxMembers;
         uint256 currentRound;
         address treasury;
+        address token; // address(0) = native CTC; otherwise ERC-20 address
         address[] members;
         mapping(address => bool) isMember;
         mapping(address => bool) hasReceivedPayout;
@@ -29,14 +41,44 @@ contract EqubPool {
     mapping(uint256 => Pool) private pools;
     uint256 public poolCount;
 
-    event PoolCreated(uint256 indexed poolId, uint256 contributionAmount, uint256 maxMembers);
+    // ─── Events ───────────────────────────────────────────────────────────────
+
+    event PoolCreated(
+        uint256 indexed poolId,
+        uint256 contributionAmount,
+        uint256 maxMembers,
+        address token
+    );
     event JoinedPool(uint256 indexed poolId, address indexed member);
-    event ContributionReceived(uint256 indexed poolId, address indexed member, uint256 round);
-    event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round);
-    event PayoutStreamScheduled(uint256 indexed poolId, address indexed beneficiary, uint256 total, uint256 rounds);
+    event ContributionReceived(
+        uint256 indexed poolId,
+        address indexed member,
+        uint256 round
+    );
+    event DefaultTriggered(
+        uint256 indexed poolId,
+        address indexed member,
+        uint256 round
+    );
+    event PayoutStreamScheduled(
+        uint256 indexed poolId,
+        address indexed beneficiary,
+        uint256 total,
+        uint256 rounds
+    );
     event RoundClosed(uint256 indexed poolId, uint256 round);
-    event CollateralLocked(uint256 indexed poolId, address indexed member, uint256 amount);
-    event PoolCompensated(uint256 indexed poolId, address indexed member, uint256 amount);
+    event CollateralLocked(
+        uint256 indexed poolId,
+        address indexed member,
+        uint256 amount
+    );
+    event PoolCompensated(
+        uint256 indexed poolId,
+        address indexed member,
+        uint256 amount
+    );
+
+    // ─── Constructor ──────────────────────────────────────────────────────────
 
     constructor(
         PayoutStream _payoutStream,
@@ -52,12 +94,46 @@ contract EqubPool {
         tierRegistry = _tierRegistry;
     }
 
+    // ─── Pool Lifecycle ───────────────────────────────────────────────────────
+
+    /**
+     * @notice Create a new Equb pool with an ERC-20 token for contributions.
+     * @param tier       Tier level (0-3), determines collateral requirements.
+     * @param contributionAmount  Amount each member contributes per round.
+     * @param maxMembers Maximum number of pool members.
+     * @param treasury   Address that receives pool funds.
+     * @param token      ERC-20 token address for contributions, or address(0) for native CTC.
+     */
+    function createPool(
+        uint8 tier,
+        uint256 contributionAmount,
+        uint256 maxMembers,
+        address treasury,
+        address token
+    ) external returns (uint256) {
+        return _createPool(tier, contributionAmount, maxMembers, treasury, token);
+    }
+
+    /**
+     * @notice Legacy createPool without token parameter (uses native CTC).
+     *         Kept for backward compatibility with existing callers.
+     */
     function createPool(
         uint8 tier,
         uint256 contributionAmount,
         uint256 maxMembers,
         address treasury
     ) external returns (uint256) {
+        return _createPool(tier, contributionAmount, maxMembers, treasury, address(0));
+    }
+
+    function _createPool(
+        uint8 tier,
+        uint256 contributionAmount,
+        uint256 maxMembers,
+        address treasury,
+        address token
+    ) internal returns (uint256) {
         require(contributionAmount > 0, "invalid contribution");
         require(maxMembers > 1, "invalid members");
         require(treasury != address(0), "invalid treasury");
@@ -72,8 +148,9 @@ contract EqubPool {
         pool.maxMembers = maxMembers;
         pool.currentRound = 1;
         pool.treasury = treasury;
+        pool.token = token;
 
-        emit PoolCreated(poolCount, contributionAmount, maxMembers);
+        emit PoolCreated(poolCount, contributionAmount, maxMembers, token);
         return poolCount;
     }
 
@@ -81,7 +158,10 @@ contract EqubPool {
         Pool storage pool = pools[poolId];
         require(pool.members.length < pool.maxMembers, "pool full");
         require(!pool.isMember[msg.sender], "already member");
-        require(identityRegistry.identityOf(msg.sender) != bytes32(0), "identity not bound");
+        require(
+            identityRegistry.identityOf(msg.sender) != bytes32(0),
+            "identity not bound"
+        );
 
         pool.members.push(msg.sender);
         pool.isMember[msg.sender] = true;
@@ -89,11 +169,40 @@ contract EqubPool {
         emit JoinedPool(poolId, msg.sender);
     }
 
+    /**
+     * @notice Contribute to the current round of a pool.
+     *
+     * For native CTC pools:  send exact `contributionAmount` as msg.value.
+     * For ERC-20 pools:      call `approve(equbPoolAddress, amount)` on the token first,
+     *                         then call this function with msg.value = 0.
+     */
     function contribute(uint256 poolId) external payable {
         Pool storage pool = pools[poolId];
         require(pool.isMember[msg.sender], "not member");
-        require(msg.value == pool.contributionAmount, "invalid amount");
-        require(!pool.contributedInRound[pool.currentRound][msg.sender], "already contributed");
+        require(
+            !pool.contributedInRound[pool.currentRound][msg.sender],
+            "already contributed"
+        );
+
+        if (pool.token == address(0)) {
+            // Native CTC contribution
+            require(msg.value == pool.contributionAmount, "invalid amount");
+        } else {
+            // ERC-20 contribution
+            require(msg.value == 0, "do not send CTC for token pool");
+            IERC20 token = IERC20(pool.token);
+            require(
+                token.allowance(msg.sender, address(this)) >=
+                    pool.contributionAmount,
+                "insufficient token allowance"
+            );
+            bool success = token.transferFrom(
+                msg.sender,
+                address(this),
+                pool.contributionAmount
+            );
+            require(success, "token transfer failed");
+        }
 
         pool.contributedInRound[pool.currentRound][msg.sender] = true;
         emit ContributionReceived(poolId, msg.sender, pool.currentRound);
@@ -104,7 +213,11 @@ contract EqubPool {
         require(pool.isMember[member], "not member");
 
         payoutStream.freezeRemaining(poolId, member);
-        collateralVault.compensatePool(pool.treasury, member, pool.contributionAmount);
+        collateralVault.compensatePool(
+            pool.treasury,
+            member,
+            pool.contributionAmount
+        );
         creditRegistry.updateScore(member, -10);
 
         emit DefaultTriggered(poolId, member, pool.currentRound);
@@ -116,9 +229,15 @@ contract EqubPool {
         uint256 memberCount = pool.members.length;
         for (uint256 i = 0; i < memberCount; i++) {
             address member = pool.members[i];
-            if (!pool.contributedInRound[pool.currentRound][member]) {
+            if (
+                !pool.contributedInRound[pool.currentRound][member]
+            ) {
                 payoutStream.freezeRemaining(poolId, member);
-                collateralVault.compensatePool(pool.treasury, member, pool.contributionAmount);
+                collateralVault.compensatePool(
+                    pool.treasury,
+                    member,
+                    pool.contributionAmount
+                );
                 creditRegistry.updateScore(member, -10);
                 emit DefaultTriggered(poolId, member, pool.currentRound);
                 emit PoolCompensated(poolId, member, pool.contributionAmount);
@@ -131,10 +250,26 @@ contract EqubPool {
         pool.currentRound += 1;
     }
 
-    function hasContributed(uint256 poolId, uint256 round, address member) external view returns (bool) {
+    // ─── View Functions ───────────────────────────────────────────────────────
+
+    function hasContributed(
+        uint256 poolId,
+        uint256 round,
+        address member
+    ) external view returns (bool) {
         Pool storage pool = pools[poolId];
         return pool.contributedInRound[round][member];
     }
+
+    /**
+     * @notice Get the ERC-20 token address for a pool.
+     *         Returns address(0) if the pool uses native CTC.
+     */
+    function poolToken(uint256 poolId) external view returns (address) {
+        return pools[poolId].token;
+    }
+
+    // ─── Payout & Collateral ──────────────────────────────────────────────────
 
     function schedulePayoutStream(
         uint256 poolId,
@@ -145,17 +280,32 @@ contract EqubPool {
     ) external {
         Pool storage pool = pools[poolId];
         require(pool.isMember[beneficiary], "not member");
-        payoutStream.createStream(poolId, beneficiary, total, upfrontPercent, totalRounds);
+        payoutStream.createStream(
+            poolId,
+            beneficiary,
+            total,
+            upfrontPercent,
+            totalRounds
+        );
         emit PayoutStreamScheduled(poolId, beneficiary, total, totalRounds);
     }
 
-    function lockPartialCollateral(uint256 poolId, address member) external {
+    function lockPartialCollateral(
+        uint256 poolId,
+        address member
+    ) external {
         Pool storage pool = pools[poolId];
         require(pool.isMember[member], "not member");
-        PayoutStream.Stream memory stream = payoutStream.streamDetails(poolId, member);
+        PayoutStream.Stream memory stream = payoutStream.streamDetails(
+            poolId,
+            member
+        );
         uint256 remaining = stream.total - stream.released;
-        TierRegistry.TierConfig memory config = tierRegistry.tierConfig(pool.tier);
-        uint256 requiredCollateral = (remaining * config.collateralRateBps) / 10000;
+        TierRegistry.TierConfig memory config = tierRegistry.tierConfig(
+            pool.tier
+        );
+        uint256 requiredCollateral = (remaining * config.collateralRateBps) /
+            10000;
         collateralVault.lockCollateral(member, requiredCollateral);
         emit CollateralLocked(poolId, member, requiredCollateral);
     }

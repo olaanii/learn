@@ -32,6 +32,9 @@ export class Pool {
   @Column({ type: 'varchar', length: 42 })
   treasury: string;
 
+  @Column({ type: 'varchar', length: 42, default: '0x0000000000000000000000000000000000000000' })
+  token: string; // ERC-20 token address, or zero address for native CTC
+
   @Column({ type: 'varchar', default: 'pending-onchain' })
   status: string; // 'pending-onchain' | 'active' | 'completed' | 'cancelled'
 

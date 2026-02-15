@@ -1155,7 +1155,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
       );
       // Refresh balance
       if (auth.walletAddress != null) {
-        wallet.loadBalance(auth.walletAddress!);
+        await wallet.loadBalance(auth.walletAddress!);
       }
     }
   }

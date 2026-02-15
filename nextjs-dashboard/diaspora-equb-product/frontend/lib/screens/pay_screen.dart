@@ -76,22 +76,37 @@ class _PayScreenState extends State<PayScreen> {
 
     setState(() => _isSending = true);
 
-    final result = await wallet.buildTransfer(
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening MetaMask to confirm…'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    final txHash = await wallet.buildAndSignTransfer(
       from: auth.walletAddress!,
       to: recipient,
       amount: _amount,
+      token: wallet.token,
     );
 
+    if (!mounted) return;
     setState(() => _isSending = false);
 
-    if (result != null && mounted) {
+    if (txHash != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Transfer ready! Sign with wallet to send $_amount USDC.\n'
-            'Estimated gas: ${result['estimatedGas']}',
-          ),
+          content: Text('Sent! Tx: $txHash'),
           duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(wallet.errorMessage ?? 'Transfer failed'),
+          backgroundColor: Colors.red.shade700,
         ),
       );
     }
@@ -168,13 +183,13 @@ class _PayScreenState extends State<PayScreen> {
                           ),
                           const SizedBox(height: 20),
                           // Note
-                          Row(
+                          const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(Icons.sticky_note_2_outlined,
                                   size: 18, color: AppTheme.textTertiary),
-                              const SizedBox(width: 6),
-                              const Text(
+                              SizedBox(width: 6),
+                              Text(
                                 'Note',
                                 style: TextStyle(
                                   fontSize: 14,
@@ -321,7 +336,7 @@ class _PayScreenState extends State<PayScreen> {
                 fontWeight: FontWeight.w500,
                 color: AppTheme.textPrimary,
               ),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Recipient address (0x...)',
                 hintStyle: TextStyle(
                   fontSize: 13,

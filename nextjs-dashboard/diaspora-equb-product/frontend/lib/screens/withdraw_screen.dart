@@ -96,7 +96,16 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
     setState(() => _isSubmitting = true);
 
-    final result = await wallet.buildWithdraw(
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening MetaMask to confirm…'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    final txHash = await wallet.buildAndSignWithdraw(
       from: auth.walletAddress!,
       to: to,
       amount: amount,
@@ -104,23 +113,27 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       network: _network,
     );
 
-    setState(() {
-      _isSubmitting = false;
-      if (result != null) {
-        _txResult = 'Transaction built! Gas: ${result['estimatedGas']}';
-      } else {
-        _txResult = wallet.errorMessage ?? 'Withdraw failed';
-      }
-    });
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
 
-    if (result != null && mounted) {
+    if (txHash != null) {
+      setState(() => _txResult = 'Sent! Tx: ${txHash.substring(0, 10)}…');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Unsigned tx ready. Sign with your wallet to broadcast.\n'
-            'To: ${result['to']}\nEstimated gas: ${result['estimatedGas']}',
+          content: Text('Withdraw sent. Tx: $txHash'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'OK',
+            onPressed: () {},
           ),
-          duration: const Duration(seconds: 5),
+        ),
+      );
+    } else {
+      setState(() => _txResult = wallet.errorMessage ?? 'Withdraw failed');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(wallet.errorMessage ?? 'Withdraw failed'),
+          backgroundColor: Colors.red.shade700,
         ),
       );
     }
@@ -300,7 +313,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(
+          hintStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w400,
             color: AppTheme.textTertiary,

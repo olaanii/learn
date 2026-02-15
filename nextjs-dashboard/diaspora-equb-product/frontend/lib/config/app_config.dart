@@ -19,7 +19,8 @@ class AppConfig {
   static const String appName = 'Diaspora Equb';
 
   /// Creditcoin Testnet block explorer
-  static const String explorerUrl = 'https://creditcoin-testnet.blockscout.com';
+  static const String explorerUrl =
+      'https://creditcoin-testnet.blockscout.com';
 
   /// Test USDC address on Creditcoin testnet (deployed by you)
   /// Override via --dart-define=TEST_USDC_ADDRESS=0x...
@@ -40,5 +41,13 @@ class AppConfig {
   static const bool devBypassFayda = bool.fromEnvironment(
     'DEV_BYPASS_FAYDA',
     defaultValue: true,
+  );
+
+  /// WalletConnect project ID from https://cloud.walletconnect.com
+  /// Required for WalletConnect v2 pairing.
+  /// Override via --dart-define=WALLETCONNECT_PROJECT_ID=...
+  static const String walletConnectProjectId = String.fromEnvironment(
+    'WALLETCONNECT_PROJECT_ID',
+    defaultValue: '',
   );
 }

@@ -25,7 +25,7 @@ export class Contribution {
   round: number;
 
   @Column({ type: 'varchar', length: 66, nullable: true })
-  txHash: string;
+  txHash: string | null;
 
   @Column({ type: 'varchar', default: 'pending-onchain' })
   status: string; // 'pending-onchain' | 'confirmed' | 'failed'

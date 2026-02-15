@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'config/router.dart';
 import 'services/api_client.dart';
+import 'services/wallet_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/pool_provider.dart';
 import 'providers/credit_provider.dart';
@@ -14,11 +15,16 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   final apiClient = ApiClient();
-  final authProvider = AuthProvider(apiClient);
-  final poolProvider = PoolProvider(apiClient);
+  final walletService = WalletService();
+
+  // Initialize WalletConnect (non-blocking)
+  walletService.init();
+
+  final authProvider = AuthProvider(apiClient, walletService);
+  final poolProvider = PoolProvider(apiClient, walletService);
   final creditProvider = CreditProvider(apiClient);
-  final walletProvider = WalletProvider(apiClient);
-  final collateralProvider = CollateralProvider(apiClient);
+  final walletProvider = WalletProvider(apiClient, walletService);
+  final collateralProvider = CollateralProvider(apiClient, walletService);
   final router = createRouter(authProvider);
 
   // Kick off auto-login before the first frame
@@ -27,6 +33,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: walletService),
         ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider.value(value: poolProvider),
         ChangeNotifierProvider.value(value: creditProvider),

@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../config/theme.dart';
+import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import '../providers/credit_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/wallet_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool standalone;
@@ -19,6 +22,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _dataLoaded = false;
+  bool _wcDialogShown = false;
+  bool _isBindingWallet = false;
 
   @override
   void didChangeDependencies() {
@@ -102,8 +107,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         IconButton(
           icon: const Icon(Icons.logout_rounded, size: 22),
           onPressed: () async {
-            await context.read<AuthProvider>().logout();
-            if (mounted) context.go('/');
+            final auth = context.read<AuthProvider>();
+            final router = GoRouter.of(context);
+            await auth.logout();
+            if (!mounted) return;
+            router.go('/');
           },
         ),
         const SizedBox(width: 4),
@@ -112,11 +120,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    return Consumer3<AuthProvider, CreditProvider, WalletProvider>(
-      builder: (context, auth, credit, wallet, _) {
+    return Consumer4<AuthProvider, CreditProvider, WalletProvider,
+        WalletService>(
+      builder: (context, auth, credit, wallet, walletService, _) {
         final walletAddr = auth.walletAddress;
         final shortAddr = _shortenAddress(walletAddr);
         final balance = wallet.balance;
+
+        // Show WalletConnect pairing dialog when connecting
+        if (walletService.isConnecting &&
+            walletService.pairingUri != null &&
+            !_wcDialogShown) {
+          _wcDialogShown = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _showWalletConnectDialog(context, walletService);
+          });
+        }
 
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -173,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Icon(
+                    const Icon(
                       Icons.content_copy_rounded,
                       size: 16,
                       color: AppTheme.textTertiary,
@@ -184,7 +204,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 4),
               // Credit tier badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.accentYellow.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(12),
@@ -201,6 +222,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 28),
               // Balance card
               _buildBalanceCard(context, balance, wallet.token),
+              const SizedBox(height: 20),
+              // WalletConnect (testnet) card
+              _buildWalletConnectCard(context, auth, walletService),
               const SizedBox(height: 28),
               // Info rows
               _buildInfoCard(context, auth, credit),
@@ -211,6 +235,247 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _showWalletConnectDialog(BuildContext context, WalletService ws) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Consumer<WalletService>(
+        builder: (context, walletService, _) {
+          if (!walletService.isConnecting) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              _wcDialogShown = false;
+              setState(() {});
+            });
+          }
+          final uri = walletService.pairingUri ?? '';
+          return AlertDialog(
+            title: const Text('Connect Wallet'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Scan with MetaMask or any WalletConnect-compatible wallet (Creditcoin Testnet)',
+                    style: TextStyle(fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  if (uri.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: QrImageView(
+                        data: uri,
+                        version: QrVersions.auto,
+                        size: 200,
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Waiting for approval...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _wcDialogShown = false;
+                  setState(() {});
+                },
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) {
+      _wcDialogShown = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  Widget _buildWalletConnectCard(
+      BuildContext context, AuthProvider auth, WalletService walletService) {
+    final hasProjectId = AppConfig.walletConnectProjectId.isNotEmpty;
+
+    if (!hasProjectId) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.cardWhite,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          boxShadow: AppTheme.subtleShadow,
+        ),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.link_off_rounded,
+                    size: 22, color: AppTheme.textTertiary),
+                SizedBox(width: 10),
+                Text(
+                  'WalletConnect',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Set WALLETCONNECT_PROJECT_ID (from cloud.walletconnect.com) via --dart-define to enable testnet wallet signing.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final connected = walletService.isConnected;
+    final wcAddress = walletService.walletAddress;
+    final boundAddress = auth.walletAddress;
+    final canBind = connected && wcAddress != null && wcAddress != boundAddress;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.cardWhite,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        boxShadow: AppTheme.subtleShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                connected
+                    ? Icons.account_balance_wallet_rounded
+                    : Icons.link_rounded,
+                size: 22,
+                color: connected ? AppTheme.positive : AppTheme.textTertiary,
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'WalletConnect (Testnet)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            connected
+                ? 'Connected: ${_shortenAddress(wcAddress)}'
+                : 'Connect your wallet to sign pool, collateral and transfer transactions on Creditcoin Testnet.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+            ),
+          ),
+          if (walletService.errorMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              walletService.errorMessage!,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppTheme.negative,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              if (connected) ...[
+                OutlinedButton.icon(
+                  onPressed: _isBindingWallet
+                      ? null
+                      : () async {
+                          if (wcAddress == null) return;
+                          setState(() => _isBindingWallet = true);
+                          await auth.bindWallet(wcAddress);
+                          setState(() => _isBindingWallet = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Wallet bound. App will use this address.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                  icon: _isBindingWallet
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_circle_outline, size: 18),
+                  label: Text(
+                      canBind ? 'Use this wallet in app' : 'Already in use'),
+                ),
+                const SizedBox(width: 10),
+                TextButton(
+                  onPressed: () async {
+                    await walletService.disconnect();
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('Disconnect'),
+                ),
+              ] else
+                ElevatedButton.icon(
+                  onPressed: walletService.isConnecting
+                      ? null
+                      : () {
+                          walletService.connect();
+                          setState(() {});
+                        },
+                  icon: walletService.isConnecting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.link_rounded, size: 18),
+                  label: Text(walletService.isConnecting
+                      ? 'Connecting...'
+                      : 'Connect wallet'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -321,8 +586,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Divider(height: 20),
           _buildInfoRow('Eligible Tier', 'Tier ${credit.eligibleTier}'),
           const Divider(height: 20),
-          _buildInfoRow(
-              'Collateral Rate', '${credit.collateralRate / 100}%'),
+          _buildInfoRow('Collateral Rate', '${credit.collateralRate / 100}%'),
           const Divider(height: 20),
           _buildInfoRow('Max Pool Size', '\$${credit.maxPoolSize}'),
           if (credit.nextTier != null) ...[
@@ -444,9 +708,8 @@ class _DotChart extends StatelessWidget {
         final rng = Random(42);
         final data = List.generate(cols, (i) {
           final base = sin(i / cols * pi * 2 - 0.5) * 0.4 + 0.3;
-          final peak = i >= 18 && i <= 23
-              ? 0.4 * (1 - ((i - 20.5).abs() / 3))
-              : 0.0;
+          final peak =
+              i >= 18 && i <= 23 ? 0.4 * (1 - ((i - 20.5).abs() / 3)) : 0.0;
           return (base + peak + rng.nextDouble() * 0.15).clamp(0.0, 1.0);
         });
 

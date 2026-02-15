@@ -1,19 +1,21 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../services/api_client.dart';
+import '../services/wallet_service.dart';
 import '../config/app_config.dart';
 
 enum AuthStatus { unauthenticated, loading, authenticated, walletBound }
 
 class AuthProvider extends ChangeNotifier {
   final ApiClient _api;
+  final WalletService _walletService;
 
   AuthStatus _status = AuthStatus.unauthenticated;
   String? _identityHash;
   String? _walletAddress;
   String? _errorMessage;
 
-  AuthProvider(this._api);
+  AuthProvider(this._api, this._walletService);
 
   AuthStatus get status => _status;
   String? get identityHash => _identityHash;
@@ -21,6 +23,9 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated =>
       _status == AuthStatus.authenticated || _status == AuthStatus.walletBound;
+
+  /// Access the wallet service for signing transactions.
+  WalletService get walletService => _walletService;
 
   Future<void> verifyFayda(String token) async {
     _status = AuthStatus.loading;
@@ -33,6 +38,7 @@ class AuthProvider extends ChangeNotifier {
       _identityHash = response['identityHash'];
 
       if (response['walletBindingStatus'] == 'bound') {
+        _walletAddress = response['walletAddress'];
         _status = AuthStatus.walletBound;
       } else {
         _status = AuthStatus.authenticated;
@@ -74,6 +80,40 @@ class AuthProvider extends ChangeNotifier {
   /// Whether the dev bypass button should be shown on the onboarding screen.
   bool get isDevBypassEnabled => AppConfig.devBypassFayda;
 
+  /// Bind wallet using WalletConnect: connect the user's real wallet,
+  /// then bind the wallet address to their identity on the backend.
+  Future<void> connectAndBindWallet() async {
+    if (_identityHash == null) return;
+
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // 1. Connect via WalletConnect (user approves in their wallet app)
+      final address = await _walletService.connect();
+      if (address == null) {
+        _errorMessage =
+            _walletService.errorMessage ?? 'Wallet connection failed';
+        notifyListeners();
+        return;
+      }
+
+      // 2. Bind the wallet address from WalletConnect to the identity
+      final response = await _api.bindWallet(_identityHash!, address);
+      if (response['status'] == 'bound') {
+        _walletAddress = address;
+        _status = AuthStatus.walletBound;
+      } else {
+        _errorMessage = 'Wallet binding failed: ${response['status']}';
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to connect wallet: $e';
+    }
+
+    notifyListeners();
+  }
+
+  /// Legacy: bind wallet by pasting an address (kept for dev/test).
   Future<void> bindWallet(String walletAddress) async {
     if (_identityHash == null) return;
 
@@ -105,7 +145,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       // Decode the JWT payload to extract identity + wallet
       final parts = token.split('.');
-      if (parts.length != 3) throw FormatException('Invalid JWT');
+      if (parts.length != 3) throw const FormatException('Invalid JWT');
 
       final payload = parts[1];
       // base64Url needs padding normalization
@@ -129,6 +169,12 @@ class AuthProvider extends ChangeNotifier {
 
       if (wallet != null && wallet.isNotEmpty) {
         _status = AuthStatus.walletBound;
+
+        // Restore WalletConnect session if available
+        if (_walletService.isConnected &&
+            _walletService.walletAddress == wallet) {
+          // Already connected
+        }
       } else {
         _status = AuthStatus.authenticated;
       }
@@ -143,6 +189,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     await _api.clearToken();
+    await _walletService.disconnect();
     _status = AuthStatus.unauthenticated;
     _identityHash = null;
     _walletAddress = null;

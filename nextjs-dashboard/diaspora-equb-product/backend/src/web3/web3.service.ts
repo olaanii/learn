@@ -47,6 +47,9 @@ const PAYOUT_STREAM_ABI = [
 ];
 
 const EQUB_POOL_ABI = [
+  // v2: createPool now accepts a token address (address(0) = native CTC)
+  'function createPool(uint8 tier, uint256 contributionAmount, uint256 maxMembers, address treasury, address token) external returns (uint256)',
+  // Legacy overload (native CTC only)
   'function createPool(uint8 tier, uint256 contributionAmount, uint256 maxMembers, address treasury) external returns (uint256)',
   'function joinPool(uint256 poolId) external',
   'function contribute(uint256 poolId) external payable',
@@ -56,11 +59,23 @@ const EQUB_POOL_ABI = [
   'function schedulePayoutStream(uint256 poolId, address beneficiary, uint256 total, uint256 upfrontPercent, uint256 totalRounds) external',
   'function lockPartialCollateral(uint256 poolId, address member) external',
   'function poolCount() external view returns (uint256)',
-  'event PoolCreated(uint256 indexed poolId, uint256 contributionAmount, uint256 maxMembers)',
+  'function poolToken(uint256 poolId) external view returns (address)',
+  'event PoolCreated(uint256 indexed poolId, uint256 contributionAmount, uint256 maxMembers, address token)',
   'event JoinedPool(uint256 indexed poolId, address indexed member)',
   'event ContributionReceived(uint256 indexed poolId, address indexed member, uint256 round)',
   'event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round)',
   'event RoundClosed(uint256 indexed poolId, uint256 round)',
+];
+
+// ERC-20 ABI fragment (for building approve TXs on the client)
+const ERC20_ABI = [
+  'function approve(address spender, uint256 amount) external returns (bool)',
+  'function allowance(address owner, address spender) external view returns (uint256)',
+  'function balanceOf(address account) external view returns (uint256)',
+  'function transfer(address to, uint256 amount) external returns (bool)',
+  'function transferFrom(address from, address to, uint256 amount) external returns (bool)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+  'event Approval(address indexed owner, address indexed spender, uint256 value)',
 ];
 
 @Injectable()
@@ -68,6 +83,7 @@ export class Web3Service implements OnModuleInit {
   private readonly logger = new Logger(Web3Service.name);
   private provider: ethers.JsonRpcProvider;
   private deployerSigner: ethers.Wallet | null = null;
+  private _chainId: number;
 
   private identityRegistry: ethers.Contract;
   private tierRegistry: ethers.Contract;
@@ -80,7 +96,8 @@ export class Web3Service implements OnModuleInit {
 
   async onModuleInit() {
     const rpcUrl = this.configService.get<string>('RPC_URL');
-    const chainId = this.configService.get<number>('CHAIN_ID');
+    const chainId = this.configService.get<number>('CHAIN_ID', 102031);
+    this._chainId = chainId;
 
     this.provider = new ethers.JsonRpcProvider(rpcUrl, chainId);
 
@@ -172,6 +189,30 @@ export class Web3Service implements OnModuleInit {
     return this.deployerSigner;
   }
 
+  /** Returns the configured chain ID (e.g. 102031 for Creditcoin Testnet). */
+  getChainId(): number {
+    return this._chainId;
+  }
+
+  /**
+   * Helper: build an unsigned transaction object from encoded calldata.
+   * The Flutter client will prompt the user's wallet to sign this.
+   */
+  buildUnsignedTx(
+    to: string,
+    data: string,
+    value = '0',
+    estimatedGas = '300000',
+  ): UnsignedTxDto {
+    return {
+      to,
+      data,
+      value,
+      chainId: this._chainId,
+      estimatedGas,
+    };
+  }
+
   async isRpcHealthy(): Promise<boolean> {
     try {
       await this.provider.getBlockNumber();
@@ -180,4 +221,13 @@ export class Web3Service implements OnModuleInit {
       return false;
     }
   }
+}
+
+/** Shape returned to the client for every write operation. */
+export interface UnsignedTxDto {
+  to: string;
+  data: string;
+  value: string;
+  chainId: number;
+  estimatedGas: string;
 }
