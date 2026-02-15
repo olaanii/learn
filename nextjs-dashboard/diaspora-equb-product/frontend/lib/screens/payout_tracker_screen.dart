@@ -62,8 +62,9 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
             }
 
             // Extract pool data
-            final contributionAmount =
-                double.tryParse(pool['contributionAmount']?.toString() ?? '0') ?? 0;
+            final contributionAmount = double.tryParse(
+                    pool['contributionAmount']?.toString() ?? '0') ??
+                0;
             final maxMembers = pool['maxMembers'] ?? 10;
             final currentRound = pool['currentRound'] ?? 0;
             final totalRounds = maxMembers;
@@ -73,12 +74,9 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
             const upfrontPercent = 20; // default 20%
             final upfrontAmount = totalAmount * upfrontPercent / 100;
             final streamAmount = totalAmount - upfrontAmount;
-            final perRound =
-                totalRounds > 0 ? streamAmount / totalRounds : 0.0;
-            final releasedRounds =
-                currentRound > 0 ? currentRound - 1 : 0;
-            final totalReleased =
-                upfrontAmount + (perRound * releasedRounds);
+            final perRound = totalRounds > 0 ? streamAmount / totalRounds : 0.0;
+            final releasedRounds = currentRound > 0 ? currentRound - 1 : 0;
+            final totalReleased = upfrontAmount + (perRound * releasedRounds);
             final remaining = totalAmount - totalReleased;
             final status = pool['status']?.toString() ?? 'pending-onchain';
 
@@ -102,16 +100,15 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
                         const SizedBox(height: 16),
                         _buildStreamInfoRow('Total Amount',
                             '${totalAmount.toStringAsFixed(2)} USDC'),
-                        _buildStreamInfoRow(
-                            'Upfront ($upfrontPercent%)',
+                        _buildStreamInfoRow('Upfront ($upfrontPercent%)',
                             '${upfrontAmount.toStringAsFixed(2)} USDC'),
-                        _buildStreamInfoRow('Per Round',
-                            '${perRound.toStringAsFixed(2)} USDC'),
                         _buildStreamInfoRow(
-                            'Total Rounds', '$totalRounds'),
+                            'Per Round', '${perRound.toStringAsFixed(2)} USDC'),
+                        _buildStreamInfoRow('Total Rounds', '$totalRounds'),
                         _buildStreamInfoRow('Released Rounds',
                             '$releasedRounds / $totalRounds'),
-                        _buildStreamInfoRow('Members', '$memberCount / $maxMembers'),
+                        _buildStreamInfoRow(
+                            'Members', '$memberCount / $maxMembers'),
                         const SizedBox(height: 16),
                         const Divider(),
                         const SizedBox(height: 8),
@@ -159,12 +156,10 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
                       children: [
                         Text(
                           'Release Progress',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                         const SizedBox(height: 16),
 
@@ -172,8 +167,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
                         _buildProgressSection(
                           context,
                           label: 'Upfront Payment',
-                          amount:
-                              '${upfrontAmount.toStringAsFixed(2)} USDC',
+                          amount: '${upfrontAmount.toStringAsFixed(2)} USDC',
                           isReleased: currentRound > 0,
                         ),
                         const SizedBox(height: 12),
@@ -185,8 +179,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen> {
                             child: _buildProgressSection(
                               context,
                               label: 'Round $i',
-                              amount:
-                                  '${perRound.toStringAsFixed(2)} USDC',
+                              amount: '${perRound.toStringAsFixed(2)} USDC',
                               isReleased: i <= releasedRounds,
                               isCurrent: i == releasedRounds + 1,
                             ),

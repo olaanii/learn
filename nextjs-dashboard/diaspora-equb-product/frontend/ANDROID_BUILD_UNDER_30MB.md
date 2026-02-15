@@ -74,6 +74,33 @@ buildTypes {
 
 Then run the same Flutter command as above. If `minifyEnabled` causes build or runtime issues, remove it and keep `--split-per-abi` and `--obfuscate`; that is usually enough to stay under 30 MB per ABI.
 
+## If build fails with "Address already in use: bind"
+
+The build script **`build_android_under_30mb.bat`** avoids this by using a **project-local Gradle home** and **no daemon**, so it doesn’t conflict with Android Studio or other Gradle processes.
+
+**Use the batch file to build (recommended):**
+- From **repo root:** `frontend\build_android_under_30mb.bat`
+- From **frontend folder (PowerShell):** `.\build_android_under_30mb.bat` (the `.\` is required in PowerShell)
+- From **frontend folder (CMD):** `build_android_under_30mb.bat`
+
+If you build with `flutter build apk ...` directly and see the error:
+
+1. **Stop Gradle daemons:** From the `frontend` folder run:
+   ```cmd
+   cd android
+   gradlew.bat --stop
+   cd ..
+   ```
+
+2. **Or** set a project-local Gradle home and no daemon before running Flutter:
+   ```cmd
+   set GRADLE_USER_HOME=%CD%\android\.gradle-user-home
+   set GRADLE_OPTS=-Dorg.gradle.daemon=false
+   flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+   ```
+
+3. Close **Android Studio** (or any other window building this project) and retry.
+
 ## If release build fails with lint errors (BuiltinIssueRegistry / PsiMember)
 
 The project already disables release lint in `android/app/build.gradle.kts` and `android/build.gradle.kts` so plugin lint tasks don’t fail the build. If you still see lint failures, run the build skipping lint:

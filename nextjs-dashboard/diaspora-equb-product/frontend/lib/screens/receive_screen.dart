@@ -144,12 +144,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                           // Exchange rate
                           Builder(
                             builder: (context) {
-                              final eur = wallet.rates['EUR']
-                                      ?.toStringAsFixed(2) ??
-                                  '0.95';
-                              final gbp = wallet.rates['GBP']
-                                      ?.toStringAsFixed(2) ??
-                                  '0.79';
+                              final eur =
+                                  wallet.rates['EUR']?.toStringAsFixed(2) ??
+                                      '0.95';
+                              final gbp =
+                                  wallet.rates['GBP']?.toStringAsFixed(2) ??
+                                      '0.79';
                               return Text(
                                 '1 USD = EUR $eur • GBP $gbp',
                                 style: const TextStyle(

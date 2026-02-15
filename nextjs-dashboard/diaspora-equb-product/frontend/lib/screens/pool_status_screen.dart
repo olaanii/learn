@@ -53,32 +53,32 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       poolId: widget.poolId,
     );
 
-    if (mounted) {
-      if (txHash != null) {
-        final auth = context.read<AuthProvider>();
-        if (auth.walletAddress != null) {
-          context.read<WalletProvider>().loadAllBalances(auth.walletAddress!);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Contribution sent! TX: ${txHash.substring(0, 16)}...'),
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () {
-                // Open in block explorer
-                debugPrint('${AppConfig.explorerUrl}/tx/$txHash');
-              },
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(pools.errorMessage ?? 'Contribution failed'),
-          ),
-        );
+    if (!mounted) return;
+    if (txHash != null) {
+      final auth = context.read<AuthProvider>();
+      if (auth.walletAddress != null) {
+        await context.read<WalletProvider>().loadAllBalances(auth.walletAddress!);
       }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Contribution sent! TX: ${txHash.substring(0, 16)}...'),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () {
+              // Open in block explorer
+              debugPrint('${AppConfig.explorerUrl}/tx/$txHash');
+            },
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(pools.errorMessage ?? 'Contribution failed'),
+        ),
+      );
     }
   }
 

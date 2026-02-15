@@ -55,24 +55,33 @@ class _CollateralScreenState extends State<CollateralScreen> {
       amount: amount,
     );
 
-    if (mounted) {
-      if (success) {
-        _amountController.clear();
-        wallet.loadAllBalances(auth.walletAddress!);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Collateral locked successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(collateral.errorMessage ?? 'Failed to lock collateral'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (success) {
+      _amountController.clear();
+      // Refresh wallet balances so "available" reflects the locked amount
+      await wallet.loadAllBalances(auth.walletAddress!);
+      if (!mounted) return;
+      // Refetch collateral and balances after a short delay so UI picks up
+      // backend updates (avoids stale GET right after POST)
+      final addr = auth.walletAddress!;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        collateral.loadCollateral(addr);
+        wallet.loadAllBalances(addr);
+      });
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Collateral locked successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(collateral.errorMessage ?? 'Failed to lock collateral'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -101,7 +110,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Wallet balance card
+                  // Wallet balance card (on-chain balance; locked tokens are in vault)
                   _buildWalletBalanceCard(wallet),
                   const SizedBox(height: 20),
 
@@ -110,7 +119,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
                   const SizedBox(height: 28),
 
                   // Lock collateral section
-                  _buildLockSection(),
+                  _buildLockSection(collateral),
                   const SizedBox(height: 28),
 
                   // Collateral entries
@@ -309,7 +318,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
         Expanded(
           child: _buildSummaryCard(
             icon: Icons.lock_outline,
-            label: 'Locked',
+            label: 'Collateral locked',
             value: '\$${collateral.totalLocked.toStringAsFixed(2)}',
             color: AppTheme.primaryColor,
           ),
@@ -319,6 +328,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
           child: _buildSummaryCard(
             icon: Icons.account_balance_wallet_outlined,
             label: 'Available',
+            subtitle: 'Withdrawable',
             value: '\$${collateral.totalAvailable.toStringAsFixed(2)}',
             color: AppTheme.positive,
           ),
@@ -330,6 +340,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
   Widget _buildSummaryCard({
     required IconData icon,
     required String label,
+    String? subtitle,
     required String value,
     required Color color,
   }) {
@@ -357,17 +368,32 @@ class _CollateralScreenState extends State<CollateralScreen> {
             label,
             style: const TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.textTertiary,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+              ),
             ),
           ),
         ],
@@ -375,7 +401,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
     );
   }
 
-  Widget _buildLockSection() {
+  Widget _buildLockSection(CollateralProvider collateral) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -403,6 +429,31 @@ class _CollateralScreenState extends State<CollateralScreen> {
               color: AppTheme.textTertiary,
             ),
           ),
+          if (collateral.totalLocked > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline,
+                      size: 20, color: AppTheme.primaryColor),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Total collateral locked: \$${collateral.totalLocked.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           // Amount input
           Container(
@@ -446,7 +497,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: _lockCollateral,
+              onPressed: collateral.isLoading ? null : _lockCollateral,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.darkButton,
                 foregroundColor: Colors.white,
@@ -455,13 +506,22 @@ class _CollateralScreenState extends State<CollateralScreen> {
                 ),
                 elevation: 0,
               ),
-              child: const Text(
-                'Lock Collateral',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: collateral.isLoading
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Lock Collateral',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -482,8 +542,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
         child: Column(
           children: [
             Icon(Icons.shield_outlined,
-                size: 48,
-                color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             const Text(
               'No collateral locked yet',
@@ -514,8 +573,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
         boxShadow: AppTheme.subtleShadow,
       ),
       child: Column(
-        children:
-            List.generate(collateral.collaterals.length, (i) {
+        children: List.generate(collateral.collaterals.length, (i) {
           final entry = collateral.collaterals[i];
           final isLast = i == collateral.collaterals.length - 1;
           return _buildCollateralTile(entry, isLast);
@@ -565,7 +623,9 @@ class _CollateralScreenState extends State<CollateralScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  poolId != null ? 'Pool ${poolId.substring(0, 8)}...' : 'General',
+                  poolId != null
+                      ? 'Pool ${poolId.substring(0, 8)}...'
+                      : 'General',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -574,10 +634,11 @@ class _CollateralScreenState extends State<CollateralScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Locked: \$${locked.toStringAsFixed(2)}',
+                  'Collateral locked: \$${locked.toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textTertiary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 if (slashed > 0)
@@ -604,7 +665,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
                 ),
               ),
               const Text(
-                'available',
+                'withdrawable',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppTheme.textTertiary,

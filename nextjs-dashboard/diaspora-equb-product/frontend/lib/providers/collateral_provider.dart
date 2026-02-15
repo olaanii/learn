@@ -144,17 +144,40 @@ class CollateralProvider extends ChangeNotifier {
     required String amount,
     String? poolId,
   }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
     try {
       await _api.lockCollateral(
         walletAddress: walletAddress,
         amount: amount,
         poolId: poolId,
       );
-      // Reload collateral data
+      final addAmount = double.tryParse(amount) ?? 0;
+      if (addAmount > 0 && _collaterals.isNotEmpty) {
+        // Optimistic update: show new locked amount immediately (GET /api/collateral is often 6–8+ s)
+        final updated = List<Map<String, dynamic>>.from(_collaterals);
+        for (var i = 0; i < updated.length; i++) {
+          final c = Map<String, dynamic>.from(updated[i]);
+          final cur = double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
+          c['lockedAmount'] = (cur + addAmount).toString();
+          updated[i] = c;
+        }
+        _collaterals = updated;
+        _isLoading = false;
+        notifyListeners();
+        // Screen’s delayed refetch will sync with server
+        return true;
+      }
+      // No existing row: must refetch to get the new collateral entry from server
       await loadCollateral(walletAddress);
+      _isLoading = false;
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = 'Failed to lock collateral';
+      _isLoading = false;
       notifyListeners();
       return false;
     }

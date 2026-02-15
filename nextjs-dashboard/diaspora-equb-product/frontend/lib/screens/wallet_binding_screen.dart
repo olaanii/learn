@@ -132,7 +132,8 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                   ),
 
                   // Show pairing URI as QR code when connecting
-                  if (wallet.pairingUri != null && wallet.pairingUri!.isNotEmpty) ...[
+                  if (wallet.pairingUri != null &&
+                      wallet.pairingUri!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Card(
                       child: Padding(

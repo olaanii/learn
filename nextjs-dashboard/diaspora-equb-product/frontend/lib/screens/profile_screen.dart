@@ -416,11 +416,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? null
                       : () async {
                           if (wcAddress == null) return;
+                          final messenger = ScaffoldMessenger.of(context);
                           setState(() => _isBindingWallet = true);
                           await auth.bindWallet(wcAddress);
                           setState(() => _isBindingWallet = false);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               const SnackBar(
                                 content: Text(
                                     'Wallet bound. App will use this address.'),

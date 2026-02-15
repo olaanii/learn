@@ -83,9 +83,9 @@ class WalletService extends ChangeNotifier {
       // Request Creditcoin Testnet (EIP-155 chain)
       const chainId = 'eip155:${AppConfig.chainId}';
 
-      // Use requiredNamespaces so the wallet connects on Creditcoin Testnet (102031)
+      // optionalNamespaces (requiredNamespaces is deprecated in WalletConnect v2)
       final connectResponse = await _signClient!.connect(
-        requiredNamespaces: {
+        optionalNamespaces: {
           'eip155': const RequiredNamespace(
             chains: [chainId],
             methods: [
@@ -102,9 +102,9 @@ class WalletService extends ChangeNotifier {
       _pairingUri = connectResponse.uri?.toString();
       notifyListeners();
 
-      // Try to open MetaMask deep link on mobile
+      // Try to open MetaMask (deep link, then universal link fallback) so user can approve
       if (_pairingUri != null) {
-        _tryOpenWallet(_pairingUri!);
+        await _tryOpenWallet(_pairingUri!);
       }
 
       // Wait for the wallet to approve the session
@@ -151,8 +151,8 @@ class WalletService extends ChangeNotifier {
         'gas': _toHex(unsignedTx['estimatedGas'] ?? '300000'),
       };
 
-      // Try to bring the wallet to foreground
-      _tryOpenWallet(null);
+      // Try to bring the wallet to foreground so user can confirm the TX
+      await _tryOpenWallet(null);
 
       // Request the wallet to sign and send
       final result = await _signClient!.request(
@@ -252,21 +252,27 @@ class WalletService extends ChangeNotifier {
   }
 
   /// Try to open MetaMask or another wallet via deep link.
-  void _tryOpenWallet(String? uri) {
+  /// Tries custom scheme first, then MetaMask universal link as fallback (helps on Android).
+  Future<void> _tryOpenWallet(String? uri) async {
     try {
       if (uri != null) {
-        // WalletConnect URI deep link for MetaMask
-        final metamaskUri = 'metamask://wc?uri=${Uri.encodeComponent(uri)}';
-        launchUrl(Uri.parse(metamaskUri), mode: LaunchMode.externalApplication);
+        final encodedUri = Uri.encodeComponent(uri);
+        // 1. Deep link (works best on iOS; can fail on Android)
+        final deepLink = Uri.parse('metamask://wc?uri=$encodedUri');
+        final launched = await launchUrl(deepLink, mode: LaunchMode.externalApplication);
+        if (launched) return;
+        // 2. Universal link fallback (more reliable when custom scheme is blocked)
+        final universalLink = Uri.parse('https://link.metamask.io/wc?uri=$encodedUri');
+        await launchUrl(universalLink, mode: LaunchMode.externalApplication);
       } else {
-        // Just bring MetaMask to foreground
-        launchUrl(
+        // Bring MetaMask to foreground for pending sign request
+        await launchUrl(
           Uri.parse('metamask://'),
           mode: LaunchMode.externalApplication,
         );
       }
     } catch (_) {
-      // Deep link not available; user will scan QR code instead
+      // Deep link not available; user can scan QR code or open wallet manually
     }
   }
 }
