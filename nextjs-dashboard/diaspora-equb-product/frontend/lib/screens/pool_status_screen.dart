@@ -17,16 +17,42 @@ class PoolStatusScreen extends StatefulWidget {
 }
 
 class _PoolStatusScreenState extends State<PoolStatusScreen> {
+  Map<String, dynamic>? _tokenInfo;
+  bool _isContributing = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PoolProvider>().loadPool(widget.poolId);
+      _loadPoolData();
     });
   }
 
-  /// Contribute on-chain via WalletConnect: get unsigned TX from backend,
-  /// then prompt the wallet to sign and broadcast.
+  Future<void> _loadPoolData() async {
+    final pools = context.read<PoolProvider>();
+    await pools.loadPool(widget.poolId);
+
+    final info = await pools.getPoolTokenInfo(widget.poolId);
+    if (mounted) {
+      setState(() => _tokenInfo = info);
+    }
+  }
+
+  bool get _isErc20Pool {
+    if (_tokenInfo == null) return false;
+    return _tokenInfo!['isErc20'] == true;
+  }
+
+  String get _tokenSymbol {
+    if (!_isErc20Pool || _tokenInfo?['token'] == null) return 'CTC';
+    return _tokenInfo!['token']['symbol'] ?? 'TOKEN';
+  }
+
+  String? get _tokenAddress {
+    if (!_isErc20Pool || _tokenInfo?['token'] == null) return null;
+    return _tokenInfo!['token']['address'];
+  }
+
   Future<void> _contributeOnChain(
     PoolProvider pools,
     WalletService wallet,
@@ -39,34 +65,66 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                'Pool has no on-chain ID. Use legacy contribute for dev/test.'),
+            content: Text('Pool has no on-chain ID yet.'),
           ),
         );
       }
       return;
     }
 
-    final txHash = await pools.buildAndSignContribute(
-      onChainPoolId as int,
-      contributionAmount.toString(),
-      poolId: widget.poolId,
-    );
+    setState(() => _isContributing = true);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isErc20Pool
+                ? 'Step 1/2: Approve $_tokenSymbol spending — confirm in wallet...'
+                : 'Contributing $contributionAmount — confirm in your wallet...',
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+
+    String? txHash;
+
+    if (_isErc20Pool && _tokenAddress != null) {
+      txHash = await pools.approveAndContribute(
+        onChainPoolId: onChainPoolId as int,
+        contributionAmount: contributionAmount.toString(),
+        tokenAddress: _tokenAddress!,
+      );
+    } else {
+      txHash = await pools.buildAndSignContribute(
+        onChainPoolId as int,
+        contributionAmount.toString(),
+        tokenAddress: _tokenAddress,
+        poolId: widget.poolId,
+      );
+    }
 
     if (!mounted) return;
+    setState(() => _isContributing = false);
+
     if (txHash != null) {
       final auth = context.read<AuthProvider>();
       if (auth.walletAddress != null) {
-        await context.read<WalletProvider>().loadAllBalances(auth.walletAddress!);
+        await context.read<WalletProvider>().refreshAfterTx(
+              auth.walletAddress!,
+            );
       }
       if (!mounted) return;
+      await pools.loadPool(widget.poolId);
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Contribution sent! TX: ${txHash.substring(0, 16)}...'),
+          content: Text('Contribution confirmed! TX: ${txHash.substring(0, 16)}...'),
+          duration: const Duration(seconds: 4),
           action: SnackBarAction(
             label: 'View',
             onPressed: () {
-              // Open in block explorer
               debugPrint('${AppConfig.explorerUrl}/tx/$txHash');
             },
           ),
@@ -75,14 +133,13 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(pools.errorMessage ?? 'Contribution failed'),
+          content: Text(pools.errorMessage ?? 'Contribution failed or rejected'),
+          backgroundColor: Colors.red.shade700,
         ),
       );
     }
   }
 
-  /// Legacy contribute (DB-only, for dev/test when WalletConnect is not configured).
   Future<void> _contributeLegacy(
     PoolProvider pools,
     String walletAddress,
@@ -110,6 +167,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     final pools = context.watch<PoolProvider>();
     final auth = context.watch<AuthProvider>();
     final wallet = context.watch<WalletService>();
+    final walletProvider = context.watch<WalletProvider>();
     final pool = pools.selectedPool;
 
     return Container(
@@ -129,8 +187,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         body: pool == null
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: () async =>
-                    context.read<PoolProvider>().loadPool(widget.poolId),
+                onRefresh: _loadPoolData,
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -179,11 +236,19 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                             if (pool['onChainPoolId'] != null)
                               _buildInfoRow('On-Chain ID',
                                   '${pool['onChainPoolId']}'),
+                            if (_isErc20Pool)
+                              _buildInfoRow('Token', '$_tokenSymbol ($_tokenAddress)'),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Balance card showing deduction preview
+                    if (auth.walletAddress != null && wallet.isConnected) ...[
+                      _buildBalancePreviewCard(walletProvider, pool),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Members section
                     Text(
@@ -231,41 +296,66 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                     }),
                     const SizedBox(height: 24),
 
-                    // ── Contribute Buttons ──
+                    // Contribute buttons
                     if (auth.walletAddress != null) ...[
-                      // On-chain contribute (via WalletConnect)
                       if (wallet.isConnected &&
                           pool['onChainPoolId'] != null) ...[
-                        ElevatedButton.icon(
-                          onPressed: pools.isLoading
-                              ? null
-                              : () => _contributeOnChain(pools, wallet, pool),
-                          icon: pools.isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: (_isContributing || pools.isLoading)
+                                ? null
+                                : () => _contributeOnChain(pools, wallet, pool),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.darkButton,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isContributing
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                          Icons.account_balance_wallet_outlined,
+                                          size: 20),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        _isErc20Pool
+                                            ? 'Approve & Contribute $_tokenSymbol (Round ${pool['currentRound'] ?? 1})'
+                                            : 'Contribute On-Chain (Round ${pool['currentRound'] ?? 1})',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                )
-                              : const Icon(Icons.account_balance_wallet),
-                          label: Text(
-                            'Contribute On-Chain (Round ${pool['currentRound'] ?? 1})',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Text(
-                          'Signs via WalletConnect — your wallet will prompt you',
-                          style:
-                              TextStyle(color: Colors.grey[500], fontSize: 12),
+                          _isErc20Pool
+                              ? 'Two wallet signatures required: approve $_tokenSymbol spend, then contribute.'
+                              : 'Your wallet (MetaMask) will pop up to sign this transaction.',
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 12,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ] else ...[
-                        // Legacy/dev contribute (DB-only)
                         ElevatedButton.icon(
                           onPressed: () => _contributeLegacy(
                             pools,
@@ -314,6 +404,107 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
+  Widget _buildBalancePreviewCard(
+      WalletProvider walletProvider, Map<String, dynamic> pool) {
+    final contributionRaw = pool['contributionAmount']?.toString() ?? '0';
+    final contribution = double.tryParse(contributionRaw) ?? 0;
+
+    String currentBalance;
+    String afterBalance;
+
+    if (_isErc20Pool) {
+      final bal =
+          double.tryParse(walletProvider.balanceOf(_tokenSymbol)) ?? 0;
+      currentBalance = bal.toStringAsFixed(2);
+      afterBalance = (bal - contribution).toStringAsFixed(2);
+    } else {
+      final bal = double.tryParse(walletProvider.balance) ?? 0;
+      currentBalance = bal.toStringAsFixed(2);
+      afterBalance = (bal - contribution).toStringAsFixed(2);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.accentYellow.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+        border: Border.all(
+          color: AppTheme.accentYellow,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Balance',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              Text(
+                '\$$currentBalance ${_isErc20Pool ? _tokenSymbol : 'CTC'}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Contribution',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.negative,
+                ),
+              ),
+              Text(
+                '-$contributionRaw',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.negative,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'After Contribution',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              Text(
+                '\$$afterBalance',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -321,7 +512,13 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.grey[600])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

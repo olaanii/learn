@@ -117,6 +117,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => _isSubmitting = false);
 
     if (txHash != null) {
+      await wallet.refreshAfterTx(auth.walletAddress!, token: _currency);
+      if (!mounted) return;
+
       setState(() => _txResult = 'Sent! Tx: ${txHash.substring(0, 10)}…');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -162,21 +165,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 _buildTextField(
                   controller: _accountController,
                   hint: 'Enter wallet address (0x...)',
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: const Text(
-                      'Use frequent account',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ),
                 ),
                 const SizedBox(height: 28),
 

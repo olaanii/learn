@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
 
 class TransactionsScreen extends StatefulWidget {
-  /// When true, renders as a full page with its own Scaffold+gradient.
-  /// When false, renders just the body content (for embedding in MainShell).
   final bool standalone;
 
   const TransactionsScreen({super.key, this.standalone = false});
@@ -55,8 +54,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             title: const Text('Transactions'),
             actions: [
               IconButton(
-                icon: const Icon(Icons.search_rounded, size: 24),
-                onPressed: () {},
+                icon: const Icon(Icons.refresh_rounded, size: 24),
+                onPressed: _loadTransactions,
               ),
               const SizedBox(width: 4),
             ],
@@ -66,10 +65,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       );
     }
 
-    // Embedded mode: header row + body
     return Column(
       children: [
-        // Inline header
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Row(
@@ -84,8 +81,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.search_rounded, size: 24),
-                onPressed: () {},
+                icon: const Icon(Icons.refresh_rounded, size: 24),
+                onPressed: _loadTransactions,
               ),
             ],
           ),
@@ -112,7 +109,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.receipt_long_rounded,
-                      size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                      size: 48,
+                      color: AppTheme.textTertiary.withValues(alpha: 0.5)),
                   const SizedBox(height: 16),
                   const Text(
                     'No transactions yet',
@@ -137,84 +135,72 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           );
         }
 
-        // Group transactions - for now show all in a single group
-        return ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          children: [
-            // Card selector chip
-            _buildCardChip(),
-            const SizedBox(height: 24),
-            _buildGroupHeader('Recent'),
-            const SizedBox(height: 12),
-            _buildGroupCard(txList),
-            const SizedBox(height: 24),
-          ],
+        final grouped = _groupByDay(txList);
+
+        return RefreshIndicator(
+          onRefresh: () async => _loadTransactions(),
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            itemCount: grouped.length,
+            itemBuilder: (context, index) {
+              final group = grouped[index];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (index > 0) const SizedBox(height: 24),
+                  _buildGroupHeader(group.label),
+                  const SizedBox(height: 12),
+                  _buildGroupCard(group.transactions),
+                ],
+              );
+            },
+          ),
         );
       },
     );
   }
 
-  Widget _buildCardChip() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.darkButton,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Mastercard-style circles
-            SizedBox(
-              width: 28,
-              height: 18,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 0,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEB001B),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 10,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF79E1B).withValues(alpha: 0.85),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              '••••2872',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                color: Colors.white, size: 18),
-          ],
-        ),
-      ),
-    );
+  List<_DayGroup> _groupByDay(List<Map<String, dynamic>> txList) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    final Map<String, DateTime> groupDates = {};
+
+    for (final tx in txList) {
+      final timestamp = tx['timestamp'];
+      DateTime txDate;
+      if (timestamp != null && timestamp is num) {
+        txDate = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt());
+      } else {
+        txDate = now;
+      }
+      final dayKey =
+          '${txDate.year}-${txDate.month.toString().padLeft(2, '0')}-${txDate.day.toString().padLeft(2, '0')}';
+      grouped.putIfAbsent(dayKey, () => []);
+      grouped[dayKey]!.add({...tx, '_parsedDate': txDate});
+      groupDates.putIfAbsent(dayKey, () => DateTime(txDate.year, txDate.month, txDate.day));
+    }
+
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return sortedKeys.map((key) {
+      final date = groupDates[key]!;
+      String label;
+      if (date == today) {
+        label = 'Today';
+      } else if (date == yesterday) {
+        label = 'Yesterday';
+      } else {
+        label = DateFormat('MMM d, yyyy').format(date);
+      }
+      return _DayGroup(label: label, transactions: grouped[key]!);
+    }).toList();
   }
 
   Widget _buildGroupHeader(String label) {
@@ -224,7 +210,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         label,
         style: const TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           color: AppTheme.textTertiary,
         ),
       ),
@@ -256,7 +242,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         ? '-\$${amount.toStringAsFixed(2)}'
         : '+\$${amount.toStringAsFixed(2)}';
 
-    // Shorten addresses
     final from = item['from']?.toString() ?? '';
     final to = item['to']?.toString() ?? '';
     final displayAddr = isSent ? to : from;
@@ -264,6 +249,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         ? '${displayAddr.substring(0, 6)}...${displayAddr.substring(displayAddr.length - 4)}'
         : displayAddr;
     final tokenSymbol = item['token']?.toString() ?? 'USDC';
+
+    // Format time
+    final parsedDate = item['_parsedDate'] as DateTime?;
+    final timeStr = parsedDate != null
+        ? DateFormat('h:mm a').format(parsedDate)
+        : '';
 
     final color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
 
@@ -278,7 +269,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       ),
       child: Row(
         children: [
-          // Avatar
           Container(
             width: 44,
             height: 44,
@@ -293,7 +283,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
           ),
           const SizedBox(width: 14),
-          // Name + type
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,15 +305,30 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         color: AppTheme.textTertiary,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.access_time_rounded,
-                        size: 12, color: AppTheme.textTertiary),
+                    if (timeStr.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: AppTheme.textTertiary.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        timeStr,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
             ),
           ),
-          // Amount
           Text(
             amountStr,
             style: TextStyle(
@@ -337,4 +341,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       ),
     );
   }
+}
+
+class _DayGroup {
+  final String label;
+  final List<Map<String, dynamic>> transactions;
+
+  _DayGroup({required this.label, required this.transactions});
 }

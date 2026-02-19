@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../config/app_config.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/notification_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -127,8 +129,30 @@ class _HomeScreenState extends State<HomeScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (!AppConfig.isMainnet) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.orange, width: 0.5),
+            ),
+            child: const Text(
+              'TESTNET',
+              style: TextStyle(
+                color: Colors.orange,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
         const Spacer(),
         _buildHeaderIcon(Icons.show_chart_rounded),
+        const SizedBox(width: 8),
+        _buildNotificationBell(context),
         const SizedBox(width: 8),
         GestureDetector(
           onTap: _loadWalletData,
@@ -147,6 +171,41 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, size: 20, color: AppTheme.textPrimary),
+    );
+  }
+
+  Widget _buildNotificationBell(BuildContext context) {
+    final unread = context.watch<NotificationProvider>().unreadCount;
+    return GestureDetector(
+      onTap: () => context.push('/notifications'),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _buildHeaderIcon(Icons.notifications_outlined),
+          if (unread > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: AppTheme.dangerColor,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                child: Text(
+                  unread > 99 ? '99+' : '$unread',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -341,6 +400,16 @@ class _HomeScreenState extends State<HomeScreen> {
           label: 'Receive',
           onTap: () => context.push('/receive'),
         ),
+        _buildActionButton(
+          icon: Icons.groups_rounded,
+          label: 'Equb',
+          onTap: () => context.push('/pools'),
+        ),
+        _buildActionButton(
+          icon: Icons.shield_outlined,
+          label: 'Collateral',
+          onTap: () => context.push('/collateral'),
+        ),
       ],
     );
   }
@@ -391,10 +460,14 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Latest Transactions',
-              style: Theme.of(context).textTheme.titleLarge,
+            Flexible(
+              child: Text(
+                'Latest Transactions',
+                style: Theme.of(context).textTheme.titleLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+            const SizedBox(width: 8),
             GestureDetector(
               onTap: () => context.push('/transactions'),
               child: const Text(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/pool_provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/wallet_service.dart';
 import '../config/theme.dart';
 
 class PoolBrowserScreen extends StatefulWidget {
@@ -193,6 +195,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     final contributionController = TextEditingController();
     final membersController = TextEditingController();
     final treasuryController = TextEditingController();
+    final wallet = context.read<WalletService>();
+    final auth = context.read<AuthProvider>();
 
     showDialog(
       context: context,
@@ -227,6 +231,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                 decoration: const InputDecoration(
                     labelText: 'Treasury Address (0x...)'),
               ),
+              if (!wallet.isConnected)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Connect your wallet to create on-chain pools.',
+                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                  ),
+                ),
             ],
           ),
         ),
@@ -237,20 +249,64 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
           ),
           ElevatedButton(
             onPressed: () async {
-              final pool = await context.read<PoolProvider>().createPool(
-                    tier: int.tryParse(tierController.text) ?? 0,
-                    contributionAmount: contributionController.text,
-                    maxMembers: int.tryParse(membersController.text) ?? 5,
-                    treasury: treasuryController.text,
+              if (wallet.isConnected) {
+                Navigator.pop(ctx);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Creating pool — confirm in your wallet...'),
+                      duration: Duration(seconds: 3),
+                    ),
                   );
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (pool != null && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Pool created successfully!')),
+                }
+
+                final txHash = await context.read<PoolProvider>().buildAndSignCreatePool(
+                  tier: int.tryParse(tierController.text) ?? 0,
+                  contributionAmount: contributionController.text,
+                  maxMembers: int.tryParse(membersController.text) ?? 5,
+                  treasury: treasuryController.text.isNotEmpty
+                      ? treasuryController.text
+                      : auth.walletAddress ?? '0x0000000000000000000000000000000000000000',
                 );
+
+                if (context.mounted) {
+                  if (txHash != null) {
+                    await context.read<PoolProvider>().loadPools();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Pool created on-chain! TX: ${txHash.substring(0, 16)}...'),
+                        ),
+                      );
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          context.read<PoolProvider>().errorMessage ?? 'Pool creation failed',
+                        ),
+                        backgroundColor: Colors.red.shade700,
+                      ),
+                    );
+                  }
+                }
+              } else {
+                final pool = await context.read<PoolProvider>().createPool(
+                  tier: int.tryParse(tierController.text) ?? 0,
+                  contributionAmount: contributionController.text,
+                  maxMembers: int.tryParse(membersController.text) ?? 5,
+                  treasury: treasuryController.text,
+                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (pool != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Pool created (DB-only, connect wallet for on-chain).')),
+                  );
+                }
               }
             },
-            child: const Text('Create'),
+            child: Text(wallet.isConnected ? 'Create & Sign' : 'Create'),
           ),
         ],
       ),

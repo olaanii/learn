@@ -96,6 +96,9 @@ class _PayScreenState extends State<PayScreen> {
     setState(() => _isSending = false);
 
     if (txHash != null) {
+      await wallet.refreshAfterTx(auth.walletAddress!, token: wallet.token);
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Sent! Tx: $txHash'),
