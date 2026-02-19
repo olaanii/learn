@@ -9,6 +9,7 @@ import { CreditScore } from '../entities/credit-score.entity';
 import { Collateral } from '../entities/collateral.entity';
 import { Identity } from '../entities/identity.entity';
 import { IndexedBlock } from '../entities/indexed-block.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { IndexedBlock } from '../entities/indexed-block.entity';
       Identity,
       IndexedBlock,
     ]),
+    NotificationsModule,
   ],
   providers: [IndexerService],
   exports: [IndexerService],

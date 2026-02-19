@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
@@ -37,6 +38,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly web3Service: Web3Service,
+    private readonly notifications: NotificationsService,
     @InjectRepository(Pool)
     private readonly poolRepo: Repository<Pool>,
     @InjectRepository(PoolMember)
@@ -471,6 +473,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       walletAddress: member,
     });
     await this.memberRepo.save(poolMember);
+
+    this.notifications.create(
+      member,
+      'pool_joined',
+      'Joined Pool',
+      `You joined Tier ${pool.tier} pool #${pool.onChainPoolId}.`,
+      { poolId: pool.id, onChainPoolId: pool.onChainPoolId },
+    ).catch(() => {});
   }
 
   private async handleContributionReceived(
@@ -508,6 +518,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       txHash: txHash || null,
     });
     await this.contributionRepo.save(contribution);
+
+    this.notifications.create(
+      member,
+      'contribution_confirmed',
+      'Contribution Confirmed',
+      `Your round ${roundNum} contribution to pool #${pool.onChainPoolId} is confirmed on-chain.`,
+      { poolId: pool.id, round: roundNum, txHash },
+    ).catch(() => {});
   }
 
   private async handleRoundClosed(
@@ -521,6 +539,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
 
     pool.currentRound = Number(round) + 1;
     await this.poolRepo.save(pool);
+
+    const members = await this.memberRepo.find({ where: { poolId: pool.id } });
+    for (const m of members) {
+      this.notifications.create(
+        m.walletAddress,
+        'round_closed',
+        'Round Closed',
+        `Round ${Number(round)} of pool #${pool.onChainPoolId} is closed. Round ${pool.currentRound} begins.`,
+        { poolId: pool.id, round: Number(round) },
+      ).catch(() => {});
+    }
   }
 
   private async handleStreamCreated(
@@ -578,6 +607,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       BigInt(stream.released) + BigInt(amount)
     ).toString();
     await this.payoutStreamRepo.save(stream);
+
+    this.notifications.create(
+      beneficiary,
+      'payout_received',
+      'Payout Received',
+      `You received a payout of ${ethers.formatUnits(amount, 6)} from pool #${pool.onChainPoolId}.`,
+      { poolId: pool.id, amount: amount.toString() },
+    ).catch(() => {});
   }
 
   private async handleScoreUpdated(user: string, newScore: bigint) {
@@ -646,6 +683,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     collateral.lockedAmount = (currentLocked - actualSlash).toString();
     collateral.slashedAmount = (currentSlashed + actualSlash).toString();
     await this.collateralRepo.save(collateral);
+
+    this.notifications.create(
+      user,
+      'collateral_slashed',
+      'Collateral Slashed',
+      `${ethers.formatUnits(actualSlash, 6)} of your collateral has been slashed.`,
+      { amount: actualSlash.toString() },
+    ).catch(() => {});
   }
 
   private async handleDefaultTriggered(
@@ -678,6 +723,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       });
       await this.contributionRepo.save(contribution);
     }
+
+    this.notifications.create(
+      member,
+      'default_triggered',
+      'Default Warning',
+      `You defaulted on round ${roundNum} of pool #${pool.onChainPoolId}. Collateral may be slashed.`,
+      { poolId: pool.id, round: roundNum },
+    ).catch(() => {});
   }
 
   private async handleStreamFrozen(
@@ -696,6 +749,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
 
     stream.frozen = true;
     await this.payoutStreamRepo.save(stream);
+
+    this.notifications.create(
+      beneficiary,
+      'stream_frozen',
+      'Payout Stream Frozen',
+      `Your payout stream for pool #${pool.onChainPoolId} has been frozen due to a default.`,
+      { poolId: pool.id },
+    ).catch(() => {});
   }
 
   private async handleIdentityBound(wallet: string, identityHash: string) {

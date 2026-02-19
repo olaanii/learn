@@ -136,7 +136,7 @@ export class TokenService {
         contract.queryFilter(receivedFilter, fromBlock, currentBlock),
       ]);
 
-      const transactions = [
+      const allEvents = [
         ...sentEvents.map((event: any) => ({
           type: 'sent',
           from: event.args[0],
@@ -159,9 +159,29 @@ export class TokenService {
         })),
       ];
 
-      // Sort by block number descending and limit
-      transactions.sort((a, b) => b.blockNumber - a.blockNumber);
-      return transactions.slice(0, limit);
+      allEvents.sort((a, b) => b.blockNumber - a.blockNumber);
+      const trimmed = allEvents.slice(0, limit);
+
+      // Resolve block timestamps for each unique block
+      const uniqueBlocks = [...new Set(trimmed.map((t) => t.blockNumber))];
+      const blockTimestamps: Record<number, number> = {};
+      await Promise.all(
+        uniqueBlocks.map(async (bn) => {
+          try {
+            const block = await provider.getBlock(bn);
+            if (block) blockTimestamps[bn] = block.timestamp;
+          } catch (_e) {
+            // Non-fatal: leave timestamp undefined
+          }
+        }),
+      );
+
+      return trimmed.map((tx) => ({
+        ...tx,
+        timestamp: blockTimestamps[tx.blockNumber]
+          ? blockTimestamps[tx.blockNumber] * 1000
+          : null,
+      }));
     } catch (error) {
       this.logger.warn(
         `Failed to fetch transactions for ${walletAddress}: ${error.message}`,
