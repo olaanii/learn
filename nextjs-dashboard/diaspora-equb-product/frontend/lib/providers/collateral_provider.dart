@@ -18,7 +18,6 @@ class CollateralProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get lastTxHash => _lastTxHash;
 
-  /// Total locked amount across all collateral entries.
   double get totalLocked {
     double total = 0;
     for (final c in _collaterals) {
@@ -27,7 +26,6 @@ class CollateralProvider extends ChangeNotifier {
     return total;
   }
 
-  /// Total slashed amount across all collateral entries.
   double get totalSlashed {
     double total = 0;
     for (final c in _collaterals) {
@@ -36,7 +34,6 @@ class CollateralProvider extends ChangeNotifier {
     return total;
   }
 
-  /// Total available balance across all collateral entries.
   double get totalAvailable {
     double total = 0;
     for (final c in _collaterals) {
@@ -61,11 +58,129 @@ class CollateralProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── On-Chain TX Builder Methods (WalletConnect signing) ────────────────────
+  // ─── ERC-20 Token Collateral (USDC / USDT) ────────────────────────────────
 
-  /// Build unsigned TX to deposit collateral, then sign & send via WalletConnect.
-  /// Returns the TX hash on success, or null on failure.
-  /// Pass [walletAddress] to refresh collateral data after success.
+  /// Deposit USDC/USDT as collateral:
+  /// 1. Backend builds ERC-20 transfer TX -> user signs via MetaMask
+  /// 2. After TX confirmed, backend records it in DB
+  Future<String?> buildAndSignDepositToken({
+    required String amount,
+    required String walletAddress,
+    String tokenSymbol = 'USDC',
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _lastTxHash = null;
+    notifyListeners();
+
+    try {
+      if (!_walletService.isConnected) {
+        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      final unsignedTx = await _api.buildDepositCollateralToken(
+        amount: amount,
+        tokenSymbol: tokenSymbol,
+      );
+
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
+      _lastTxHash = txHash;
+
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      _optimisticAddLocked(double.tryParse(amount) ?? 0);
+
+      try {
+        await _api.confirmCollateralTokenDeposit(
+          walletAddress: walletAddress,
+          amount: amount,
+          tokenSymbol: tokenSymbol,
+          txHash: txHash,
+        );
+      } catch (_) {
+        // Non-fatal: deposit is already on-chain
+      }
+
+      await loadCollateral(walletAddress);
+      _isLoading = false;
+      notifyListeners();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Token collateral deposit failed: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Release token collateral: backend (deployer) sends tokens back to user.
+  Future<String?> releaseTokenCollateral({
+    required String walletAddress,
+    required String amount,
+    String tokenSymbol = 'USDC',
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _lastTxHash = null;
+    notifyListeners();
+
+    try {
+      final result = await _api.releaseCollateralToken(
+        walletAddress: walletAddress,
+        amount: amount,
+        tokenSymbol: tokenSymbol,
+      );
+
+      final txHash = result['txHash'] as String?;
+      _lastTxHash = txHash;
+
+      if (txHash == null) {
+        _errorMessage = 'Release failed — no transaction hash returned';
+      }
+
+      await loadCollateral(walletAddress);
+      _isLoading = false;
+      notifyListeners();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Token collateral release failed: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  void _optimisticAddLocked(double amount) {
+    if (_collaterals.isEmpty) {
+      _collaterals = [
+        {
+          'lockedAmount': amount.toString(),
+          'availableBalance': '0',
+          'slashedAmount': '0',
+          'source': 'token',
+        }
+      ];
+    } else {
+      final updated = List<Map<String, dynamic>>.from(_collaterals);
+      final c = Map<String, dynamic>.from(updated[0]);
+      final cur = double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
+      c['lockedAmount'] = (cur + amount).toString();
+      updated[0] = c;
+      _collaterals = updated;
+    }
+    notifyListeners();
+  }
+
+  // ─── Native CTC Collateral (backward compat) ──────────────────────────────
+
   Future<String?> buildAndSignDeposit(String amount, {String? walletAddress}) async {
     _isLoading = true;
     _errorMessage = null;
@@ -73,17 +188,12 @@ class CollateralProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Get unsigned TX from backend
       final unsignedTx = await _api.buildDepositCollateral(amount);
-
-      // 2. Sign and send via WalletConnect
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       } else if (walletAddress != null) {
         await loadCollateral(walletAddress);
       }
@@ -99,7 +209,6 @@ class CollateralProvider extends ChangeNotifier {
     }
   }
 
-  /// Build unsigned TX to release collateral, then sign & send via WalletConnect.
   Future<String?> buildAndSignRelease({
     required String userAddress,
     required String amount,
@@ -115,13 +224,11 @@ class CollateralProvider extends ChangeNotifier {
         amount: amount,
       );
 
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       } else {
         await loadCollateral(userAddress);
       }
@@ -156,7 +263,6 @@ class CollateralProvider extends ChangeNotifier {
       );
       final addAmount = double.tryParse(amount) ?? 0;
       if (addAmount > 0 && _collaterals.isNotEmpty) {
-        // Optimistic update: show new locked amount immediately (GET /api/collateral is often 6–8+ s)
         final updated = List<Map<String, dynamic>>.from(_collaterals);
         for (var i = 0; i < updated.length; i++) {
           final c = Map<String, dynamic>.from(updated[i]);
@@ -167,10 +273,8 @@ class CollateralProvider extends ChangeNotifier {
         _collaterals = updated;
         _isLoading = false;
         notifyListeners();
-        // Screen’s delayed refetch will sync with server
         return true;
       }
-      // No existing row: must refetch to get the new collateral entry from server
       await loadCollateral(walletAddress);
       _isLoading = false;
       notifyListeners();

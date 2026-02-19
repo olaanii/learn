@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/api_client.dart';
 import '../services/wallet_service.dart';
@@ -18,7 +19,7 @@ class WalletProvider extends ChangeNotifier {
   // Transactions (for the selected token)
   List<Map<String, dynamic>> _transactions = [];
 
-  bool _isLoading = false;
+  int _loadingCount = 0;
   String? _errorMessage;
   String? _lastTxHash;
 
@@ -48,9 +49,20 @@ class WalletProvider extends ChangeNotifier {
 
   Map<String, double> get rates => _rates;
   List<Map<String, dynamic>> get transactions => _transactions;
-  bool get isLoading => _isLoading;
+  bool get isLoading => _loadingCount > 0;
   String? get errorMessage => _errorMessage;
   String? get lastTxHash => _lastTxHash;
+
+  void _startLoading() {
+    _loadingCount++;
+    notifyListeners();
+  }
+
+  void _stopLoading() {
+    _loadingCount--;
+    if (_loadingCount < 0) _loadingCount = 0;
+    notifyListeners();
+  }
 
   /// Switch the selected token and reload transactions.
   void selectToken(String tokenSymbol, {String? walletAddress}) {
@@ -66,9 +78,8 @@ class WalletProvider extends ChangeNotifier {
   /// Load the balance for a specific token.
   Future<void> loadBalance(String walletAddress,
       {String token = 'USDC'}) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
-    notifyListeners();
 
     try {
       final data = await _api.getTokenBalance(walletAddress, token: token);
@@ -82,8 +93,7 @@ class WalletProvider extends ChangeNotifier {
       _errorMessage = 'Failed to load $token balance';
     }
 
-    _isLoading = false;
-    notifyListeners();
+    _stopLoading();
   }
 
   /// Load balances for all supported tokens (USDC + USDT).
@@ -97,9 +107,8 @@ class WalletProvider extends ChangeNotifier {
   /// Load recent transactions for a wallet.
   Future<void> loadTransactions(String walletAddress,
       {String token = 'USDC', int limit = 20}) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
-    notifyListeners();
 
     try {
       final data = await _api.getTokenTransactions(
@@ -112,8 +121,7 @@ class WalletProvider extends ChangeNotifier {
       _errorMessage = 'Failed to load transactions';
     }
 
-    _isLoading = false;
-    notifyListeners();
+    _stopLoading();
   }
 
   /// Load exchange rates.
@@ -136,16 +144,14 @@ class WalletProvider extends ChangeNotifier {
   /// Get an unsigned TX from the backend, then sign & send it via WalletConnect.
   /// Returns the TX hash on success, or null on failure.
   Future<String?> signAndSend(Map<String, dynamic> unsignedTx) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
     _lastTxHash = null;
-    notifyListeners();
 
     try {
       if (!_walletService.isConnected) {
         _errorMessage = 'Wallet not connected. Please connect via WalletConnect.';
-        _isLoading = false;
-        notifyListeners();
+        _stopLoading();
         return null;
       }
 
@@ -156,26 +162,23 @@ class WalletProvider extends ChangeNotifier {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       }
 
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return txHash;
     } catch (e) {
       _errorMessage = 'Transaction failed: $e';
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return null;
     }
   }
 
-  /// Request faucet tokens (builds unsigned tx for the user to sign).
+  /// Request faucet tokens (minted by deployer on backend).
   Future<Map<String, dynamic>?> requestFaucet({
     required String walletAddress,
     double amount = 1000,
     String token = 'USDC',
   }) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
-    notifyListeners();
 
     try {
       final data = await _api.requestFaucet(
@@ -183,13 +186,112 @@ class WalletProvider extends ChangeNotifier {
         amount: amount,
         token: token,
       );
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return data;
     } catch (e) {
       _errorMessage = 'Failed to build faucet transaction';
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
+      return null;
+    }
+  }
+
+  // ─── Pool / Contract Transaction Helpers ──────────────────────────────────
+
+  /// Build unsigned TX to deposit collateral on-chain, then sign via wallet.
+  Future<String?> buildAndSignCollateralDeposit(String amount) async {
+    _startLoading();
+    _errorMessage = null;
+    _lastTxHash = null;
+
+    try {
+      if (!_walletService.isConnected) {
+        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _stopLoading();
+        return null;
+      }
+
+      final unsignedTx = await _api.buildDepositCollateral(amount);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
+      _lastTxHash = txHash;
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+      }
+      _stopLoading();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Collateral deposit failed: $e';
+      _stopLoading();
+      return null;
+    }
+  }
+
+  /// Build unsigned TX to release collateral on-chain, then sign via wallet.
+  Future<String?> buildAndSignCollateralRelease({
+    required String userAddress,
+    required String amount,
+  }) async {
+    _startLoading();
+    _errorMessage = null;
+    _lastTxHash = null;
+
+    try {
+      if (!_walletService.isConnected) {
+        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _stopLoading();
+        return null;
+      }
+
+      final unsignedTx = await _api.buildReleaseCollateral(
+        userAddress: userAddress,
+        amount: amount,
+      );
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
+      _lastTxHash = txHash;
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+      }
+      _stopLoading();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Collateral release failed: $e';
+      _stopLoading();
+      return null;
+    }
+  }
+
+  /// Build unsigned contribution TX, then sign and send via wallet.
+  /// For ERC-20 pools, approve must be done separately first.
+  Future<String?> buildAndSignContribution({
+    required int onChainPoolId,
+    required String contributionAmount,
+    String? tokenAddress,
+  }) async {
+    _startLoading();
+    _errorMessage = null;
+    _lastTxHash = null;
+
+    try {
+      if (!_walletService.isConnected) {
+        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _stopLoading();
+        return null;
+      }
+
+      final unsignedTx = await _api.buildContribute(
+        onChainPoolId: onChainPoolId,
+        contributionAmount: contributionAmount,
+        tokenAddress: tokenAddress,
+      );
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
+      _lastTxHash = txHash;
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+      }
+      _stopLoading();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Contribution failed: $e';
+      _stopLoading();
       return null;
     }
   }
@@ -246,16 +348,14 @@ class WalletProvider extends ChangeNotifier {
     required String amount,
     String token = 'USDC',
   }) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
     _lastTxHash = null;
-    notifyListeners();
 
     try {
       if (!_walletService.isConnected) {
         _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
-        _isLoading = false;
-        notifyListeners();
+        _stopLoading();
         return null;
       }
 
@@ -270,13 +370,11 @@ class WalletProvider extends ChangeNotifier {
       if (txHash == null) {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       }
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return txHash;
     } catch (e) {
       _errorMessage = 'Transfer failed: $e';
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return null;
     }
   }
@@ -290,16 +388,14 @@ class WalletProvider extends ChangeNotifier {
     String token = 'USDC',
     String network = 'ERC-20',
   }) async {
-    _isLoading = true;
+    _startLoading();
     _errorMessage = null;
     _lastTxHash = null;
-    notifyListeners();
 
     try {
       if (!_walletService.isConnected) {
         _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
-        _isLoading = false;
-        notifyListeners();
+        _stopLoading();
         return null;
       }
 
@@ -315,15 +411,25 @@ class WalletProvider extends ChangeNotifier {
       if (txHash == null) {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       }
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return txHash;
     } catch (e) {
       _errorMessage = 'Withdraw failed: $e';
-      _isLoading = false;
-      notifyListeners();
+      _stopLoading();
       return null;
     }
+  }
+
+  /// Refresh balances + transactions after a successful TX.
+  /// Loads immediately, then again after [delayMs] to catch indexer lag.
+  Future<void> refreshAfterTx(String walletAddress, {String? token}) async {
+    final t = token ?? _selectedToken;
+    await loadAllBalances(walletAddress);
+    await loadTransactions(walletAddress, token: t);
+    unawaited(Future.delayed(const Duration(milliseconds: 500), () async {
+      await loadAllBalances(walletAddress);
+      await loadTransactions(walletAddress, token: t);
+    }));
   }
 
   /// Load all wallet data at once (both USDC + USDT balances).
