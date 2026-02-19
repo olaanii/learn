@@ -14,25 +14,22 @@ RUN npm run build
 # ── Production stage ──────────────────────────────────
 FROM node:20-alpine AS production
 
-# Security: run as non-root user
 RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 
-# Health check
-RUN apk add --no-cache curl
-
+# wget is built into alpine — no extra apk install needed
 USER appuser
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -f http://localhost:3001/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
+  CMD wget -q --spider http://localhost:3001/api/health || exit 1
 
 CMD ["node", "dist/main.js"]

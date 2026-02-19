@@ -88,8 +88,9 @@ jobs:
           DATABASE_USERNAME: equb
           DATABASE_PASSWORD: test_password
           DATABASE_NAME: diaspora_equb_test
-          JWT_SECRET: ci-test-secret-key-min-16-chars
-          RPC_URL: https://rpc.creditcoin.org
+          JWT_SECRET: ci-test-secret-key-that-is-at-least-32-chars-long
+          RPC_URL: https://rpc.cc3-testnet.creditcoin.network
+          CHAIN_ID: 102031
           NODE_ENV: test
 
   # ── Frontend ─────────────────────────────────────────
@@ -114,11 +115,9 @@ jobs:
 
       - name: Analyze
         run: flutter analyze
-        continue-on-error: true
 
       - name: Build APK (debug)
         run: flutter build apk --debug
-        continue-on-error: true
 
   # ── Docker Build ─────────────────────────────────────
   docker:

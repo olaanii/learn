@@ -1,4 +1,6 @@
-version: '3.8'
+# Docker Compose file — compatible with Docker CE and Docker Desktop Personal (free).
+# No Swarm, no Docker Scout, no paid-only features.
+# Usage: docker compose up -d
 
 services:
   postgres:
@@ -33,25 +35,31 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-diaspora_equb}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
-      RPC_URL: ${RPC_URL:-https://rpc.creditcoin.org}
-      CHAIN_ID: ${CHAIN_ID:-102030}
+      RPC_URL: ${RPC_URL:-https://rpc.cc3-testnet.creditcoin.network}
+      CHAIN_ID: ${CHAIN_ID:-102031}
       IDENTITY_REGISTRY_ADDRESS: ${IDENTITY_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
       TIER_REGISTRY_ADDRESS: ${TIER_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
       CREDIT_REGISTRY_ADDRESS: ${CREDIT_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
       COLLATERAL_VAULT_ADDRESS: ${COLLATERAL_VAULT_ADDRESS:-0x0000000000000000000000000000000000000000}
       PAYOUT_STREAM_ADDRESS: ${PAYOUT_STREAM_ADDRESS:-0x0000000000000000000000000000000000000000}
       EQUB_POOL_ADDRESS: ${EQUB_POOL_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TEST_USDC_ADDRESS: ${TEST_USDC_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TEST_USDT_ADDRESS: ${TEST_USDT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      FAYDA_API_URL: ${FAYDA_API_URL:-}
+      FAYDA_API_KEY: ${FAYDA_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       PORT: 3001
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:3001/api/health']
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3001/api/health']
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
   nginx:
     image: nginx:alpine
