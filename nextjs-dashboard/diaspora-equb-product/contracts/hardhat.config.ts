@@ -41,6 +41,30 @@ const config: HardhatUserConfig = {
       accounts: [DEPLOYER_PRIVATE_KEY],
     },
   },
+  etherscan: {
+    apiKey: {
+      creditcoin: 'no-api-key-needed',
+      creditcoinTestnet: 'no-api-key-needed',
+    },
+    customChains: [
+      {
+        network: 'creditcoin',
+        chainId: 102030,
+        urls: {
+          apiURL: 'https://creditcoin.blockscout.com/api',
+          browserURL: 'https://creditcoin.blockscout.com',
+        },
+      },
+      {
+        network: 'creditcoinTestnet',
+        chainId: 102031,
+        urls: {
+          apiURL: 'https://creditcoin-testnet.blockscout.com/api',
+          browserURL: 'https://creditcoin-testnet.blockscout.com',
+        },
+      },
+    ],
+  },
   gasReporter: {
     enabled: process.env.REPORT_GAS === 'true',
     currency: 'USD',

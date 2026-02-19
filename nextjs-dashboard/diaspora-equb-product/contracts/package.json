@@ -1,6 +1,6 @@
 {
   "name": "diaspora-equb-contracts",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Smart contracts for Diaspora Equb DeFi MVP",
   "scripts": {
@@ -12,6 +12,10 @@
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.ts --network creditcoinTestnet",
     "deploy:test-tokens": "hardhat run scripts/deploy-test-tokens.ts --network creditcoinTestnet",
     "configure-tiers": "hardhat run scripts/configure-tiers.ts --network creditcoin",
+    "configure-tiers:testnet": "hardhat run scripts/configure-tiers.ts --network creditcoinTestnet",
+    "verify:testnet": "hardhat run scripts/verify-deployment.ts --network creditcoinTestnet",
+    "verify:mainnet": "hardhat run scripts/verify-deployment.ts --network creditcoin",
+    "deploy:full-testnet": "npm run deploy:creditcoin-testnet && npm run deploy:test-tokens && npm run configure-tiers:testnet && npm run verify:testnet",
     "node": "hardhat node"
   },
   "devDependencies": {
