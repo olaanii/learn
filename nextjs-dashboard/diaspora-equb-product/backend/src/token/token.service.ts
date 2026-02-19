@@ -111,51 +111,22 @@ export class TokenService {
   }
 
   /**
-   * Get token transfer history for a wallet.
-   *
-   * Primary source: DB (indexed by IndexerService — full history).
-   * Fallback: on-chain queryFilter for recent blocks if DB is empty
-   * (e.g. first load before indexer has caught up).
+   * Get token transfer history for a wallet from the blockchain only.
+   * No DB/indexer — always reads real Transfer events from Creditcoin testnet
+   * so that any connected wallet (including new WalletConnect) sees its full
+   * on-chain history.
    */
   async getTransactions(
     walletAddress: string,
     tokenSymbol: string = 'USDC',
     limit: number = 50,
   ): Promise<any[]> {
-    const addr = walletAddress.toLowerCase();
-
-    // 1. Try DB first — this gives us full persistent history
-    try {
-      const dbTransfers = await this.indexerService.getTransfersForWallet(
-        walletAddress,
-        tokenSymbol,
-        limit,
-      );
-
-      if (dbTransfers.length > 0) {
-        return dbTransfers.map((t) => ({
-          type: t.from === addr ? 'sent' : 'received',
-          from: t.from,
-          to: t.to,
-          amount: t.amount,
-          rawAmount: t.rawAmount,
-          token: t.token,
-          txHash: t.txHash,
-          blockNumber: t.blockNumber,
-          timestamp: t.timestamp ? Number(t.timestamp) : null,
-        }));
-      }
-    } catch (e) {
-      this.logger.warn(`DB transaction query failed, falling back to chain: ${e.message}`);
-    }
-
-    // 2. Fallback: query chain directly (covers first-load before indexer catches up)
     return this.getTransactionsFromChain(walletAddress, tokenSymbol, limit);
   }
 
   /**
-   * Direct on-chain query for recent Transfer events. Used as fallback
-   * when the DB index hasn't caught up yet.
+   * On-chain query for ERC-20 Transfer events involving this wallet.
+   * Scans a large block range on Creditcoin testnet so past history always shows.
    */
   private async getTransactionsFromChain(
     walletAddress: string,
@@ -167,18 +138,81 @@ export class TokenService {
       const decimals = await contract.decimals();
       const provider = this.web3Service.getProvider();
       const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 10000);
+
+      // Creditcoin testnet: scan enough blocks for full past history (env override optional)
+      const lookback = this.configService.get<number>(
+        'TX_HISTORY_LOOKBACK_BLOCKS',
+        1_000_000,
+      );
+      const scanStart = Math.max(0, currentBlock - lookback);
+
+      this.logger.log(
+        `[Chain] ${tokenSymbol} transfers for ${walletAddress} (blocks ${scanStart}..${currentBlock})`,
+      );
 
       const sentFilter = contract.filters.Transfer(walletAddress, null);
       const receivedFilter = contract.filters.Transfer(null, walletAddress);
 
-      const [sentEvents, receivedEvents] = await Promise.all([
-        contract.queryFilter(sentFilter, fromBlock, currentBlock),
-        contract.queryFilter(receivedFilter, fromBlock, currentBlock),
-      ]);
+      // Smaller chunks = fewer RPC failures (Creditcoin node often rejects large ranges)
+      const CHUNK = 10_000;
+      const MAX_RETRIES = 2;
+
+      const queryChunk = async (
+        from: number,
+        to: number,
+      ): Promise<{ sent: any[]; received: any[] }> => {
+        const [s, r] = await Promise.all([
+          contract.queryFilter(sentFilter, from, to),
+          contract.queryFilter(receivedFilter, from, to),
+        ]);
+        return { sent: s, received: r };
+      };
+
+      let allSent: any[] = [];
+      let allReceived: any[] = [];
+
+      for (let start = scanStart; start <= currentBlock; start += CHUNK) {
+        const end = Math.min(start + CHUNK - 1, currentBlock);
+        let lastErr: string | null = null;
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const { sent, received } = await queryChunk(start, end);
+            allSent = allSent.concat(sent);
+            allReceived = allReceived.concat(received);
+            lastErr = null;
+            break;
+          } catch (e: any) {
+            lastErr = e?.message ?? String(e);
+            if (attempt < MAX_RETRIES) {
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          }
+        }
+
+        if (lastErr) {
+          // Last resort: try two half-chunks (avoids losing whole range)
+          const mid = start + Math.floor((end - start) / 2);
+          for (const [a, b] of [
+            [start, mid],
+            [mid + 1, end],
+          ] as [number, number][]) {
+            if (a > b) continue;
+            try {
+              const { sent, received } = await queryChunk(a, b);
+              allSent = allSent.concat(sent);
+              allReceived = allReceived.concat(received);
+            } catch (e2: any) {
+              this.logger.warn(
+                `Chunk ${a}-${b} failed for ${tokenSymbol}: ${e2?.message ?? e2}`,
+              );
+            }
+          }
+        }
+      }
 
       const allEvents = [
-        ...sentEvents.map((event: any) => ({
+        ...allSent.map((event: any) => ({
           type: 'sent',
           from: event.args[0],
           to: event.args[1],
@@ -188,7 +222,7 @@ export class TokenService {
           txHash: event.transactionHash,
           blockNumber: event.blockNumber,
         })),
-        ...receivedEvents.map((event: any) => ({
+        ...allReceived.map((event: any) => ({
           type: 'received',
           from: event.args[0],
           to: event.args[1],
@@ -203,6 +237,11 @@ export class TokenService {
       allEvents.sort((a, b) => b.blockNumber - a.blockNumber);
       const trimmed = allEvents.slice(0, limit);
 
+      this.logger.log(
+        `Found ${allEvents.length} ${tokenSymbol} events, returning top ${trimmed.length}`,
+      );
+
+      // Resolve timestamps for each unique block
       const uniqueBlocks = [...new Set(trimmed.map((t) => t.blockNumber))];
       const blockTimestamps: Record<number, number> = {};
       await Promise.all(
@@ -210,7 +249,7 @@ export class TokenService {
           try {
             const block = await provider.getBlock(bn);
             if (block) blockTimestamps[bn] = block.timestamp;
-          } catch {
+          } catch (_e) {
             // Non-fatal
           }
         }),
@@ -267,7 +306,7 @@ export class TokenService {
           data,
         });
       estimatedGas = gasEstimate.toString();
-    } catch {
+    } catch (_e) {
       this.logger.warn('Gas estimation failed, using default');
     }
 

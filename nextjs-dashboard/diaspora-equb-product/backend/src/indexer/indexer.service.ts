@@ -36,12 +36,16 @@ const ERC20_TRANSFER_ABI = [
  *   - IdentityRegistry: IdentityBound
  */
 @Injectable()
+/** Polling interval (ms) for catch-up when RPC does not support persistent log filters. */
+const CATCH_UP_POLL_MS = 60_000;
+
 export class IndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(IndexerService.name);
   private isRunning = false;
   private lastError: string | null = null;
   private indexedEventCount = 0;
   private startedAt: Date | null = null;
+  private catchUpIntervalId: ReturnType<typeof setInterval> | null = null;
 
   private tokenAddresses: Record<string, string> = {};
 
@@ -94,11 +98,19 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       // 1. Catch up from last indexed block
       await this.catchUp();
 
-      // 2. Subscribe to real-time events
-      this.subscribeToEvents();
+      // 2. Poll for new events (Creditcoin RPC does not support eth_newFilter/eth_getFilterChanges)
+      this.catchUpIntervalId = setInterval(() => {
+        if (this.isRunning) {
+          this.catchUp().catch((e) =>
+            this.logger.warn(`Catch-up poll failed: ${e?.message ?? e}`),
+          );
+        }
+      }, CATCH_UP_POLL_MS);
 
       this.lastError = null;
-      this.logger.log('Event indexer started and listening for events');
+      this.logger.log(
+        `Event indexer started (polling every ${CATCH_UP_POLL_MS / 1000}s)`,
+      );
     } catch (error) {
       this.lastError = error.message;
       this.logger.error(`Indexer startup failed: ${error.message}`);
@@ -115,20 +127,28 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Stopping event indexer...');
     this.isRunning = false;
 
-    // Remove all event listeners
+    if (this.catchUpIntervalId) {
+      clearInterval(this.catchUpIntervalId);
+      this.catchUpIntervalId = null;
+    }
+
     try {
       const equbPool = this.web3Service.getEqubPool();
       const payoutStream = this.web3Service.getPayoutStream();
       const creditRegistry = this.web3Service.getCreditRegistry();
       const collateralVault = this.web3Service.getCollateralVault();
       const identityRegistry = this.web3Service.getIdentityRegistry();
-
       equbPool.removeAllListeners();
       payoutStream.removeAllListeners();
       creditRegistry.removeAllListeners();
       collateralVault.removeAllListeners();
       identityRegistry.removeAllListeners();
-    } catch {
+
+      const tokens = this.getTokenContracts();
+      for (const { contract } of tokens) {
+        contract.removeAllListeners();
+      }
+    } catch (_e) {
       // Ignore cleanup errors
     }
   }
@@ -1010,7 +1030,20 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     const record = await this.indexedBlockRepo.findOne({
       where: { contractName },
     });
-    return record ? Number(record.lastBlockNumber) : 0;
+    if (record) return Number(record.lastBlockNumber);
+
+    // No record: estimate a reasonable start block so we don't scan from genesis.
+    // Contracts on testnet are recent; scanning from 100k blocks ago covers deployment.
+    try {
+      const currentBlock = await this.web3Service.getProvider().getBlockNumber();
+      const defaultStart = Math.max(0, currentBlock - 100_000);
+      this.logger.log(
+        `${contractName}: no indexed block record, defaulting to ${defaultStart} (~100k blocks ago)`,
+      );
+      return defaultStart;
+    } catch (_e) {
+      return 0;
+    }
   }
 
   private async setLastIndexedBlock(
