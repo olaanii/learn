@@ -16,7 +16,7 @@ class WalletProvider extends ChangeNotifier {
   // Exchange rates
   Map<String, double> _rates = {};
 
-  // Transactions (for the selected token)
+  // Transactions: combined across all tokens, sorted by block number
   List<Map<String, dynamic>> _transactions = [];
 
   int _loadingCount = 0;
@@ -64,15 +64,11 @@ class WalletProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Switch the selected token and reload transactions.
+  /// Switch the selected token (transactions already include all tokens).
   void selectToken(String tokenSymbol, {String? walletAddress}) {
     if (_selectedToken == tokenSymbol) return;
     _selectedToken = tokenSymbol;
     notifyListeners();
-    // Optionally reload transactions for the new token
-    if (walletAddress != null) {
-      loadTransactions(walletAddress, token: tokenSymbol);
-    }
   }
 
   /// Load the balance for a specific token.
@@ -104,19 +100,37 @@ class WalletProvider extends ChangeNotifier {
     ]);
   }
 
-  /// Load recent transactions for a wallet.
+  /// Load transaction history for a wallet.
+  /// Fetches for both USDC and USDT, merges and sorts by block number.
   Future<void> loadTransactions(String walletAddress,
-      {String token = 'USDC', int limit = 20}) async {
+      {String? token, int limit = 50}) async {
     _startLoading();
     _errorMessage = null;
 
     try {
-      final data = await _api.getTokenTransactions(
-        walletAddress,
-        token: token,
-        limit: limit,
-      );
-      _transactions = List<Map<String, dynamic>>.from(data);
+      if (token != null) {
+        final data = await _api.getTokenTransactions(
+          walletAddress,
+          token: token,
+          limit: limit,
+        );
+        _transactions = List<Map<String, dynamic>>.from(data);
+      } else {
+        final results = await Future.wait([
+          _api.getTokenTransactions(walletAddress, token: 'USDC', limit: limit),
+          _api.getTokenTransactions(walletAddress, token: 'USDT', limit: limit),
+        ]);
+        final merged = <Map<String, dynamic>>[
+          ...List<Map<String, dynamic>>.from(results[0]),
+          ...List<Map<String, dynamic>>.from(results[1]),
+        ];
+        merged.sort((a, b) {
+          final bBlock = (b['blockNumber'] as num?) ?? 0;
+          final aBlock = (a['blockNumber'] as num?) ?? 0;
+          return bBlock.compareTo(aBlock);
+        });
+        _transactions = merged.take(limit).toList();
+      }
     } catch (e) {
       _errorMessage = 'Failed to load transactions';
     }
@@ -421,26 +435,22 @@ class WalletProvider extends ChangeNotifier {
   }
 
   /// Refresh balances + transactions after a successful TX.
-  /// Loads immediately, then again after [delayMs] to catch indexer lag.
+  /// Loads immediately, then again after a delay to catch indexer lag.
   Future<void> refreshAfterTx(String walletAddress, {String? token}) async {
-    final t = token ?? _selectedToken;
     await loadAllBalances(walletAddress);
-    await loadTransactions(walletAddress, token: t);
-    unawaited(Future.delayed(const Duration(milliseconds: 500), () async {
+    await loadTransactions(walletAddress);
+    unawaited(Future.delayed(const Duration(seconds: 2), () async {
       await loadAllBalances(walletAddress);
-      await loadTransactions(walletAddress, token: t);
+      await loadTransactions(walletAddress);
     }));
   }
 
-  /// Load all wallet data at once (both USDC + USDT balances).
+  /// Load all wallet data at once (both USDC + USDT balances + all transactions).
   Future<void> loadAll(String walletAddress, {String? token}) async {
-    final activeToken = token ?? _selectedToken;
     await Future.wait([
-      // Load balances for both stablecoins
       loadBalance(walletAddress, token: 'USDC'),
       loadBalance(walletAddress, token: 'USDT'),
-      // Load transactions for the active token
-      loadTransactions(walletAddress, token: activeToken),
+      loadTransactions(walletAddress),
       loadExchangeRates(),
     ]);
   }

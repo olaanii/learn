@@ -366,7 +366,7 @@ class ApiClient {
   }
 
   Future<List<dynamic>> getTokenTransactions(
-      String walletAddress, {String token = 'USDC', int limit = 20}) async {
+      String walletAddress, {String token = 'USDC', int limit = 50}) async {
     final response = await _dio.get('/token/transactions', queryParameters: {
       'walletAddress': walletAddress,
       'token': token,

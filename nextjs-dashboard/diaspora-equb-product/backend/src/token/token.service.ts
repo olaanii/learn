@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
+import { IndexerService } from '../indexer/indexer.service';
 
 // Standard ERC-20 ABI for balance and transfer
 const ERC20_ABI = [
@@ -26,6 +27,7 @@ export class TokenService {
   constructor(
     private readonly web3Service: Web3Service,
     private readonly configService: ConfigService,
+    private readonly indexerService: IndexerService,
   ) {
     this.chainId = this.configService.get<number>('CHAIN_ID', 102031);
 
@@ -109,26 +111,65 @@ export class TokenService {
   }
 
   /**
-   * Get recent token transfer events for a wallet.
+   * Get token transfer history for a wallet.
+   *
+   * Primary source: DB (indexed by IndexerService — full history).
+   * Fallback: on-chain queryFilter for recent blocks if DB is empty
+   * (e.g. first load before indexer has caught up).
    */
   async getTransactions(
     walletAddress: string,
     tokenSymbol: string = 'USDC',
-    limit: number = 20,
+    limit: number = 50,
+  ): Promise<any[]> {
+    const addr = walletAddress.toLowerCase();
+
+    // 1. Try DB first — this gives us full persistent history
+    try {
+      const dbTransfers = await this.indexerService.getTransfersForWallet(
+        walletAddress,
+        tokenSymbol,
+        limit,
+      );
+
+      if (dbTransfers.length > 0) {
+        return dbTransfers.map((t) => ({
+          type: t.from === addr ? 'sent' : 'received',
+          from: t.from,
+          to: t.to,
+          amount: t.amount,
+          rawAmount: t.rawAmount,
+          token: t.token,
+          txHash: t.txHash,
+          blockNumber: t.blockNumber,
+          timestamp: t.timestamp ? Number(t.timestamp) : null,
+        }));
+      }
+    } catch (e) {
+      this.logger.warn(`DB transaction query failed, falling back to chain: ${e.message}`);
+    }
+
+    // 2. Fallback: query chain directly (covers first-load before indexer catches up)
+    return this.getTransactionsFromChain(walletAddress, tokenSymbol, limit);
+  }
+
+  /**
+   * Direct on-chain query for recent Transfer events. Used as fallback
+   * when the DB index hasn't caught up yet.
+   */
+  private async getTransactionsFromChain(
+    walletAddress: string,
+    tokenSymbol: string,
+    limit: number,
   ): Promise<any[]> {
     try {
       const contract = this.getTokenContract(tokenSymbol);
       const decimals = await contract.decimals();
-
-      // Query recent Transfer events involving this address
       const provider = this.web3Service.getProvider();
       const currentBlock = await provider.getBlockNumber();
-      // Look back ~2000 blocks (roughly a few hours on most chains)
-      const fromBlock = Math.max(0, currentBlock - 2000);
+      const fromBlock = Math.max(0, currentBlock - 10000);
 
-      // Transfers FROM the user
       const sentFilter = contract.filters.Transfer(walletAddress, null);
-      // Transfers TO the user
       const receivedFilter = contract.filters.Transfer(null, walletAddress);
 
       const [sentEvents, receivedEvents] = await Promise.all([
@@ -162,7 +203,6 @@ export class TokenService {
       allEvents.sort((a, b) => b.blockNumber - a.blockNumber);
       const trimmed = allEvents.slice(0, limit);
 
-      // Resolve block timestamps for each unique block
       const uniqueBlocks = [...new Set(trimmed.map((t) => t.blockNumber))];
       const blockTimestamps: Record<number, number> = {};
       await Promise.all(
@@ -170,8 +210,8 @@ export class TokenService {
           try {
             const block = await provider.getBlock(bn);
             if (block) blockTimestamps[bn] = block.timestamp;
-          } catch (_e) {
-            // Non-fatal: leave timestamp undefined
+          } catch {
+            // Non-fatal
           }
         }),
       );
@@ -184,7 +224,7 @@ export class TokenService {
       }));
     } catch (error) {
       this.logger.warn(
-        `Failed to fetch transactions for ${walletAddress}: ${error.message}`,
+        `Failed to fetch on-chain transactions for ${walletAddress}: ${error.message}`,
       );
       return [];
     }

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
@@ -12,6 +13,12 @@ import { CreditScore } from '../entities/credit-score.entity';
 import { Collateral } from '../entities/collateral.entity';
 import { Identity } from '../entities/identity.entity';
 import { IndexedBlock } from '../entities/indexed-block.entity';
+import { TokenTransfer } from '../entities/token-transfer.entity';
+
+const ERC20_TRANSFER_ABI = [
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+  'function decimals() view returns (uint8)',
+];
 
 /**
  * IndexerService listens to smart contract events on Creditcoin and
@@ -36,9 +43,12 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
   private indexedEventCount = 0;
   private startedAt: Date | null = null;
 
+  private tokenAddresses: Record<string, string> = {};
+
   constructor(
     private readonly web3Service: Web3Service,
     private readonly notifications: NotificationsService,
+    private readonly configService: ConfigService,
     @InjectRepository(Pool)
     private readonly poolRepo: Repository<Pool>,
     @InjectRepository(PoolMember)
@@ -55,7 +65,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     private readonly identityRepo: Repository<Identity>,
     @InjectRepository(IndexedBlock)
     private readonly indexedBlockRepo: Repository<IndexedBlock>,
-  ) {}
+    @InjectRepository(TokenTransfer)
+    private readonly tokenTransferRepo: Repository<TokenTransfer>,
+  ) {
+    this.tokenAddresses = {
+      USDC: this.configService.get<string>('TEST_USDC_ADDRESS', ''),
+      USDT: this.configService.get<string>('TEST_USDT_ADDRESS', ''),
+    };
+  }
 
   async onModuleInit() {
     // Start indexing after a short delay to let the provider connect
@@ -128,6 +145,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       this.catchUpContract('CreditRegistry', this.web3Service.getCreditRegistry(), currentBlock),
       this.catchUpContract('CollateralVault', this.web3Service.getCollateralVault(), currentBlock),
       this.catchUpContract('IdentityRegistry', this.web3Service.getIdentityRegistry(), currentBlock),
+      this.catchUpTokenTransfers(currentBlock),
     ]);
   }
 
@@ -216,6 +234,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     this.subscribeCreditRegistry();
     this.subscribeCollateralVault();
     this.subscribeIdentityRegistry();
+    this.subscribeTokenTransfers();
   }
 
   private subscribeEqubPool() {
@@ -783,6 +802,159 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       });
       await this.identityRepo.save(newIdentity);
     }
+  }
+
+  // ─── ERC-20 Token Transfer Indexing ─────────────────────────────────────────
+
+  private getTokenContracts(): { symbol: string; contract: ethers.Contract; address: string }[] {
+    const provider = this.web3Service.getProvider();
+    const result: { symbol: string; contract: ethers.Contract; address: string }[] = [];
+    for (const [symbol, address] of Object.entries(this.tokenAddresses)) {
+      if (address && address !== '0x0000000000000000000000000000000000000000') {
+        result.push({
+          symbol,
+          address,
+          contract: new ethers.Contract(address, ERC20_TRANSFER_ABI, provider),
+        });
+      }
+    }
+    return result;
+  }
+
+  private async catchUpTokenTransfers(currentBlock: number) {
+    const tokens = this.getTokenContracts();
+    if (tokens.length === 0) {
+      this.logger.warn('No token addresses configured — skipping transfer indexing');
+      return;
+    }
+
+    for (const { symbol, contract, address } of tokens) {
+      const contractKey = `TokenTransfer_${symbol}`;
+      const lastBlock = await this.getLastIndexedBlock(contractKey);
+      const fromBlock = lastBlock + 1;
+
+      if (fromBlock > currentBlock) {
+        this.logger.log(`${contractKey}: already up to date (block ${currentBlock})`);
+        continue;
+      }
+
+      this.logger.log(`${contractKey}: catching up from block ${fromBlock} to ${currentBlock}`);
+
+      let decimals = 6;
+      try {
+        decimals = Number(await contract.decimals());
+      } catch { /* use default */ }
+
+      const CHUNK_SIZE = 2000;
+      for (let start = fromBlock; start <= currentBlock; start += CHUNK_SIZE) {
+        const end = Math.min(start + CHUNK_SIZE - 1, currentBlock);
+        try {
+          const events = await contract.queryFilter('Transfer', start, end);
+          for (const event of events) {
+            if (!(event instanceof ethers.EventLog)) continue;
+            await this.saveTokenTransfer(event, symbol, address, decimals);
+            this.indexedEventCount++;
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to query ${contractKey} Transfer blocks ${start}-${end}: ${e.message}`);
+        }
+      }
+
+      await this.setLastIndexedBlock(contractKey, currentBlock);
+      this.logger.log(`${contractKey}: catch-up complete at block ${currentBlock}`);
+    }
+  }
+
+  private subscribeTokenTransfers() {
+    const tokens = this.getTokenContracts();
+    for (const { symbol, contract, address } of tokens) {
+      let decimals = 6;
+      contract.decimals().then((d: bigint) => { decimals = Number(d); }).catch(() => {});
+
+      contract.on('Transfer', async (from: string, to: string, value: bigint, event: any) => {
+        const log = event?.log ?? event;
+        const txHash = log?.transactionHash;
+        const blockNumber = log?.blockNumber;
+        this.logger.debug(`[${symbol}] Transfer: ${from} -> ${to}, amount=${ethers.formatUnits(value, decimals)}`);
+
+        await this.saveTokenTransfer(
+          { args: [from, to, value], transactionHash: txHash, blockNumber } as any,
+          symbol, address, decimals,
+        );
+        this.indexedEventCount++;
+        if (blockNumber) {
+          await this.setLastIndexedBlock(`TokenTransfer_${symbol}`, blockNumber);
+        }
+      });
+    }
+  }
+
+  private async saveTokenTransfer(
+    event: any,
+    symbol: string,
+    tokenAddress: string,
+    decimals: number,
+  ) {
+    const from: string = event.args?.[0] ?? event.args?.from;
+    const to: string = event.args?.[1] ?? event.args?.to;
+    const value: bigint = event.args?.[2] ?? event.args?.value;
+    const txHash = event.transactionHash;
+    const blockNumber = event.blockNumber;
+
+    if (!txHash) return;
+
+    const existing = await this.tokenTransferRepo.findOne({ where: { txHash } });
+    if (existing) return;
+
+    let timestamp: number | null = null;
+    try {
+      const block = await this.web3Service.getProvider().getBlock(blockNumber);
+      if (block) timestamp = block.timestamp * 1000;
+    } catch { /* non-fatal */ }
+
+    const transfer = this.tokenTransferRepo.create({
+      txHash,
+      from: from.toLowerCase(),
+      to: to.toLowerCase(),
+      amount: ethers.formatUnits(value, decimals),
+      rawAmount: value.toString(),
+      token: symbol.toUpperCase(),
+      tokenAddress,
+      blockNumber,
+      timestamp,
+    });
+
+    try {
+      await this.tokenTransferRepo.save(transfer);
+    } catch (e) {
+      if (!e.message?.includes('duplicate')) {
+        this.logger.warn(`Failed to save transfer ${txHash}: ${e.message}`);
+      }
+    }
+  }
+
+  /**
+   * Query persisted token transfers for a wallet from the database.
+   * Returns full history (not limited to recent blocks).
+   */
+  async getTransfersForWallet(
+    walletAddress: string,
+    token?: string,
+    limit = 50,
+  ): Promise<TokenTransfer[]> {
+    const addr = walletAddress.toLowerCase();
+    const qb = this.tokenTransferRepo
+      .createQueryBuilder('t')
+      .where('(t.from = :addr OR t.to = :addr)', { addr });
+
+    if (token) {
+      qb.andWhere('t.token = :token', { token: token.toUpperCase() });
+    }
+
+    return qb
+      .orderBy('t.blockNumber', 'DESC')
+      .limit(limit)
+      .getMany();
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final auth = context.read<AuthProvider>();
     final wallet = context.read<WalletProvider>();
     if (auth.walletAddress != null) {
-      wallet.loadTransactions(auth.walletAddress!);
+      wallet.loadTransactions(auth.walletAddress!, limit: 50);
     }
   }
 

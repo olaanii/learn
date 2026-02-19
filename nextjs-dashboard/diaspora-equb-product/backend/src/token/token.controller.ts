@@ -50,7 +50,7 @@ export class TokenController {
     return this.tokenService.getTransactions(
       walletAddress,
       token || 'USDC',
-      limit || 20,
+      limit || 50,
     );
   }
 
