@@ -1,8 +1,11 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
 import 'package:reown_core/reown_core.dart' show PairingMetadata;
 import 'package:reown_sign/reown_sign.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
+import 'ethereum_provider_stub.dart'
+    if (dart.library.js_interop) 'ethereum_provider_web.dart'
+    as eth_provider;
 
 /// Service that manages WalletConnect v2 sessions for client-side TX signing.
 ///
@@ -22,7 +25,9 @@ class WalletService extends ChangeNotifier {
 
   // ─── Getters ────────────────────────────────────────────────────────────────
 
-  bool get isConnected => _session != null && _walletAddress != null;
+  bool get isConnected =>
+      _walletAddress != null &&
+      (kIsWeb ? eth_provider.hasInjectedProvider : _session != null);
   String? get walletAddress => _walletAddress;
   String? get pairingUri => _pairingUri;
   bool get isConnecting => _isConnecting;
@@ -65,9 +70,44 @@ class WalletService extends ChangeNotifier {
 
   // ─── Connect ────────────────────────────────────────────────────────────────
 
-  /// Initiate a WalletConnect pairing. Returns the pairing URI for QR display.
-  /// On mobile, attempts to deep-link to MetaMask.
+  /// Connect to a wallet.
+  /// On web: uses the injected MetaMask browser extension (window.ethereum).
+  /// On mobile: uses WalletConnect v2 with deep-link to MetaMask.
   Future<String?> connect() async {
+    // On web, prefer the injected MetaMask extension
+    if (kIsWeb && eth_provider.hasInjectedProvider) {
+      return _connectViaInjected();
+    }
+
+    // Mobile: use WalletConnect
+    return _connectViaWalletConnect();
+  }
+
+  Future<String?> _connectViaInjected() async {
+    _isConnecting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final address = await eth_provider.connectViaInjectedProvider();
+      if (address != null) {
+        _walletAddress = address;
+        _isConnecting = false;
+        notifyListeners();
+        debugPrint('[WalletService] Connected via MetaMask extension: $address');
+        return address;
+      }
+      _errorMessage = 'No accounts returned from MetaMask';
+    } catch (e) {
+      _errorMessage = 'MetaMask connection failed: $e';
+    }
+
+    _isConnecting = false;
+    notifyListeners();
+    return null;
+  }
+
+  Future<String?> _connectViaWalletConnect() async {
     if (_signClient == null) await init();
     if (_signClient == null) {
       _errorMessage = 'WalletConnect not initialized. Check project ID.';
@@ -80,10 +120,8 @@ class WalletService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Request Creditcoin Testnet (EIP-155 chain)
       const chainId = 'eip155:${AppConfig.chainId}';
 
-      // optionalNamespaces (requiredNamespaces is deprecated in WalletConnect v2)
       final connectResponse = await _signClient!.connect(
         optionalNamespaces: {
           'eip155': const RequiredNamespace(
@@ -102,12 +140,10 @@ class WalletService extends ChangeNotifier {
       _pairingUri = connectResponse.uri?.toString();
       notifyListeners();
 
-      // Try to open MetaMask (deep link, then universal link fallback) so user can approve
       if (_pairingUri != null) {
         await _tryOpenWallet(_pairingUri!);
       }
 
-      // Wait for the wallet to approve the session
       _session = await connectResponse.session.future;
       _extractWalletAddress();
 
@@ -133,7 +169,40 @@ class WalletService extends ChangeNotifier {
   Future<String?> signAndSendTransaction(
     Map<String, dynamic> unsignedTx,
   ) async {
-    if (_signClient == null || _session == null || _walletAddress == null) {
+    if (_walletAddress == null) {
+      _errorMessage = 'Wallet not connected';
+      notifyListeners();
+      return null;
+    }
+
+    final txParams = {
+      'from': _walletAddress,
+      'to': unsignedTx['to'],
+      'data': unsignedTx['data'],
+      'value': _toHex(unsignedTx['value'] ?? '0'),
+      'gas': _toHex(unsignedTx['estimatedGas'] ?? '300000'),
+    };
+
+    // On web, use the injected provider
+    if (kIsWeb && eth_provider.hasInjectedProvider) {
+      try {
+        final txHash = await eth_provider.sendTransactionViaInjected(txParams);
+        if (txHash != null) {
+          debugPrint('[WalletService] TX sent via MetaMask extension: $txHash');
+          return txHash;
+        }
+        _errorMessage = 'Transaction rejected';
+        notifyListeners();
+        return null;
+      } catch (e) {
+        _errorMessage = 'Transaction failed: $e';
+        notifyListeners();
+        return null;
+      }
+    }
+
+    // Mobile: use WalletConnect
+    if (_signClient == null || _session == null) {
       _errorMessage = 'Wallet not connected';
       notifyListeners();
       return null;
@@ -141,20 +210,8 @@ class WalletService extends ChangeNotifier {
 
     try {
       const chainId = 'eip155:${AppConfig.chainId}';
-
-      // Build the eth_sendTransaction params
-      final txParams = {
-        'from': _walletAddress,
-        'to': unsignedTx['to'],
-        'data': unsignedTx['data'],
-        'value': _toHex(unsignedTx['value'] ?? '0'),
-        'gas': _toHex(unsignedTx['estimatedGas'] ?? '300000'),
-      };
-
-      // Try to bring the wallet to foreground so user can confirm the TX
       await _tryOpenWallet(null);
 
-      // Request the wallet to sign and send
       final result = await _signClient!.request(
         topic: _session!.topic,
         chainId: chainId,
@@ -164,7 +221,6 @@ class WalletService extends ChangeNotifier {
         ),
       );
 
-      // result is the transaction hash
       final txHash = result.toString();
       debugPrint('[WalletService] TX sent: $txHash');
       return txHash;
@@ -177,7 +233,29 @@ class WalletService extends ChangeNotifier {
 
   /// Sign a personal message (e.g. for authentication).
   Future<String?> personalSign(String message) async {
-    if (_signClient == null || _session == null || _walletAddress == null) {
+    if (_walletAddress == null) {
+      _errorMessage = 'Wallet not connected';
+      notifyListeners();
+      return null;
+    }
+
+    // On web, use the injected MetaMask extension
+    if (kIsWeb && eth_provider.hasInjectedProvider) {
+      try {
+        final sig = await eth_provider.personalSignViaInjected(message, _walletAddress!);
+        if (sig != null) return sig;
+        _errorMessage = 'Signing rejected';
+        notifyListeners();
+        return null;
+      } catch (e) {
+        _errorMessage = 'Signing failed: $e';
+        notifyListeners();
+        return null;
+      }
+    }
+
+    // Mobile: use WalletConnect
+    if (_signClient == null || _session == null) {
       _errorMessage = 'Wallet not connected';
       notifyListeners();
       return null;
@@ -252,20 +330,20 @@ class WalletService extends ChangeNotifier {
   }
 
   /// Try to open MetaMask or another wallet via deep link.
-  /// Tries custom scheme first, then MetaMask universal link as fallback (helps on Android).
+  /// On web, MetaMask is a browser extension — deep links don't apply and
+  /// would navigate the tab to about:blank, so we skip them entirely.
   Future<void> _tryOpenWallet(String? uri) async {
+    if (kIsWeb) return;
+
     try {
       if (uri != null) {
         final encodedUri = Uri.encodeComponent(uri);
-        // 1. Deep link (works best on iOS; can fail on Android)
         final deepLink = Uri.parse('metamask://wc?uri=$encodedUri');
         final launched = await launchUrl(deepLink, mode: LaunchMode.externalApplication);
         if (launched) return;
-        // 2. Universal link fallback (more reliable when custom scheme is blocked)
         final universalLink = Uri.parse('https://link.metamask.io/wc?uri=$encodedUri');
         await launchUrl(universalLink, mode: LaunchMode.externalApplication);
       } else {
-        // Bring MetaMask to foreground for pending sign request
         await launchUrl(
           Uri.parse('metamask://'),
           mode: LaunchMode.externalApplication,

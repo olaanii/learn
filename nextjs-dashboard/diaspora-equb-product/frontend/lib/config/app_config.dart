@@ -4,13 +4,15 @@ class AppConfig {
     defaultValue: 'http://localhost:3001/api',
   );
 
-  /// Creditcoin Testnet RPC. Override via --dart-define=RPC_URL=...
+  /// Creditcoin RPC endpoint. Override via --dart-define=RPC_URL=...
+  /// Testnet: https://rpc.cc3-testnet.creditcoin.network  (102031)
+  /// Mainnet: https://mainnet3.creditcoin.network          (102030)
   static const String rpcUrl = String.fromEnvironment(
     'RPC_URL',
     defaultValue: 'https://rpc.cc3-testnet.creditcoin.network',
   );
 
-  /// Creditcoin Testnet chain ID = 102031 (mainnet = 102030)
+  /// Creditcoin chain ID. Testnet = 102031, Mainnet = 102030.
   static const int chainId = int.fromEnvironment(
     'CHAIN_ID',
     defaultValue: 102031,
@@ -18,18 +20,21 @@ class AppConfig {
 
   static const String appName = 'Diaspora Equb';
 
-  /// Creditcoin Testnet block explorer
-  static const String explorerUrl =
-      'https://creditcoin-testnet.blockscout.com';
+  /// Block explorer URL — switches based on chain ID.
+  static String get explorerUrl => chainId == 102030
+      ? 'https://creditcoin.blockscout.com'
+      : 'https://creditcoin-testnet.blockscout.com';
 
-  /// Test USDC address on Creditcoin testnet (deployed by you)
-  /// Override via --dart-define=TEST_USDC_ADDRESS=0x...
+  /// Whether we are targeting mainnet (useful for UI badges / warnings).
+  static bool get isMainnet => chainId == 102030;
+
+  /// USDC token address. Override via --dart-define=TEST_USDC_ADDRESS=0x...
   static const String usdcAddress = String.fromEnvironment(
     'TEST_USDC_ADDRESS',
     defaultValue: '0x0000000000000000000000000000000000000000',
   );
 
-  /// Test USDT address on Creditcoin testnet (deployed by you)
+  /// USDT token address. Override via --dart-define=TEST_USDT_ADDRESS=0x...
   static const String usdtAddress = String.fromEnvironment(
     'TEST_USDT_ADDRESS',
     defaultValue: '0x0000000000000000000000000000000000000000',
@@ -40,7 +45,7 @@ class AppConfig {
   /// with a mock identity and wallet address.
   static const bool devBypassFayda = bool.fromEnvironment(
     'DEV_BYPASS_FAYDA',
-    defaultValue: true,
+    defaultValue: false,
   );
 
   /// WalletConnect project ID from https://cloud.walletconnect.com
@@ -48,6 +53,13 @@ class AppConfig {
   /// Override via --dart-define=WALLETCONNECT_PROJECT_ID=...
   static const String walletConnectProjectId = String.fromEnvironment(
     'WALLETCONNECT_PROJECT_ID',
+    defaultValue: '',
+  );
+
+  /// Sentry DSN for Flutter error tracking (optional).
+  /// Override via --dart-define=SENTRY_DSN=...
+  static const String sentryDsn = String.fromEnvironment(
+    'SENTRY_DSN',
     defaultValue: '',
   );
 }

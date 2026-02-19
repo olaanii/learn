@@ -55,6 +55,26 @@ class ApiClient {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> walletChallenge(String walletAddress) async {
+    final response = await _dio.post('/auth/wallet/challenge', data: {
+      'walletAddress': walletAddress,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> walletVerify({
+    required String walletAddress,
+    required String signature,
+    required String message,
+  }) async {
+    final response = await _dio.post('/auth/wallet/verify', data: {
+      'walletAddress': walletAddress,
+      'signature': signature,
+      'message': message,
+    });
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> devLogin({String? walletAddress}) async {
     final response = await _dio.post('/auth/dev-login', data: {
       if (walletAddress != null) 'walletAddress': walletAddress,
@@ -216,6 +236,8 @@ class ApiClient {
   }
 
   // ── Collateral TX Builders ──────────────────────
+
+  /// Build unsigned CTC collateral deposit TX (native).
   Future<Map<String, dynamic>> buildDepositCollateral(String amount) async {
     final response = await _dio.post('/collateral/build/deposit', data: {
       'amount': amount,
@@ -223,6 +245,7 @@ class ApiClient {
     return response.data;
   }
 
+  /// Build unsigned CTC collateral release TX (native).
   Future<Map<String, dynamic>> buildReleaseCollateral({
     required String userAddress,
     required String amount,
@@ -230,6 +253,50 @@ class ApiClient {
     final response = await _dio.post('/collateral/build/release', data: {
       'userAddress': userAddress,
       'amount': amount,
+    });
+    return response.data;
+  }
+
+  /// Build unsigned ERC-20 transfer TX to deposit USDC/USDT as collateral.
+  Future<Map<String, dynamic>> buildDepositCollateralToken({
+    required String amount,
+    String tokenSymbol = 'USDC',
+  }) async {
+    final response =
+        await _dio.post('/collateral/build/deposit-token', data: {
+      'amount': amount,
+      'tokenSymbol': tokenSymbol,
+    });
+    return response.data;
+  }
+
+  /// Confirm on-chain token deposit so the backend records it in DB.
+  Future<Map<String, dynamic>> confirmCollateralTokenDeposit({
+    required String walletAddress,
+    required String amount,
+    required String tokenSymbol,
+    required String txHash,
+  }) async {
+    final response =
+        await _dio.post('/collateral/deposit-token/confirm', data: {
+      'walletAddress': walletAddress,
+      'amount': amount,
+      'tokenSymbol': tokenSymbol,
+      'txHash': txHash,
+    });
+    return response.data;
+  }
+
+  /// Release token collateral: deployer sends USDC/USDT back to user.
+  Future<Map<String, dynamic>> releaseCollateralToken({
+    required String walletAddress,
+    required String amount,
+    String tokenSymbol = 'USDC',
+  }) async {
+    final response = await _dio.post('/collateral/release-token', data: {
+      'walletAddress': walletAddress,
+      'amount': amount,
+      'tokenSymbol': tokenSymbol,
     });
     return response.data;
   }
@@ -348,6 +415,28 @@ class ApiClient {
   Future<List<dynamic>> getSupportedTokens() async {
     final response = await _dio.get('/token/supported');
     return response.data;
+  }
+
+  // ── Notifications ──────────────────────────────
+  Future<List<dynamic>> getNotifications({int limit = 50, int offset = 0}) async {
+    final response = await _dio.get('/notifications', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    return response.data;
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    final response = await _dio.get('/notifications/unread-count');
+    return response.data['count'] ?? 0;
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await _dio.patch('/notifications/$id/read');
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _dio.patch('/notifications/read-all');
   }
 
   // ── Health ────────────────────────────────────

@@ -14,6 +14,7 @@ import '../screens/credit_tier_screen.dart';
 import '../screens/withdraw_screen.dart';
 import '../screens/collateral_screen.dart';
 import '../screens/fund_wallet_screen.dart';
+import '../screens/notifications_screen.dart';
 
 GoRouter createRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -127,6 +128,11 @@ GoRouter createRouter(AuthProvider authProvider) {
         path: '/fund-wallet',
         name: 'fund-wallet',
         builder: (context, state) => const FundWalletScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        name: 'notifications',
+        builder: (context, state) => const NotificationsScreen(),
       ),
     ],
   );
