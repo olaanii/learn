@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -5,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { SanitizePipe } from './common/pipes/sanitize.pipe';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -16,14 +18,26 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3001);
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
+  // Sentry error tracking (optional – only active when SENTRY_DSN is set)
+  const sentryDsn = configService.get<string>('SENTRY_DSN', '');
+  if (sentryDsn) {
+    Sentry.init({
+      dsn: sentryDsn,
+      environment: nodeEnv,
+      tracesSampleRate: nodeEnv === 'production' ? 0.2 : 1.0,
+    });
+    logger.log('Sentry error tracking enabled');
+  }
+
   // Security
   app.use(helmet());
 
-  // CORS – allow all origins in development for Flutter web/mobile testing
+  // CORS – restrict origins in production, allow all in development
+  const corsOrigins = configService.get<string>('CORS_ORIGINS', '');
   app.enableCors({
     origin: nodeEnv === 'production'
-      ? ['https://your-frontend-domain.com']
-      : true, // Allow all origins in development
+      ? (corsOrigins ? corsOrigins.split(',').map((o) => o.trim()) : false)
+      : true,
     credentials: true,
   });
 
@@ -33,8 +47,9 @@ async function bootstrap() {
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Global validation pipe
+  // Global pipes: sanitize inputs then validate
   app.useGlobalPipes(
+    new SanitizePipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -50,7 +65,7 @@ async function bootstrap() {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Diaspora Equb DeFi API')
       .setDescription('Non-custodial backend API for the Diaspora Equb rotating savings protocol')
-      .setVersion('0.1.0')
+      .setVersion('0.9.0')
       .addBearerAuth()
       .build();
 

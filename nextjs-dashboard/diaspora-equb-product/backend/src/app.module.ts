@@ -19,6 +19,7 @@ import { Web3Module } from './web3/web3.module';
 import { TokenModule } from './token/token.module';
 import { HealthModule } from './health/health.module';
 import { IndexerModule } from './indexer/indexer.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { IndexerModule } from './indexer/indexer.module';
     TokenModule,
     HealthModule,
     IndexerModule,
+    NotificationsModule,
   ],
   providers: [
     // Global JWT authentication guard
