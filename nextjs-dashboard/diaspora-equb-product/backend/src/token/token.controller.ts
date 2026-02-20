@@ -47,10 +47,12 @@ export class TokenController {
     @Query('token') token?: string,
     @Query('limit') limit?: number,
   ) {
+    const limitNum =
+      limit != null ? Number(limit) : 50;
     return this.tokenService.getTransactions(
       walletAddress,
       token || 'USDC',
-      limit || 50,
+      Number.isFinite(limitNum) ? limitNum : 50,
     );
   }
 

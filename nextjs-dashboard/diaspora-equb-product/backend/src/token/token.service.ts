@@ -18,6 +18,8 @@ const ERC20_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
+const ERC20_TRANSFER_SELECTOR = '0xa9059cbb';
+
 @Injectable()
 export class TokenService {
   private readonly logger = new Logger(TokenService.name);
@@ -111,17 +113,200 @@ export class TokenService {
   }
 
   /**
-   * Get token transfer history for a wallet from the blockchain only.
-   * No DB/indexer — always reads real Transfer events from Creditcoin testnet
-   * so that any connected wallet (including new WalletConnect) sees its full
-   * on-chain history.
+   * Get full transaction history for a wallet so it matches what MetaMask shows.
+   * Uses Blockscout API (all on-chain txs: native CTC, contract calls, failed/success).
+   * Falls back to ERC-20 Transfer events only if Blockscout is unavailable.
    */
   async getTransactions(
     walletAddress: string,
     tokenSymbol: string = 'USDC',
     limit: number = 50,
   ): Promise<any[]> {
-    return this.getTransactionsFromChain(walletAddress, tokenSymbol, limit);
+    const limitNum = Number(limit) || 50;
+    try {
+      const normalizedAddress = ethers.getAddress(walletAddress);
+      const [txList, tokenTxList] = await Promise.all([
+        this.getTransactionsFromBlockscout(normalizedAddress, limitNum),
+        this.getTokenTransfersFromBlockscout(normalizedAddress, limitNum * 2),
+      ]);
+      const byHash = new Map<string, any>();
+      for (const tx of tokenTxList) {
+        const h = (tx.txHash || tx.hash || '').toLowerCase();
+        if (h) byHash.set(h, tx);
+      }
+      for (const tx of txList) {
+        const h = (tx.txHash || '').toLowerCase();
+        if (h && !byHash.has(h)) byHash.set(h, tx);
+      }
+      const merged = Array.from(byHash.values());
+      merged.sort((a, b) => (b.blockNumber || 0) - (a.blockNumber || 0));
+      const out = merged.slice(0, limitNum);
+      this.logger.log(
+        `[Blockscout] merged ${txList.length} txlist + ${tokenTxList.length} tokentx => ${out.length} unique`,
+      );
+      if (out.length > 0) return out;
+    } catch (err) {
+      this.logger.warn(
+        `Blockscout failed for ${walletAddress}, falling back to token events: ${err?.message ?? err}`,
+      );
+    }
+    try {
+      return await this.getTransactionsFromChain(
+        walletAddress,
+        tokenSymbol,
+        limitNum,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `getTransactions failed for ${walletAddress} ${tokenSymbol}: ${err?.message ?? err}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Fetch ERC-20 token transfers for an address (includes received e.g. faucet).
+   * Uses Blockscout tokentx so transfers where user is "to" (received) are included.
+   */
+  private async getTokenTransfersFromBlockscout(
+    walletAddress: string,
+    limit: number,
+  ): Promise<any[]> {
+    const baseUrl = this.configService.get<string>(
+      'BLOCKSCOUT_API_URL',
+      this.chainId === 102030
+        ? 'https://creditcoin.blockscout.com/api'
+        : 'https://creditcoin-testnet.blockscout.com/api',
+    );
+    const url = `${baseUrl}?module=account&action=tokentx&address=${encodeURIComponent(walletAddress)}&sort=desc&offset=${Math.min(limit, 100)}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const json = await res.json();
+    if (json.status !== '1' || !Array.isArray(json.result)) return [];
+    const list = json.result as any[];
+    const wallet = walletAddress.toLowerCase();
+    return list.map((t) => {
+      const from = (t.from || '').toLowerCase();
+      const isSent = from === wallet;
+      const decimals = parseInt(t.tokenDecimal || '6', 10) || 6;
+      const valueWei = BigInt(t.value || '0');
+      const amount = ethers.formatUnits(valueWei, decimals);
+      const token = (t.tokenSymbol || 'USDC').toUpperCase();
+      return {
+        type: isSent ? 'sent' : 'received',
+        from: t.from || '',
+        to: t.to || '',
+        amount,
+        rawAmount: valueWei.toString(),
+        token,
+        txHash: t.hash,
+        blockNumber: parseInt(t.blockNumber, 10) || 0,
+        timestamp: t.timeStamp ? parseInt(t.timeStamp, 10) * 1000 : null,
+        isError: false,
+        contractAddress: t.contractAddress || null,
+      };
+    });
+  }
+
+  /**
+   * Fetch all transactions for an address from Blockscout (same data as MetaMask activity).
+   * Includes native CTC transfers, contract calls, and failed txs.
+   */
+  private async getTransactionsFromBlockscout(
+    walletAddress: string,
+    limit: number,
+  ): Promise<any[]> {
+    const baseUrl = this.configService.get<string>(
+      'BLOCKSCOUT_API_URL',
+      this.chainId === 102030
+        ? 'https://creditcoin.blockscout.com/api'
+        : 'https://creditcoin-testnet.blockscout.com/api',
+    );
+    const url = `${baseUrl}?module=account&action=txlist&address=${encodeURIComponent(walletAddress)}&sort=desc&offset=${Math.min(limit, 100)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Blockscout HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    if (json.status !== '1' || !Array.isArray(json.result)) {
+      return [];
+    }
+    const list = json.result as any[];
+    this.logger.log(
+      `[Blockscout] ${list.length} transactions for ${walletAddress}`,
+    );
+    const usdcAddr = (this.tokenAddresses.USDC || '').toLowerCase();
+    const usdtAddr = (this.tokenAddresses.USDT || '').toLowerCase();
+    const iface = new ethers.Interface(ERC20_ABI);
+
+    return list.slice(0, limit).map((tx) => {
+      const isSent =
+        (tx.from || '').toLowerCase() === walletAddress.toLowerCase();
+      const isError = tx.isError === '1' || tx.txreceipt_status === '0';
+      const toContract = (tx.to || '').toLowerCase();
+
+      // ERC-20 transfer: input = 0xa9059cbb + address(32) + amount(32)
+      let token = 'CTC';
+      let amount: string;
+      let rawAmount: string;
+      const valueWei = BigInt(tx.value || '0');
+
+      if (
+        (tx.input || '').slice(0, 10).toLowerCase() ===
+          ERC20_TRANSFER_SELECTOR &&
+        (toContract === usdcAddr || toContract === usdtAddr) &&
+        usdcAddr &&
+        usdcAddr !== '0x0000000000000000000000000000000000000000'
+      ) {
+        try {
+          const decoded = iface.parseTransaction({ data: tx.input });
+          if (decoded && decoded.name === 'transfer' && decoded.args.length >= 2) {
+            const recipient = decoded.args[0];
+            const amountWei = decoded.args[1];
+            token = toContract === usdtAddr ? 'USDT' : 'USDC';
+            rawAmount = String(amountWei);
+            amount = ethers.formatUnits(amountWei, 6);
+            const toAddr = typeof recipient === 'string' ? recipient : recipient?.toString?.() ?? '';
+            return {
+              type: isSent ? 'sent' : 'received',
+              from: tx.from || '',
+              to: toAddr,
+              amount,
+              rawAmount,
+              token,
+              txHash: tx.hash,
+              blockNumber: parseInt(tx.blockNumber, 10) || 0,
+              timestamp: tx.timeStamp
+                ? parseInt(tx.timeStamp, 10) * 1000
+                : null,
+              isError,
+              contractAddress: tx.contractAddress || null,
+            };
+          }
+        } catch (_e) {
+          // fall through to CTC
+        }
+      }
+
+      // Native CTC or other contract call
+      amount = ethers.formatEther(valueWei);
+      rawAmount = valueWei.toString();
+      return {
+        type: isSent ? 'sent' : 'received',
+        from: tx.from || '',
+        to: tx.to || '',
+        amount,
+        rawAmount,
+        token,
+        txHash: tx.hash,
+        blockNumber: parseInt(tx.blockNumber, 10) || 0,
+        timestamp: tx.timeStamp
+          ? parseInt(tx.timeStamp, 10) * 1000
+          : null,
+        isError,
+        contractAddress: tx.contractAddress || null,
+      };
+    });
   }
 
   /**
@@ -134,6 +319,15 @@ export class TokenService {
     limit: number,
   ): Promise<any[]> {
     try {
+      // Normalize address so event filters match (RPC/index can be case-sensitive)
+      let normalizedAddress: string;
+      try {
+        normalizedAddress = ethers.getAddress(walletAddress);
+      } catch {
+        this.logger.warn(`Invalid wallet address for tx history: ${walletAddress}`);
+        return [];
+      }
+
       const contract = this.getTokenContract(tokenSymbol);
       const decimals = await contract.decimals();
       const provider = this.web3Service.getProvider();
@@ -147,11 +341,11 @@ export class TokenService {
       const scanStart = Math.max(0, currentBlock - lookback);
 
       this.logger.log(
-        `[Chain] ${tokenSymbol} transfers for ${walletAddress} (blocks ${scanStart}..${currentBlock})`,
+        `[Chain] ${tokenSymbol} transfers for ${normalizedAddress} (blocks ${scanStart}..${currentBlock})`,
       );
 
-      const sentFilter = contract.filters.Transfer(walletAddress, null);
-      const receivedFilter = contract.filters.Transfer(null, walletAddress);
+      const sentFilter = contract.filters.Transfer(normalizedAddress, null);
+      const receivedFilter = contract.filters.Transfer(null, normalizedAddress);
 
       // Smaller chunks = fewer RPC failures (Creditcoin node often rejects large ranges)
       const CHUNK = 10_000;

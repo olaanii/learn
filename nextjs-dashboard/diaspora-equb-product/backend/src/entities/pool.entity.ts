@@ -41,6 +41,10 @@ export class Pool {
   @Column({ type: 'varchar', length: 66, nullable: true })
   txHash: string;
 
+  /** Address that signed the createPool transaction (pool creator / admin for close round, pick winner). */
+  @Column({ type: 'varchar', length: 42, nullable: true })
+  createdBy: string | null;
+
   @OneToMany(() => PoolMember, (member) => member.pool)
   members: PoolMember[];
 

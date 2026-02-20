@@ -5,6 +5,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PoolsService } from './pools.service';
 import {
   CreatePoolDto,
@@ -37,6 +38,16 @@ export class PoolsController {
       body.treasury,
       body.token,
     );
+  }
+
+  @Post('from-creation-tx')
+  @SkipThrottle()
+  @ApiOperation({
+    summary:
+      'Create pool from a mined createPool tx. Waits for receipt, parses PoolCreated, returns pool with onChainPoolId and status active.',
+  })
+  createPoolFromCreationTx(@Body() body: { txHash: string }) {
+    return this.poolsService.createPoolFromCreationTx(body.txHash);
   }
 
   @Post('build/join')
@@ -111,6 +122,7 @@ export class PoolsController {
   // ─── Read Endpoints (from DB cache, populated by event indexer) ───────────────
 
   @Get(':id')
+  @SkipThrottle() // Allow polling for on-chain status without hitting rate limit
   @ApiOperation({ summary: 'Get pool details by ID (from cache)' })
   getPool(@Param('id') id: string) {
     return this.poolsService.getPool(id);

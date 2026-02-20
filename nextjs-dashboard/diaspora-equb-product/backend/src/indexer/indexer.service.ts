@@ -35,10 +35,10 @@ const ERC20_TRANSFER_ABI = [
  *   - CollateralVault: CollateralDeposited, CollateralLocked, CollateralSlashed
  *   - IdentityRegistry: IdentityBound
  */
-@Injectable()
 /** Polling interval (ms) for catch-up when RPC does not support persistent log filters. */
 const CATCH_UP_POLL_MS = 60_000;
 
+@Injectable()
 export class IndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(IndexerService.name);
   private isRunning = false;
@@ -472,24 +472,54 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     event: ethers.EventLog | ethers.ContractEventPayload,
     token?: string,
   ) {
-    const txHash = 'log' in event ? event.log?.transactionHash : (event as any).transactionHash;
-    const existing = await this.poolRepo.findOne({
+    const txHashRaw = 'log' in event ? event.log?.transactionHash : (event as any).transactionHash;
+    const txHash = txHashRaw ? String(txHashRaw).trim().toLowerCase() : null;
+    this.logger.log(
+      `[EqubPool] PoolCreated: onChainPoolId=${onChainPoolId}, txHash=${txHash ?? 'none'}`,
+    );
+    const existingByOnChain = await this.poolRepo.findOne({
       where: { onChainPoolId: Number(onChainPoolId) },
     });
-    if (existing) return; // Already indexed
+    if (existingByOnChain) return; // Already indexed
+
+    // Decode treasury from calldata and get creator (tx signer) from tx.from
+    let treasury = '0x0000000000000000000000000000000000000000';
+    let createdBy: string | null = null;
+    if (txHash) {
+      try {
+        const provider = this.web3Service.getProvider();
+        const equbPool = this.web3Service.getEqubPool();
+        const tx = await provider.getTransaction(txHash);
+        if (tx) {
+          if (tx.from) createdBy = ethers.getAddress(tx.from);
+          if (tx?.data) {
+            const parsed = equbPool.interface.parseTransaction({ data: tx.data });
+            if (parsed?.args && parsed.args.length >= 4) {
+              const t = parsed.args[3];
+              const addr = typeof t === 'string' && t.startsWith('0x') ? t : String((t as any)?.toString?.() ?? t);
+              if (addr && addr !== '0x0000000000000000000000000000000000000000') treasury = ethers.getAddress(addr);
+            }
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`Could not decode treasury/creator from PoolCreated tx ${txHash}: ${e}`);
+      }
+    }
 
     const pool = this.poolRepo.create({
       onChainPoolId: Number(onChainPoolId),
-      tier: 0, // Will be updated if we read from chain
+      tier: 0,
       contributionAmount: contributionAmount.toString(),
       maxMembers: Number(maxMembers),
       currentRound: 1,
-      treasury: '0x0000000000000000000000000000000000000000',
+      treasury,
+      createdBy,
       token: token || '0x0000000000000000000000000000000000000000',
       status: 'active',
-      txHash: txHash || null,
+      ...(txHash ? { txHash } : {}),
     });
     await this.poolRepo.save(pool);
+    this.logger.log(`[EqubPool] PoolCreated: created new pool id=${pool.id}, onChainPoolId=${onChainPoolId}`);
   }
 
   private async handleJoinedPool(

@@ -58,42 +58,48 @@ export class AuthService {
 
   /**
    * Dev-only login: generates a JWT for testing without Fayda verification.
+   * If the wallet is already bound to an identity, uses that identity (avoids unique constraint).
    * In production this endpoint should be disabled or protected.
    */
   async devLogin(walletAddress?: string) {
-    const devWallet = walletAddress || '0x0000000000000000000000000000000000DE1057';
-    const identityHash = `0x${createHash('sha256').update('dev-test-identity').digest('hex')}`;
+    const devWallet = (walletAddress || '0x0000000000000000000000000000000000DE1057').toLowerCase();
+    const devIdentityHash = `0x${createHash('sha256').update('dev-test-identity').digest('hex')}`;
 
-    // Upsert identity record — always update wallet to current devWallet
-    let identity = await this.identityRepo.findOne({ where: { identityHash } });
-    if (!identity) {
-      identity = this.identityRepo.create({
-        identityHash,
-        walletAddress: devWallet,
-        bindingStatus: 'bound',
-      });
-      identity = await this.identityRepo.save(identity);
-      this.logger.log(`Dev identity created: ${identityHash}`);
-    } else if (identity.walletAddress !== devWallet) {
-      identity.walletAddress = devWallet;
-      identity.bindingStatus = 'bound';
-      identity = await this.identityRepo.save(identity);
-      this.logger.log(`Dev identity wallet updated to: ${devWallet}`);
+    // Prefer existing identity that already has this wallet (case-insensitive for DE1057 etc.)
+    let identity = await this.identityRepo
+      .createQueryBuilder('i')
+      .where('LOWER(i.walletAddress) = :wallet', { wallet: devWallet })
+      .getOne();
+    if (identity) {
+      this.logger.log(`Dev login: using existing identity for wallet ${devWallet}`);
+    } else {
+      identity = await this.identityRepo.findOne({ where: { identityHash: devIdentityHash } });
+      if (!identity) {
+        identity = this.identityRepo.create({
+          identityHash: devIdentityHash,
+          walletAddress: devWallet,
+          bindingStatus: 'bound',
+        });
+        identity = await this.identityRepo.save(identity);
+        this.logger.log(`Dev identity created: ${devIdentityHash}`);
+      } else if ((identity.walletAddress || '').toLowerCase() !== devWallet) {
+        identity.walletAddress = devWallet;
+        identity.bindingStatus = 'bound';
+        identity = await this.identityRepo.save(identity);
+        this.logger.log(`Dev identity wallet updated to: ${devWallet}`);
+      }
     }
 
-    // Generate JWT
-    const payload = {
-      sub: identityHash,
-      walletAddress: identity.walletAddress || devWallet,
-    };
+    const wallet = identity.walletAddress || devWallet;
+    const payload = { sub: identity.identityHash, walletAddress: wallet };
     const accessToken = this.jwtService.sign(payload);
 
-    this.logger.warn(`[DEV-LOGIN] JWT issued for ${devWallet} — disable in production!`);
+    this.logger.warn(`[DEV-LOGIN] JWT issued for ${wallet} — disable in production!`);
 
     return {
       accessToken,
-      identityHash,
-      walletAddress: identity.walletAddress || devWallet,
+      identityHash: identity.identityHash,
+      walletAddress: wallet,
       walletBindingStatus: 'bound',
     };
   }

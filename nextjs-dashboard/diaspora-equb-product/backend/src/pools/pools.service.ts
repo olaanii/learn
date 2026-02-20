@@ -11,6 +11,7 @@ import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
 import { PayoutStreamEntity } from '../entities/payout-stream.entity';
+import { ethers } from 'ethers';
 import { Web3Service, UnsignedTxDto } from '../web3/web3.service';
 
 @Injectable()
@@ -50,6 +51,39 @@ export class PoolsService {
     this.logger.log(
       `Building createPool TX: tier=${tier}, contribution=${contributionAmount}, maxMembers=${maxMembers}, token=${tokenAddress}`,
     );
+
+    // Validate params that would cause contract revert (so user gets a clear error instead of failed tx)
+    const contributionBig = BigInt(contributionAmount);
+    if (contributionBig <= 0n) {
+      throw new BadRequestException(
+        'Invalid contribution: amount must be greater than 0 (contract: "invalid contribution")',
+      );
+    }
+    if (maxMembers <= 1) {
+      throw new BadRequestException(
+        'Invalid members: maxMembers must be greater than 1 (contract: "invalid members")',
+      );
+    }
+    const zeroAddr = '0x0000000000000000000000000000000000000000';
+    if (!treasury || treasury.toLowerCase() === zeroAddr.toLowerCase()) {
+      throw new BadRequestException(
+        'Invalid treasury: treasury address cannot be zero (contract: "invalid treasury")',
+      );
+    }
+
+    const tierRegistry = this.web3Service.getTierRegistry();
+    const config = await tierRegistry.tierConfig(tier);
+    if (!config.enabled) {
+      throw new BadRequestException(
+        `Tier ${tier} is disabled on-chain. The network admin must call configureTier to enable this tier (contract: "tier disabled")`,
+      );
+    }
+    const maxPoolSize = BigInt(config.maxPoolSize.toString());
+    if (contributionBig > maxPoolSize) {
+      throw new BadRequestException(
+        `Contribution amount (${contributionAmount}) exceeds tier ${tier} max pool size (${config.maxPoolSize}) (contract: "pool size exceeds tier")`,
+      );
+    }
 
     const equbPool = this.web3Service.getEqubPool();
     // Use the v2 overload that includes the token parameter
@@ -185,6 +219,46 @@ export class PoolsService {
 
   // ─── Read Methods (from DB cache, populated by Event Indexer) ───────────────
 
+  /** Backfill treasury and createdBy from createPool tx when missing. */
+  private async backfillPoolFromCreationTx(pool: Pool): Promise<void> {
+    if (!pool.txHash) return;
+    const zero = '0x0000000000000000000000000000000000000000';
+    const needsTreasury = pool.treasury === zero;
+    const needsCreatedBy = !pool.createdBy;
+    if (!needsTreasury && !needsCreatedBy) return;
+    try {
+      const provider = this.web3Service.getProvider();
+      const equbPool = this.web3Service.getEqubPool();
+      const tx = await provider.getTransaction(pool.txHash);
+      if (!tx) return;
+      let updated = false;
+      if (needsCreatedBy && tx.from) {
+        const { ethers } = await import('ethers');
+        pool.createdBy = ethers.getAddress(tx.from);
+        updated = true;
+        this.logger.log(`Backfilled createdBy for pool ${pool.id}: ${pool.createdBy}`);
+      }
+      if (needsTreasury && tx.data) {
+        const parsed = equbPool.interface.parseTransaction({ data: tx.data });
+        if (parsed?.args && parsed.args.length >= 4) {
+          const t = parsed.args[3];
+          const treasury =
+            typeof t === 'string' && t.startsWith('0x')
+              ? t
+              : String((t as any)?.toString?.() ?? t);
+          if (treasury && treasury !== zero) {
+            pool.treasury = treasury;
+            updated = true;
+            this.logger.log(`Backfilled treasury for pool ${pool.id}: ${treasury}`);
+          }
+        }
+      }
+      if (updated) await this.poolRepo.save(pool);
+    } catch (e) {
+      this.logger.warn(`Could not backfill pool ${pool.id} from tx: ${e}`);
+    }
+  }
+
   async getPool(poolId: string) {
     const pool = await this.poolRepo.findOne({
       where: { id: poolId },
@@ -193,7 +267,9 @@ export class PoolsService {
     if (!pool) {
       throw new NotFoundException(`Pool ${poolId} not found`);
     }
-    return pool;
+    await this.backfillPoolFromCreationTx(pool);
+    // Return plain object so createdBy/treasury are never stripped by serialization
+    return { ...pool, createdBy: pool.createdBy ?? null };
   }
 
   /**
@@ -309,6 +385,77 @@ export class PoolsService {
       token: saved.token,
       status: saved.status,
     };
+  }
+
+  /**
+   * Create pool from a mined createPool tx. Waits for receipt, parses PoolCreated,
+   * and creates the pool with onChainPoolId and status active immediately.
+   */
+  async createPoolFromCreationTx(txHash: string): Promise<Pool> {
+    const hash = txHash.trim();
+    this.logger.log(`createPoolFromCreationTx: waiting for receipt txHash=${hash}`);
+    const provider = this.web3Service.getProvider();
+    const equbPool = this.web3Service.getEqubPool();
+    const equbPoolAddress = (await equbPool.getAddress()).toLowerCase();
+
+    // Wait for receipt (poll up to ~2 min)
+    let receipt: ethers.TransactionReceipt | null = null;
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      receipt = await provider.getTransactionReceipt(hash);
+      if (receipt && receipt.blockNumber) break;
+    }
+    if (!receipt || !receipt.blockNumber) {
+      throw new BadRequestException('Transaction not mined yet. Try again in a moment.');
+    }
+    if (receipt.status === 0) {
+      throw new BadRequestException('Transaction reverted on-chain. Pool was not created.');
+    }
+
+    const tx = await provider.getTransaction(hash);
+    if (!tx) throw new BadRequestException('Transaction not found');
+
+    const createdBy = tx.from ? ethers.getAddress(tx.from) : null;
+    let treasury = '0x0000000000000000000000000000000000000000';
+    if (tx.data) {
+      const parsed = equbPool.interface.parseTransaction({ data: tx.data });
+      if (parsed?.args && parsed.args.length >= 4) {
+        const t = parsed.args[3];
+        const addr = typeof t === 'string' && t.startsWith('0x') ? t : String((t as any)?.toString?.() ?? t);
+        if (addr && addr !== '0x0000000000000000000000000000000000000000') treasury = ethers.getAddress(addr);
+      }
+    }
+
+    const iface = equbPool.interface;
+    const poolCreatedTopic = iface.getEvent('PoolCreated')?.topicHash;
+    const log = receipt.logs.find(
+      (l) => l.address.toLowerCase() === equbPoolAddress && (poolCreatedTopic && l.topics[0] === poolCreatedTopic),
+    );
+    if (!log) throw new BadRequestException('PoolCreated event not found in transaction');
+
+    const decoded = iface.parseLog({ topics: log.topics as string[], data: log.data });
+    if (!decoded || decoded.name !== 'PoolCreated') throw new BadRequestException('Failed to parse PoolCreated');
+    const [poolId, contributionAmount, maxMembers, token] = decoded.args;
+
+    const onChainPoolId = Number(poolId);
+    const existing = await this.poolRepo.findOne({ where: { onChainPoolId } });
+    if (existing) return existing;
+
+    const pool = this.poolRepo.create({
+      onChainPoolId,
+      tier: 0,
+      contributionAmount: contributionAmount.toString(),
+      maxMembers: Number(maxMembers),
+      currentRound: 1,
+      treasury,
+      createdBy,
+      token: token && typeof token === 'string' ? token : (token as any)?.toString?.() ?? '0x0000000000000000000000000000000000000000',
+      status: 'active',
+      txHash: hash.toLowerCase(),
+    });
+    const saved = await this.poolRepo.save(pool);
+    this.logger.log(`createPoolFromCreationTx: created pool id=${saved.id}, onChainPoolId=${onChainPoolId}`);
+    return saved;
   }
 
   async joinPool(poolId: string, walletAddress: string) {

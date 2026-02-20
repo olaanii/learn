@@ -191,12 +191,17 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
   }
 
   void _showCreatePoolDialog(BuildContext context) {
+    final wallet = context.read<WalletService>();
+    final auth = context.read<AuthProvider>();
     final tierController = TextEditingController(text: '0');
     final contributionController = TextEditingController();
     final membersController = TextEditingController();
-    final treasuryController = TextEditingController();
-    final wallet = context.read<WalletService>();
-    final auth = context.read<AuthProvider>();
+    // Default treasury to connected wallet so any admin can use their wallet as treasury
+    final treasuryController = TextEditingController(
+      text: wallet.isConnected
+          ? (wallet.walletAddress ?? auth.walletAddress ?? '')
+          : '',
+    );
 
     showDialog(
       context: context,
@@ -238,6 +243,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                     'Connect your wallet to create on-chain pools.',
                     style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                   ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Ensure your wallet is on Creditcoin Testnet (chain ID 102031).',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
                 ),
             ],
           ),
@@ -276,17 +289,24 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Pool created on-chain! TX: ${txHash.substring(0, 16)}...'),
+                          content: Text(
+                            'Pool created and active. TX: ${txHash.substring(0, 16)}...',
+                          ),
+                          duration: const Duration(seconds: 5),
                         ),
                       );
                     }
                   } else {
+                    final err = context.read<PoolProvider>().errorMessage ?? 'Pool creation failed';
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          context.read<PoolProvider>().errorMessage ?? 'Pool creation failed',
+                          err.contains('rejected')
+                              ? '$err Make sure your wallet is on Creditcoin Testnet (chain ID 102031).'
+                              : err,
                         ),
                         backgroundColor: Colors.red.shade700,
+                        duration: const Duration(seconds: 5),
                       ),
                     );
                   }

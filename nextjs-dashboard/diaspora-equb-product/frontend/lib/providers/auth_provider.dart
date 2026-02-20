@@ -52,22 +52,20 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Bypass Fayda verification for testing.
-  /// Still connects MetaMask to use the real wallet address for balance queries.
+  /// Dev login always uses the fixed dev wallet (DE1057) that joined the tier-0 pool,
+  /// so pool membership and authorized API calls work. Does not use MetaMask for auth.
   Future<void> skipFaydaForTesting() async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // Try to connect MetaMask so we use the real wallet address
-      final connectedAddress = await _walletService.connect();
-      final address =
-          connectedAddress ?? '0x0000000000000000000000000000000000DE1057';
-
-      final response = await _api.devLogin(walletAddress: address);
+      // Always use DE1057 for dev so this identity is the one that joined the pool
+      const devWallet = '0x0000000000000000000000000000000000DE1057';
+      final response = await _api.devLogin(walletAddress: devWallet);
       await _api.saveToken(response['accessToken']);
       _identityHash = response['identityHash'];
-      _walletAddress = address;
+      _walletAddress = devWallet;
       _status = AuthStatus.walletBound;
     } catch (e) {
       _identityHash =
@@ -195,8 +193,6 @@ class AuthProvider extends ChangeNotifier {
   /// Valid EVM address regex (0x + 40 hex chars).
   static final _evmRegex = RegExp(r'^0x[a-fA-F0-9]{40}$');
 
-  static const _devTestAddress = '0x0000000000000000000000000000000000DE1057';
-
   Future<void> tryAutoLogin() async {
     final token = await _api.getToken();
     if (token == null) return;
@@ -223,23 +219,8 @@ class AuthProvider extends ChangeNotifier {
       _identityHash = identity;
       _walletAddress = wallet;
 
-      // If the stored address is the dev placeholder, try to reconnect
-      // the real wallet so balances reflect the user's actual address.
-      if (wallet == null ||
-          wallet.isEmpty ||
-          wallet.toLowerCase() == _devTestAddress.toLowerCase()) {
-        final realAddress = await _walletService.connect();
-        if (realAddress != null) {
-          _walletAddress = realAddress;
-          // Re-issue JWT with real address
-          try {
-            final response = await _api.devLogin(walletAddress: realAddress);
-            await _api.saveToken(response['accessToken']);
-          } catch (_) {
-            // Keep going with old JWT — at least balances will be correct
-          }
-        }
-      }
+      // Keep DE1057 as-is on restore so pool membership and auth stay correct.
+      // Do not replace with MetaMask address.
 
       if (_walletAddress != null && _walletAddress!.isNotEmpty) {
         _status = AuthStatus.walletBound;

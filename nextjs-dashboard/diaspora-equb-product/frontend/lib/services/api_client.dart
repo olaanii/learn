@@ -178,6 +178,16 @@ class ApiClient {
     return response.data;
   }
 
+  /// Create pool from mined createPool tx. Backend waits for receipt and creates pool with onChainPoolId (active).
+  Future<Map<String, dynamic>> createPoolFromCreationTx(String txHash) async {
+    final response = await _dio.post(
+      '/pools/from-creation-tx',
+      data: {'txHash': txHash.trim()},
+      options: Options(receiveTimeout: const Duration(seconds: 150)),
+    );
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> buildJoinPool(int onChainPoolId) async {
     final response = await _dio.post('/pools/build/join', data: {
       'onChainPoolId': onChainPoolId,
@@ -372,7 +382,10 @@ class ApiClient {
       'token': token,
       'limit': limit,
     });
-    return response.data;
+    // Ensure we always return a list so UI doesn't break on unexpected shape
+    final data = response.data;
+    if (data is List) return data;
+    return [];
   }
 
   Future<Map<String, dynamic>> buildTransfer({

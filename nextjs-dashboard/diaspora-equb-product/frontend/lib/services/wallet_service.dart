@@ -175,12 +175,18 @@ class WalletService extends ChangeNotifier {
       return null;
     }
 
+    final chainIdRaw = unsignedTx['chainId'];
+    final chainIdHex = chainIdRaw != null
+        ? _toHex(chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
+        : _toHex(AppConfig.chainId.toString());
+
     final txParams = {
       'from': _walletAddress,
       'to': unsignedTx['to'],
       'data': unsignedTx['data'],
       'value': _toHex(unsignedTx['value'] ?? '0'),
       'gas': _toHex(unsignedTx['estimatedGas'] ?? '300000'),
+      'chainId': chainIdHex,
     };
 
     // On web, use the injected provider
@@ -195,7 +201,7 @@ class WalletService extends ChangeNotifier {
         notifyListeners();
         return null;
       } catch (e) {
-        _errorMessage = 'Transaction failed: $e';
+        _errorMessage = _formatTxFailureMessage(e);
         notifyListeners();
         return null;
       }
@@ -225,10 +231,22 @@ class WalletService extends ChangeNotifier {
       debugPrint('[WalletService] TX sent: $txHash');
       return txHash;
     } catch (e) {
-      _errorMessage = 'Transaction failed: $e';
+      _errorMessage = _formatTxFailureMessage(e);
       notifyListeners();
       return null;
     }
+  }
+
+  /// Build user-facing message for a failed tx. If the error contains a 4-byte
+  /// selector (e.g. 0xb39d8e65), append a hint about contract revert / token approval.
+  static String _formatTxFailureMessage(Object e) {
+    final s = e.toString();
+    final base = 'Transaction failed: $e';
+    // Match 0x followed by 8 hex chars (custom error selector)
+    if (RegExp(r'0x[0-9a-fA-F]{8}').hasMatch(s)) {
+      return '$base\n(Contract reverted. For token pools, approve the token first; or check Blockscout for the revert reason.)';
+    }
+    return base;
   }
 
   /// Sign a personal message (e.g. for authentication).

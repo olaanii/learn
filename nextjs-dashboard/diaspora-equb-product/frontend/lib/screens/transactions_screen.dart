@@ -15,16 +15,22 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
-  bool _loaded = false;
+  String? _lastLoadedWallet;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_loaded) {
-      _loaded = true;
+    final auth = context.read<AuthProvider>();
+    if (auth.walletAddress != null &&
+        _lastLoadedWallet != auth.walletAddress &&
+        mounted) {
+      _lastLoadedWallet = auth.walletAddress;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _loadTransactions();
       });
+    } else if (auth.walletAddress == null) {
+      _lastLoadedWallet = null;
     }
   }
 
@@ -93,9 +99,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   Widget _buildBody() {
-    return Consumer<WalletProvider>(
-      builder: (context, wallet, _) {
+    return Consumer2<AuthProvider, WalletProvider>(
+      builder: (context, auth, wallet, _) {
         final txList = wallet.transactions;
+
+        // When we have a wallet and empty list and not loading, trigger load once
+        if (auth.walletAddress != null &&
+            txList.isEmpty &&
+            !wallet.isLoading &&
+            _lastLoadedWallet != auth.walletAddress) {
+          _lastLoadedWallet = auth.walletAddress;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            wallet.loadTransactions(auth.walletAddress!, limit: 50);
+          });
+        }
 
         if (wallet.isLoading && txList.isEmpty) {
           return const Center(child: CircularProgressIndicator());
@@ -112,9 +130,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       size: 48,
                       color: AppTheme.textTertiary.withValues(alpha: 0.5)),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No transactions yet',
-                    style: TextStyle(
+                  Text(
+                    wallet.errorMessage ?? 'No transactions yet',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                       color: AppTheme.textTertiary,
@@ -129,6 +148,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       color: AppTheme.textTertiary,
                     ),
                   ),
+                  if (wallet.errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _loadTransactions,
+                      icon: const Icon(Icons.refresh_rounded, size: 20),
+                      label: const Text('Retry'),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -170,29 +197,43 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
     final Map<String, DateTime> groupDates = {};
+    const olderKey = '_older_';
 
     for (final tx in txList) {
       final timestamp = tx['timestamp'];
-      DateTime txDate;
+      DateTime? txDate;
       if (timestamp != null && timestamp is num) {
-        txDate = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt());
-      } else {
-        txDate = now;
+        final ms = timestamp.toInt();
+        if (ms > 0) {
+          txDate = DateTime.fromMillisecondsSinceEpoch(ms);
+        }
       }
-      final dayKey =
-          '${txDate.year}-${txDate.month.toString().padLeft(2, '0')}-${txDate.day.toString().padLeft(2, '0')}';
+      final dayKey = txDate != null
+          ? '${txDate.year}-${txDate.month.toString().padLeft(2, '0')}-${txDate.day.toString().padLeft(2, '0')}'
+          : olderKey;
       grouped.putIfAbsent(dayKey, () => []);
       grouped[dayKey]!.add({...tx, '_parsedDate': txDate});
-      groupDates.putIfAbsent(dayKey, () => DateTime(txDate.year, txDate.month, txDate.day));
+      if (txDate != null) {
+        groupDates.putIfAbsent(
+            dayKey, () => DateTime(txDate!.year, txDate.month, txDate.day));
+      } else {
+        groupDates.putIfAbsent(dayKey, () => DateTime(1970, 1, 1));
+      }
     }
 
     final sortedKeys = grouped.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+      ..sort((a, b) {
+        if (a == olderKey) return 1;
+        if (b == olderKey) return -1;
+        return b.compareTo(a);
+      });
 
     return sortedKeys.map((key) {
       final date = groupDates[key]!;
       String label;
-      if (date == today) {
+      if (key == olderKey) {
+        label = 'Older';
+      } else if (date == today) {
         label = 'Today';
       } else if (date == yesterday) {
         label = 'Yesterday';
@@ -238,9 +279,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final type = item['type']?.toString() ?? 'received';
     final isSent = type == 'sent';
     final amount = double.tryParse(item['amount']?.toString() ?? '0') ?? 0;
-    final amountStr = isSent
-        ? '-\$${amount.toStringAsFixed(2)}'
-        : '+\$${amount.toStringAsFixed(2)}';
+    final tokenSymbol = item['token']?.toString() ?? 'USDC';
+    final isNative = tokenSymbol == 'CTC';
+    final isFailed = item['isError'] == true;
+    final amountStr = isNative
+        ? '${isSent ? '-' : '+'}${amount.toStringAsFixed(4)} CTC'
+        : '${isSent ? '-\$' : '+\$'}${amount.toStringAsFixed(2)}';
 
     final from = item['from']?.toString() ?? '';
     final to = item['to']?.toString() ?? '';
@@ -248,15 +292,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final name = displayAddr.length > 10
         ? '${displayAddr.substring(0, 6)}...${displayAddr.substring(displayAddr.length - 4)}'
         : displayAddr;
-    final tokenSymbol = item['token']?.toString() ?? 'USDC';
 
-    // Format time
+    // Format time (show block number when timestamp missing)
     final parsedDate = item['_parsedDate'] as DateTime?;
+    final blockNumber = item['blockNumber'];
     final timeStr = parsedDate != null
         ? DateFormat('h:mm a').format(parsedDate)
-        : '';
+        : (blockNumber != null ? 'Block #$blockNumber' : '—');
 
-    final color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
+    Color color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
+    if (isFailed) color = AppTheme.textTertiary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -299,7 +344,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 Row(
                   children: [
                     Text(
-                      '$tokenSymbol ${isSent ? "Sent" : "Received"}',
+                      isFailed
+                          ? 'Failed'
+                          : '$tokenSymbol ${isSent ? "Sent" : "Received"}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textTertiary,

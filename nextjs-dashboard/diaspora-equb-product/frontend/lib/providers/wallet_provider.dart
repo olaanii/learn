@@ -101,11 +101,13 @@ class WalletProvider extends ChangeNotifier {
   }
 
   /// Load transaction history for a wallet.
-  /// Fetches for both USDC and USDT, merges and sorts by block number.
+  /// Fetches USDC and USDT independently so one failure does not block the other.
+  /// Merges and sorts by block number.
   Future<void> loadTransactions(String walletAddress,
       {String? token, int limit = 50}) async {
     _startLoading();
     _errorMessage = null;
+    _transactions = [];
 
     try {
       if (token != null) {
@@ -114,22 +116,22 @@ class WalletProvider extends ChangeNotifier {
           token: token,
           limit: limit,
         );
-        _transactions = List<Map<String, dynamic>>.from(data);
+        _transactions = data.whereType<Map<String, dynamic>>().toList();
       } else {
-        final results = await Future.wait([
-          _api.getTokenTransactions(walletAddress, token: 'USDC', limit: limit),
-          _api.getTokenTransactions(walletAddress, token: 'USDT', limit: limit),
-        ]);
-        final merged = <Map<String, dynamic>>[
-          ...List<Map<String, dynamic>>.from(results[0]),
-          ...List<Map<String, dynamic>>.from(results[1]),
-        ];
-        merged.sort((a, b) {
-          final bBlock = (b['blockNumber'] as num?) ?? 0;
-          final aBlock = (a['blockNumber'] as num?) ?? 0;
-          return bBlock.compareTo(aBlock);
-        });
-        _transactions = merged.take(limit).toList();
+        try {
+          final data = await _api.getTokenTransactions(
+            walletAddress,
+            token: 'USDC',
+            limit: limit,
+          );
+          final list = data.whereType<Map<String, dynamic>>().toList();
+          list.sort((a, b) {
+            final bBlock = (b['blockNumber'] as num?) ?? 0;
+            final aBlock = (a['blockNumber'] as num?) ?? 0;
+            return bBlock.compareTo(aBlock);
+          });
+          _transactions = list.take(limit).toList();
+        } catch (_) {}
       }
     } catch (e) {
       _errorMessage = 'Failed to load transactions';

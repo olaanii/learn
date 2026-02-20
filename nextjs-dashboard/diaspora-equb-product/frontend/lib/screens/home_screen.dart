@@ -16,16 +16,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _balanceVisible = true;
-  bool _dataLoaded = false;
+  String? _lastLoadedWallet;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_dataLoaded) {
-      _dataLoaded = true;
+    final auth = context.read<AuthProvider>();
+    if (auth.walletAddress != null &&
+        _lastLoadedWallet != auth.walletAddress &&
+        mounted) {
+      _lastLoadedWallet = auth.walletAddress;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _loadWalletData();
       });
+    } else if (auth.walletAddress == null) {
+      _lastLoadedWallet = null;
     }
   }
 
@@ -41,6 +47,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Consumer2<WalletProvider, AuthProvider>(
       builder: (context, wallet, auth, _) {
+        // When wallet is available and transactions empty and not loading, trigger load
+        if (auth.walletAddress != null &&
+            wallet.transactions.isEmpty &&
+            !wallet.isLoading &&
+            _lastLoadedWallet != auth.walletAddress) {
+          _lastLoadedWallet = auth.walletAddress;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            wallet.loadAll(auth.walletAddress!);
+          });
+        }
         return RefreshIndicator(
           onRefresh: () async {
             if (auth.walletAddress != null) {
@@ -523,9 +540,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final type = tx['type'] as String? ?? 'received';
     final isSent = type == 'sent';
     final amount = double.tryParse(tx['amount']?.toString() ?? '0') ?? 0;
-    final amountStr = isSent
-        ? '-\$${amount.toStringAsFixed(2)}'
-        : '+\$${amount.toStringAsFixed(2)}';
+    final tokenSymbol = tx['token']?.toString() ?? 'USDC';
+    final isNative = tokenSymbol == 'CTC';
+    final isFailed = tx['isError'] == true;
+    final amountStr = isNative
+        ? '${isSent ? '-' : '+'}${amount.toStringAsFixed(4)} CTC'
+        : '${isSent ? r'-$' : r'+$'}${amount.toStringAsFixed(2)}';
 
     // Shorten addresses for display
     final from = tx['from']?.toString() ?? '';
@@ -535,8 +555,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '${displayAddr.substring(0, 6)}...${displayAddr.substring(displayAddr.length - 4)}'
         : displayAddr;
 
-    final tokenSymbol = tx['token']?.toString() ?? 'USDC';
-    final color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
+    Color color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
+    if (isFailed) color = AppTheme.textTertiary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),

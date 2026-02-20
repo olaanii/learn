@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../services/api_client.dart';
 import '../services/wallet_service.dart';
@@ -103,17 +104,43 @@ class PoolProvider extends ChangeNotifier {
       if (txHash == null) {
         _errorMessage =
             _walletService.errorMessage ?? 'Transaction rejected';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      // 3. Wait for tx to be mined and create pool with onChainPoolId (active) immediately
+      try {
+        await _api.createPoolFromCreationTx(txHash);
+        await loadPools();
+      } catch (e) {
+        _errorMessage = _apiErrorMessage(e, 'Pool created on-chain but failed to register');
+        _isLoading = false;
+        notifyListeners();
+        return null;
       }
 
       _isLoading = false;
       notifyListeners();
       return txHash;
     } catch (e) {
-      _errorMessage = 'Failed to create pool: $e';
+      _errorMessage = _apiErrorMessage(e, 'Failed to create pool');
       _isLoading = false;
       notifyListeners();
       return null;
     }
+  }
+
+  /// Extract user-facing message from API (e.g. 400) or wallet errors.
+  static String _apiErrorMessage(Object e, String fallback) {
+    if (e is DioException && e.response?.data != null) {
+      final data = e.response!.data;
+      if (data is Map && data['message'] != null) {
+        final msg = data['message'];
+        return msg is String ? msg : msg.toString();
+      }
+    }
+    return '$fallback: $e';
   }
 
   /// Build a join-pool TX from the backend, then sign & send via WalletConnect.
@@ -185,7 +212,7 @@ class PoolProvider extends ChangeNotifier {
       notifyListeners();
       return txHash;
     } catch (e) {
-      _errorMessage = 'Failed to contribute: $e';
+      _errorMessage = _apiErrorMessage(e, 'Failed to contribute');
       _isLoading = false;
       notifyListeners();
       return null;
@@ -367,7 +394,7 @@ class PoolProvider extends ChangeNotifier {
       await loadPools();
       return pool;
     } catch (e) {
-      _errorMessage = 'Failed to create pool';
+      _errorMessage = _apiErrorMessage(e, 'Failed to create pool');
       notifyListeners();
       return null;
     }
