@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PoolsService } from './pools.service';
+import { SelectWinnerDto } from './dto/select-winner.dto';
 import {
   CreatePoolDto,
   JoinPoolDto,
@@ -20,6 +21,15 @@ import {
 @Controller('pools')
 export class PoolsController {
   constructor(private readonly poolsService: PoolsService) {}
+
+  @Post(':id/select-winner')
+  async selectWinner(
+    @Param('id') id: string,
+    @Body() body: SelectWinnerDto,
+  ) {
+    const result = await this.poolsService.buildSelectWinner(id, body as any);
+    return result;
+  }
 
   // ─── TX Builder Endpoints (non-custodial: return unsigned TX for wallet signing) ──
 

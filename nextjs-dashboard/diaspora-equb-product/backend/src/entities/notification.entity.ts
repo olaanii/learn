@@ -8,6 +8,7 @@ import {
 
 export type NotificationType =
   | 'round_closed'
+  | 'all_contributed'
   | 'payout_received'
   | 'contribution_confirmed'
   | 'default_triggered'

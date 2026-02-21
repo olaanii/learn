@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../entities/notification.entity';
 import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
@@ -576,6 +577,33 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
         existing.txHash = txHash || null;
         await this.contributionRepo.save(existing);
       }
+      // If the pool was marked as 'round-closed', restore to 'active' on new confirmed contribution
+      if (pool.status === 'round-closed') {
+        pool.status = 'active';
+        await this.poolRepo.save(pool).catch(() => {});
+      }
+      // Check whether all members have now contributed for this round and notify creator
+      try {
+        const roundNum = Number(round);
+        const members = await this.memberRepo.find({ where: { poolId: pool.id } });
+        if (members.length > 0) {
+          const contribCount = await this.contributionRepo.count({ where: { poolId: pool.id, round: roundNum } });
+          if (contribCount >= members.length) {
+            if (pool.createdBy) {
+              const _t: NotificationType = 'all_contributed';
+              this.notifications.create(
+                pool.createdBy,
+                _t,
+                'All Members Contributed',
+                `All ${members.length} members have contributed for round ${roundNum} of pool #${pool.onChainPoolId}. Please select the winner.`,
+                { poolId: pool.id, round: roundNum },
+              ).catch(() => {});
+            }
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to check/notify all_contributed for pool ${pool.id}: ${e}`);
+      }
       return;
     }
 
@@ -588,6 +616,12 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     });
     await this.contributionRepo.save(contribution);
 
+    // If the pool was marked 'round-closed' (e.g. by close event), set it back to active
+    if (pool.status === 'round-closed') {
+      pool.status = 'active';
+      await this.poolRepo.save(pool).catch(() => {});
+    }
+
     this.notifications.create(
       member,
       'contribution_confirmed',
@@ -595,6 +629,27 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       `Your round ${roundNum} contribution to pool #${pool.onChainPoolId} is confirmed on-chain.`,
       { poolId: pool.id, round: roundNum, txHash },
     ).catch(() => {});
+    // After recording contribution, check if all members have contributed for this round and notify pool creator
+    try {
+      const members = await this.memberRepo.find({ where: { poolId: pool.id } });
+      if (members.length > 0) {
+        const contribCount = await this.contributionRepo.count({ where: { poolId: pool.id, round: roundNum } });
+        if (contribCount >= members.length) {
+          if (pool.createdBy) {
+            const _t: NotificationType = 'all_contributed';
+            this.notifications.create(
+              pool.createdBy,
+              _t,
+              'All Members Contributed',
+              `All ${members.length} members have contributed for round ${roundNum} of pool #${pool.onChainPoolId}. Please select the winner.`,
+              { poolId: pool.id, round: roundNum },
+            ).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to check/notify all_contributed for pool ${pool.id}: ${e}`);
+    }
   }
 
   private async handleRoundClosed(
@@ -607,6 +662,8 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     if (!pool) return;
 
     pool.currentRound = Number(round) + 1;
+    // Mark pool as round-closed so UI can display transient closed status
+    pool.status = 'round-closed';
     await this.poolRepo.save(pool);
 
     const members = await this.memberRepo.find({ where: { poolId: pool.id } });

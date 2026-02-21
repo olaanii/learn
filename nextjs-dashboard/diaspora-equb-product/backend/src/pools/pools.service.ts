@@ -570,6 +570,8 @@ export class PoolsService {
     }
 
     pool.currentRound = round + 1;
+    // Persist transient closed status so UI can show round-closed
+    pool.status = 'round-closed';
     await this.poolRepo.save(pool);
 
     return {
@@ -629,5 +631,55 @@ export class PoolsService {
       totalRounds,
       status: 'stream-created',
     };
+  }
+
+  /**
+   * Build unsigned transactions for selecting a winner and scheduling payout.
+   * This validates that all members have contributed for the current round
+   * and that the caller is the pool creator.
+   */
+  async buildSelectWinner(
+    poolId: string,
+    dto: {
+      winner: string;
+      total: string;
+      upfrontPercent: number;
+      totalRounds: number;
+      caller?: string;
+    },
+  ) {
+    const pool = await this.poolRepo.findOne({ where: { id: poolId }, relations: ['members'] });
+    if (!pool) throw new NotFoundException(`Pool ${poolId} not found`);
+
+    // Verify caller is pool creator
+    if (!pool.createdBy) throw new BadRequestException('Pool creator not known; cannot authorize winner selection');
+    if (!dto.caller) throw new BadRequestException('Caller address required');
+    const { ethers } = await import('ethers');
+    const callerNorm = ethers.getAddress(dto.caller);
+    if (callerNorm.toLowerCase() !== pool.createdBy.toLowerCase()) {
+      throw new BadRequestException('Only pool creator may select the winner');
+    }
+
+    // Verify all members have contributed for the current round
+    const round = pool.currentRound;
+    const contributions = await this.contributionRepo.find({ where: { poolId: pool.id, round } });
+    const memberCount = pool.members.length;
+    if (contributions.length < memberCount) {
+      throw new BadRequestException('Not all members have contributed for this round');
+    }
+
+    if (!pool.onChainPoolId) throw new BadRequestException('Pool not linked to on-chain pool');
+
+    // Build unsigned closeRound tx and scheduleStream tx (for frontend signing)
+    const closeTx = await this.buildCloseRound(pool.onChainPoolId);
+    const scheduleTx = await this.buildScheduleStream(
+      pool.onChainPoolId,
+      dto.winner,
+      dto.total,
+      dto.upfrontPercent,
+      dto.totalRounds,
+    );
+
+    return { closeTx, scheduleTx };
   }
 }
