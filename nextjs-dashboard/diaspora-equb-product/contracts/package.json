@@ -1,0 +1,39 @@
+{
+  "name": "diaspora-equb-contracts",
+  "version": "0.9.0",
+  "private": true,
+  "description": "Smart contracts for Diaspora Equb DeFi MVP",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:creditcoin": "hardhat run scripts/deploy.ts --network creditcoin",
+    "deploy:creditcoin-testnet": "hardhat run scripts/deploy.ts --network creditcoinTestnet",
+    "deploy:test-tokens": "hardhat run scripts/deploy-test-tokens.ts --network creditcoinTestnet",
+    "configure-tiers": "hardhat run scripts/configure-tiers.ts --network creditcoin",
+    "configure-tiers:testnet": "hardhat run scripts/configure-tiers.ts --network creditcoinTestnet",
+    "verify:testnet": "hardhat run scripts/verify-deployment.ts --network creditcoinTestnet",
+    "verify:mainnet": "hardhat run scripts/verify-deployment.ts --network creditcoin",
+    "deploy:full-testnet": "npm run deploy:creditcoin-testnet && npm run deploy:test-tokens && npm run configure-tiers:testnet && npm run verify:testnet",
+    "node": "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "chai": "^4.4.0",
+    "ethers": "^6.11.0",
+    "hardhat": "^2.20.0",
+    "hardhat-gas-reporter": "^1.0.0",
+    "solidity-coverage": "^0.8.0",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.0",
+    "typescript": "^5.4.0",
+    "dotenv": "^16.4.0"
+  }
+}

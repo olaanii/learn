@@ -1,0 +1,135 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Smart Contracts ──────────────────────────────────
+  contracts:
+    name: Contracts - Compile & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Run tests
+        run: npx hardhat test
+
+      - name: Gas report
+        run: REPORT_GAS=true npx hardhat test
+        continue-on-error: true
+
+  # ── Backend ──────────────────────────────────────────
+  backend:
+    name: Backend - Lint, Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: equb
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: diaspora_equb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_USERNAME: equb
+          DATABASE_PASSWORD: test_password
+          DATABASE_NAME: diaspora_equb_test
+          JWT_SECRET: ci-test-secret-key-that-is-at-least-32-chars-long
+          RPC_URL: https://rpc.cc3-testnet.creditcoin.network
+          CHAIN_ID: 102031
+          NODE_ENV: test
+
+  # ── Frontend ─────────────────────────────────────────
+  frontend:
+    name: Frontend - Analyze & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build APK (debug)
+        run: flutter build apk --debug
+
+  # ── Docker Build ─────────────────────────────────────
+  docker:
+    name: Docker - Build Images
+    runs-on: ubuntu-latest
+    needs: [contracts, backend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t equb-backend:ci ./backend
+
+      - name: Verify image
+        run: docker images equb-backend:ci

@@ -1,0 +1,80 @@
+# Docker Compose file — compatible with Docker CE and Docker Desktop Personal (free).
+# No Swarm, no Docker Scout, no paid-only features.
+# Usage: docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: equb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME:-equb}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change_me}
+      POSTGRES_DB: ${DATABASE_NAME:-diaspora_equb}
+    ports:
+      - '${DATABASE_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USERNAME:-equb}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: equb-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-equb}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-change_me}
+      DATABASE_NAME: ${DATABASE_NAME:-diaspora_equb}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
+      RPC_URL: ${RPC_URL:-https://rpc.cc3-testnet.creditcoin.network}
+      CHAIN_ID: ${CHAIN_ID:-102031}
+      IDENTITY_REGISTRY_ADDRESS: ${IDENTITY_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TIER_REGISTRY_ADDRESS: ${TIER_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
+      CREDIT_REGISTRY_ADDRESS: ${CREDIT_REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000000}
+      COLLATERAL_VAULT_ADDRESS: ${COLLATERAL_VAULT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      PAYOUT_STREAM_ADDRESS: ${PAYOUT_STREAM_ADDRESS:-0x0000000000000000000000000000000000000000}
+      EQUB_POOL_ADDRESS: ${EQUB_POOL_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TEST_USDC_ADDRESS: ${TEST_USDC_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TEST_USDT_ADDRESS: ${TEST_USDT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      FAYDA_API_URL: ${FAYDA_API_URL:-}
+      FAYDA_API_KEY: ${FAYDA_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3001/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  nginx:
+    image: nginx:alpine
+    container_name: equb-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Uncomment for SSL:
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

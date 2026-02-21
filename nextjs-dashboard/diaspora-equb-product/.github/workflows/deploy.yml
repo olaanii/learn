@@ -1,0 +1,60 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend Docker image
+        run: |
+          docker build -t equb-backend:${{ github.sha }} ./backend
+          docker tag equb-backend:${{ github.sha }} equb-backend:latest
+
+      # ── Push to Container Registry ──
+      # Uncomment and configure for your registry:
+      #
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_TOKEN }}
+      #
+      # - name: Push image
+      #   run: |
+      #     docker tag equb-backend:latest ${{ secrets.DOCKER_USERNAME }}/equb-backend:latest
+      #     docker push ${{ secrets.DOCKER_USERNAME }}/equb-backend:latest
+
+      # ── Deploy to VPS via SSH ──
+      # Uncomment and configure:
+      #
+      # - name: Deploy to server
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host: ${{ secrets.SERVER_HOST }}
+      #     username: ${{ secrets.SERVER_USER }}
+      #     key: ${{ secrets.SERVER_SSH_KEY }}
+      #     script: |
+      #       cd /opt/diaspora-equb
+      #       git pull origin main
+      #       docker compose pull
+      #       docker compose up -d --build
+      #       docker system prune -f
+
+      - name: Deployment placeholder
+        run: |
+          echo "Deployment pipeline ready."
+          echo "Configure secrets and uncomment deploy steps when VPS is provisioned."
+          echo "Image built: equb-backend:${{ github.sha }}"
