@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:math';
 import '../services/api_client.dart';
 import '../services/wallet_service.dart';
 
@@ -97,13 +98,11 @@ class PoolProvider extends ChangeNotifier {
       );
 
       // 2. Sign and send via WalletConnect
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
         _isLoading = false;
         notifyListeners();
         return null;
@@ -114,7 +113,8 @@ class PoolProvider extends ChangeNotifier {
         await _api.createPoolFromCreationTx(txHash);
         await loadPools();
       } catch (e) {
-        _errorMessage = _apiErrorMessage(e, 'Pool created on-chain but failed to register');
+        _errorMessage =
+            _apiErrorMessage(e, 'Pool created on-chain but failed to register');
         _isLoading = false;
         notifyListeners();
         return null;
@@ -143,23 +143,99 @@ class PoolProvider extends ChangeNotifier {
     return '$fallback: $e';
   }
 
+  static String _apiErrorCode(Object e) {
+    if (e is DioException && e.response?.data != null) {
+      final data = e.response!.data;
+      if (data is Map && data['code'] != null) {
+        return data['code'].toString();
+      }
+    }
+    return 'UNKNOWN_ERROR';
+  }
+
+  static String _newIdempotencyKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${DateTime.now().millisecondsSinceEpoch}-$hex';
+  }
+
+  Future<Map<String, dynamic>?> closeActiveRound(String poolId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final data = await _api.closeActiveRound(poolId);
+      _selectedPool = await _api.getPool(poolId);
+      _isLoading = false;
+      notifyListeners();
+      return data;
+    } catch (e) {
+      _errorMessage = _apiErrorMessage(e, 'Failed to close active round');
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> pickWinnerForActiveRound(String poolId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final data = await _api.pickWinnerForActiveRound(
+        poolId: poolId,
+        idempotencyKey: _newIdempotencyKey(),
+      );
+      _selectedPool = await _api.getPool(poolId);
+      _isLoading = false;
+      notifyListeners();
+      return data;
+    } catch (e) {
+      final code = _apiErrorCode(e);
+      final defaultMessage = _apiErrorMessage(e, 'Failed to pick winner');
+      _errorMessage = switch (code) {
+        'WINNER_BEFORE_CLOSE' =>
+          'Close the active round before picking the winner.',
+        'ROUND_ALREADY_PICKED' =>
+          'Winner is already picked for this round.',
+        'SEASON_COMPLETE' =>
+          'Season is complete. Configure next season to continue.',
+        'NOT_POOL_ADMIN' =>
+          'Only the pool admin can pick a winner.',
+        'IDEMPOTENCY_REPLAY_CONFLICT' =>
+          'Duplicate request conflict detected. Retry once.',
+        _ => defaultMessage,
+      };
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   /// Build a join-pool TX from the backend, then sign & send via WalletConnect.
   /// Refreshes pool list on success so UI updates in real time.
-  Future<String?> buildAndSignJoinPool(int onChainPoolId) async {
+  Future<String?> buildAndSignJoinPool(
+    int onChainPoolId, {
+    String? caller,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     _lastTxHash = null;
     notifyListeners();
 
     try {
-      final unsignedTx = await _api.buildJoinPool(onChainPoolId);
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final unsignedTx = await _api.buildJoinPool(
+        onChainPoolId,
+        caller: caller,
+      );
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       } else {
         await loadPools();
       }
@@ -197,13 +273,11 @@ class PoolProvider extends ChangeNotifier {
         contributionAmount: contributionAmount,
         tokenAddress: tokenAddress,
       );
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       } else if (poolId != null) {
         await loadPool(poolId);
       }
@@ -235,13 +309,11 @@ class PoolProvider extends ChangeNotifier {
         tokenAddress: tokenAddress,
         amount: amount,
       );
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Approval rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Approval rejected';
       }
 
       _isLoading = false;
@@ -285,15 +357,12 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final unsignedTx =
-          await _api.buildCloseRound(onChainPoolId);
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final unsignedTx = await _api.buildCloseRound(onChainPoolId);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       }
 
       _isLoading = false;
@@ -328,13 +397,11 @@ class PoolProvider extends ChangeNotifier {
         upfrontPercent: upfrontPercent,
         totalRounds: totalRounds,
       );
-      final txHash =
-          await _walletService.signAndSendTransaction(unsignedTx);
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
       if (txHash == null) {
-        _errorMessage =
-            _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
       }
 
       _isLoading = false;
@@ -342,6 +409,216 @@ class PoolProvider extends ChangeNotifier {
       return txHash;
     } catch (e) {
       _errorMessage = 'Failed to schedule stream: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Pool-creator action: close round then schedule payout for chain-selected winner.
+  ///
+  /// Backend may return `scheduleTx` immediately or only after close-round is mined.
+  /// In the delayed case this method polls briefly, then asks the user to retry if
+  /// schedule transaction is still not available.
+  Future<Map<String, dynamic>?> buildAndSignSelectWinner({
+    required String poolId,
+    required String total,
+    required int upfrontPercent,
+    required int totalRounds,
+    required String caller,
+    void Function(String message)? onProgress,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _lastTxHash = null;
+    notifyListeners();
+
+    try {
+      final payload = await _api.buildSelectWinner(
+        poolId: poolId,
+        phase: 'close',
+        total: total,
+        upfrontPercent: upfrontPercent,
+        totalRounds: totalRounds,
+        caller: caller,
+      );
+
+      final closeTx = Map<String, dynamic>.from(payload['closeTx'] as Map);
+      Map<String, dynamic>? scheduleTx;
+      if (payload['scheduleTx'] is Map) {
+        scheduleTx = Map<String, dynamic>.from(payload['scheduleTx'] as Map);
+      }
+      String? winner = payload['winner']?.toString();
+      final round = payload['round'];
+      String? nextAction = payload['nextAction']?.toString();
+      String? warning = payload['warning']?.toString();
+
+      final closeHash = await _walletService.signAndSendTransaction(closeTx);
+      if (closeHash == null) {
+        _errorMessage =
+            _walletService.errorMessage ?? 'Close round transaction rejected';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      onProgress?.call(
+          'Round closed on-chain. Fetching winner and payout transaction...');
+
+      final shouldSkipPolling =
+          (nextAction?.contains('upgrade_contract') ?? false) ||
+              (warning?.isNotEmpty ?? false);
+
+      if (scheduleTx == null && !shouldSkipPolling) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+          await Future.delayed(const Duration(seconds: 2));
+
+          final followUp = await _api.buildSelectWinner(
+            poolId: poolId,
+            phase: 'schedule',
+            total: total,
+            upfrontPercent: upfrontPercent,
+            totalRounds: totalRounds,
+            caller: caller,
+          );
+
+          winner ??= followUp['winner']?.toString();
+          nextAction = followUp['nextAction']?.toString() ?? nextAction;
+          warning = followUp['warning']?.toString() ?? warning;
+
+          if (followUp['scheduleTx'] is Map) {
+            scheduleTx =
+                Map<String, dynamic>.from(followUp['scheduleTx'] as Map);
+            break;
+          }
+        }
+      }
+
+      if (scheduleTx == null) {
+        _lastTxHash = closeHash;
+        _errorMessage = (nextAction?.contains('upgrade_contract') ?? false)
+            ? (warning ??
+                'Round closed, but this deployed contract cannot expose winner view methods. Scheduling requires upgraded contract support.')
+            : 'Round closed. Winner is being finalized on-chain. Please retry Select Winner in a few seconds.';
+        _isLoading = false;
+        notifyListeners();
+        return {
+          'closeTxHash': closeHash,
+          'scheduleTxHash': null,
+          'winner': winner,
+          'round': round,
+          'nextAction': nextAction ?? 'await_schedule_tx',
+          'warning': warning,
+        };
+      }
+
+      onProgress
+          ?.call('Winner ready. Confirm payout scheduling in your wallet...');
+
+      final scheduleHash =
+          await _walletService.signAndSendTransaction(scheduleTx);
+      if (scheduleHash == null) {
+        _errorMessage = _walletService.errorMessage ??
+            'Schedule payout transaction rejected';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      _lastTxHash = scheduleHash;
+      _isLoading = false;
+      notifyListeners();
+
+      return {
+        'closeTxHash': closeHash,
+        'scheduleTxHash': scheduleHash,
+        'winner': winner,
+        'round': round,
+        'nextAction': nextAction ?? 'done',
+        'warning': warning,
+      };
+    } catch (e) {
+      _errorMessage = _apiErrorMessage(e, 'Failed to auto-select winner');
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  String _friendlyWinnerError(Object e, String fallback) {
+    if (e is DioException && e.response?.data is Map) {
+      final data = e.response!.data as Map;
+      final code = data['code']?.toString();
+      final message = data['message']?.toString();
+      switch (code) {
+        case 'WINNER_BEFORE_CLOSE':
+          return 'Close the active round first before picking a winner.';
+        case 'ROUND_ALREADY_PICKED':
+          return 'Winner is already picked for this round.';
+        case 'SEASON_COMPLETE':
+          return 'Season is complete. Configure the next season to continue.';
+        case 'NOT_POOL_ADMIN':
+          return 'Only the pool admin can pick the winner.';
+        case 'IDEMPOTENCY_REPLAY_CONFLICT':
+          return 'This winner request was already used with different details. Retry with a fresh attempt.';
+      }
+      if (message != null && message.isNotEmpty) return message;
+    }
+    return _apiErrorMessage(e, fallback);
+  }
+
+  Future<Map<String, dynamic>?> pickWinnerAutoFromClosedRound({
+    required String poolId,
+    required String total,
+    required int upfrontPercent,
+    required int totalRounds,
+    required String caller,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _lastTxHash = null;
+    notifyListeners();
+
+    try {
+      final payload = await _api.buildSelectWinner(
+        poolId: poolId,
+        phase: 'schedule',
+        total: total,
+        upfrontPercent: upfrontPercent,
+        totalRounds: totalRounds,
+        caller: caller,
+      );
+
+      if (payload['scheduleTx'] is! Map) {
+        _errorMessage = payload['warning']?.toString() ??
+            'Winner is not ready yet. Ensure the round is closed and try again.';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      final scheduleTx = Map<String, dynamic>.from(payload['scheduleTx'] as Map);
+      final txHash = await _walletService.signAndSendTransaction(scheduleTx);
+      _lastTxHash = txHash;
+
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+
+      await loadPool(poolId);
+      _isLoading = false;
+      notifyListeners();
+
+      return {
+        'scheduleTxHash': txHash,
+        'winner': payload['winner']?.toString(),
+        'round': payload['round'],
+      };
+    } catch (e) {
+      _errorMessage = _friendlyWinnerError(e, 'Failed to pick winner');
       _isLoading = false;
       notifyListeners();
       return null;
@@ -395,6 +672,41 @@ class PoolProvider extends ChangeNotifier {
       return pool;
     } catch (e) {
       _errorMessage = _apiErrorMessage(e, 'Failed to create pool');
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createNextSeason({
+    required String poolId,
+    required String caller,
+    String? contributionAmount,
+    String? token,
+    int? payoutSplitPct,
+    String? cadence,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _api.createNextSeason(
+        poolId: poolId,
+        caller: caller,
+        contributionAmount: contributionAmount,
+        token: token,
+        payoutSplitPct: payoutSplitPct,
+        cadence: cadence,
+      );
+
+      await loadPool(poolId);
+      await loadPools();
+      _isLoading = false;
+      notifyListeners();
+      return result;
+    } catch (e) {
+      _errorMessage = _apiErrorMessage(e, 'Failed to create next season');
+      _isLoading = false;
       notifyListeners();
       return null;
     }

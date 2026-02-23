@@ -60,6 +60,8 @@ describe('EqubPool', () => {
       await tierRegistry.getAddress(),
     );
 
+    await payoutStream.setEqubPool(await equbPool.getAddress());
+
     // Bind identities for users
     const hash1 = ethers.keccak256(ethers.toUtf8Bytes('user1'));
     const hash2 = ethers.keccak256(ethers.toUtf8Bytes('user2'));
@@ -209,6 +211,12 @@ describe('EqubPool', () => {
       // user2 penalized
       expect(await creditRegistry.scoreOf(user2.address)).to.equal(-10);
     });
+
+    it('should allow only pool creator to close round', async () => {
+      await expect(
+        equbPool.connect(user1).closeRound(poolId),
+      ).to.be.revertedWith('only creator');
+    });
   });
 
   describe('schedulePayoutStream', () => {
@@ -218,27 +226,63 @@ describe('EqubPool', () => {
       await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
       poolId = 1;
       await equbPool.connect(user1).joinPool(poolId);
+      await equbPool.connect(user2).joinPool(poolId);
+
+      await equbPool.connect(user1).contribute(poolId, { value: CONTRIBUTION });
+      await equbPool.connect(user2).contribute(poolId, { value: CONTRIBUTION });
+      await equbPool.closeRound(poolId);
     });
 
-    it('should schedule a payout stream for a member', async () => {
+    it('should schedule a payout stream for the rotating winner', async () => {
       const total = ethers.parseEther('10');
       const upfrontPercent = 20;
       const totalRounds = 8;
 
+      const [, winner] = await equbPool.rotatingWinnerForLastClosedRound(poolId);
+
       await expect(
-        equbPool.schedulePayoutStream(poolId, user1.address, total, upfrontPercent, totalRounds),
+        equbPool.schedulePayoutStream(poolId, winner, total, upfrontPercent, totalRounds),
       )
         .to.emit(equbPool, 'PayoutStreamScheduled')
-        .withArgs(poolId, user1.address, total, totalRounds);
+        .withArgs(poolId, winner, total, totalRounds);
 
-      const details = await payoutStream.streamDetails(poolId, user1.address);
+      const details = await payoutStream.streamDetails(poolId, winner);
       expect(details.total).to.equal(total);
+    });
+
+    it('should revert if beneficiary is not the current rotating winner', async () => {
+      const [, winner] = await equbPool.rotatingWinnerForLastClosedRound(poolId);
+      const wrongWinner =
+        winner.toLowerCase() === user1.address.toLowerCase()
+          ? user2.address
+          : user1.address;
+      await expect(
+        equbPool.schedulePayoutStream(poolId, wrongWinner, ethers.parseEther('10'), 20, 8),
+      ).to.be.revertedWith('not rotating winner');
     });
 
     it('should revert for non-member', async () => {
       await expect(
-        equbPool.schedulePayoutStream(poolId, user2.address, ethers.parseEther('10'), 20, 8),
-      ).to.be.revertedWith('not member');
+        equbPool.schedulePayoutStream(poolId, treasury.address, ethers.parseEther('10'), 20, 8),
+      ).to.be.revertedWith('not rotating winner');
+    });
+
+    it('should allow only pool creator to schedule stream', async () => {
+      await expect(
+        equbPool.connect(user1).schedulePayoutStream(poolId, user1.address, ethers.parseEther('10'), 20, 8),
+      ).to.be.revertedWith('only creator');
+    });
+  });
+
+  describe('triggerDefault access control', () => {
+    it('should allow only pool creator to trigger default', async () => {
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, MAX_MEMBERS, treasury.address);
+      const poolId = 1;
+      await equbPool.connect(user1).joinPool(poolId);
+
+      await expect(
+        equbPool.connect(user1).triggerDefault(poolId, user1.address),
+      ).to.be.revertedWith('only creator');
     });
   });
 
@@ -321,9 +365,10 @@ describe('EqubPool', () => {
       expect(await creditRegistry.scoreOf(user3.address)).to.equal(1);
 
       // 5. Schedule payout for user1 (round winner)
+      const [, round1Winner] = await equbPool.rotatingWinnerForLastClosedRound(poolId);
       await equbPool.schedulePayoutStream(
         poolId,
-        user1.address,
+        round1Winner,
         ethers.parseEther('3'),
         20,
         2,
@@ -342,6 +387,42 @@ describe('EqubPool', () => {
       expect(await creditRegistry.scoreOf(user2.address)).to.equal(2);
       // user3 got penalized -10 (total = 1 - 10 = -9)
       expect(await creditRegistry.scoreOf(user3.address)).to.equal(-9);
+    });
+
+    it('should avoid repeating winners within a season, then reset', async () => {
+      await equbPool['createPool(uint8,uint256,uint256,address)'](TIER, CONTRIBUTION, 3, treasury.address);
+      const poolId = 1;
+
+      await equbPool.connect(user1).joinPool(poolId);
+      await equbPool.connect(user2).joinPool(poolId);
+      await equbPool.connect(user3).joinPool(poolId);
+
+      const winners: string[] = [];
+
+      for (let r = 0; r < 3; r++) {
+        await equbPool.connect(user1).contribute(poolId, { value: CONTRIBUTION });
+        await equbPool.connect(user2).contribute(poolId, { value: CONTRIBUTION });
+        await equbPool.connect(user3).contribute(poolId, { value: CONTRIBUTION });
+        await equbPool.closeRound(poolId);
+        const [, winner] = await equbPool.rotatingWinnerForLastClosedRound(poolId);
+        winners.push(winner.toLowerCase());
+      }
+
+      const unique = new Set(winners);
+      expect(unique.size).to.equal(3);
+
+      // Round 4 starts a new season and winner can repeat
+      await equbPool.connect(user1).contribute(poolId, { value: CONTRIBUTION });
+      await equbPool.connect(user2).contribute(poolId, { value: CONTRIBUTION });
+      await equbPool.connect(user3).contribute(poolId, { value: CONTRIBUTION });
+      await equbPool.closeRound(poolId);
+      const [, round4Winner] = await equbPool.rotatingWinnerForLastClosedRound(poolId);
+
+      expect(
+        [user1.address.toLowerCase(), user2.address.toLowerCase(), user3.address.toLowerCase()].includes(
+          round4Winner.toLowerCase(),
+        ),
+      ).to.equal(true);
     });
   });
 });

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/app_config.dart';
@@ -188,9 +190,13 @@ class ApiClient {
     return response.data;
   }
 
-  Future<Map<String, dynamic>> buildJoinPool(int onChainPoolId) async {
+  Future<Map<String, dynamic>> buildJoinPool(
+    int onChainPoolId, {
+    String? caller,
+  }) async {
     final response = await _dio.post('/pools/build/join', data: {
       'onChainPoolId': onChainPoolId,
+      if (caller != null) 'caller': caller,
     });
     return response.data;
   }
@@ -245,6 +251,69 @@ class ApiClient {
     return response.data;
   }
 
+  /// Build unsigned TXs for close-round + rotating-winner payout scheduling.
+  /// Winner is auto-selected by backend according to Equb rotation rules.
+  Future<Map<String, dynamic>> buildSelectWinner({
+    required String poolId,
+    required String total,
+    required int upfrontPercent,
+    required int totalRounds,
+    required String caller,
+    String phase = 'auto',
+  }) async {
+    final response = await _dio.post('/pools/$poolId/select-winner', data: {
+      'phase': phase,
+      'total': total,
+      'upfrontPercent': upfrontPercent,
+      'totalRounds': totalRounds,
+      'caller': caller,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> closeActiveRound(String poolId) async {
+    final response = await _dio.post('/pools/$poolId/rounds/active/close');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> pickWinnerForActiveRound({
+    required String poolId,
+    required String idempotencyKey,
+    String mode = 'auto',
+  }) async {
+    final response = await _dio.post(
+      '/pools/$poolId/rounds/active/pick-winner',
+      data: {
+        'mode': mode,
+      },
+      options: Options(
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+      ),
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> createNextSeason({
+    required String poolId,
+    required String caller,
+    String? contributionAmount,
+    String? token,
+    int? payoutSplitPct,
+    String? cadence,
+  }) async {
+    final response = await _dio.post('/pools/$poolId/seasons', data: {
+      'caller': caller,
+      if (contributionAmount != null && contributionAmount.isNotEmpty)
+        'contributionAmount': contributionAmount,
+      if (token != null && token.isNotEmpty) 'token': token,
+      if (payoutSplitPct != null) 'payoutSplitPct': payoutSplitPct,
+      if (cadence != null && cadence.isNotEmpty) 'cadence': cadence,
+    });
+    return response.data;
+  }
+
   // ── Collateral TX Builders ──────────────────────
 
   /// Build unsigned CTC collateral deposit TX (native).
@@ -272,8 +341,7 @@ class ApiClient {
     required String amount,
     String tokenSymbol = 'USDC',
   }) async {
-    final response =
-        await _dio.post('/collateral/build/deposit-token', data: {
+    final response = await _dio.post('/collateral/build/deposit-token', data: {
       'amount': amount,
       'tokenSymbol': tokenSymbol,
     });
@@ -366,8 +434,8 @@ class ApiClient {
     return response.data;
   }
 
-  Future<Map<String, dynamic>> getTokenBalance(
-      String walletAddress, {String token = 'USDC'}) async {
+  Future<Map<String, dynamic>> getTokenBalance(String walletAddress,
+      {String token = 'USDC'}) async {
     final response = await _dio.get('/token/balance', queryParameters: {
       'walletAddress': walletAddress,
       'token': token,
@@ -376,11 +444,24 @@ class ApiClient {
   }
 
   Future<List<dynamic>> getTokenTransactions(
-      String walletAddress, {String token = 'USDC', int limit = 50}) async {
+    String walletAddress, {
+    String token = 'ALL',
+    int limit = 50,
+    int? fromTimestamp,
+    int? toTimestamp,
+    String? direction,
+    String? status,
+    String? cursor,
+  }) async {
     final response = await _dio.get('/token/transactions', queryParameters: {
       'walletAddress': walletAddress,
       'token': token,
       'limit': limit,
+      if (fromTimestamp != null) 'fromTimestamp': fromTimestamp,
+      if (toTimestamp != null) 'toTimestamp': toTimestamp,
+      if (direction != null && direction.isNotEmpty) 'direction': direction,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
     });
     // Ensure we always return a list so UI doesn't break on unexpected shape
     final data = response.data;
@@ -430,8 +511,81 @@ class ApiClient {
     return response.data;
   }
 
+  // ── Equb Insights ────────────────────────────
+  Future<Map<String, dynamic>> getEqubPopularSeries({
+    int? from,
+    int? to,
+    String? token,
+    String? status,
+    String? metric,
+    int? limit,
+    int? offset,
+    String bucket = 'day',
+  }) async {
+    final response = await _dio.get(
+      '/analytics/equbs/popular-series',
+      queryParameters: {
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (token != null && token.isNotEmpty && token != 'all') 'token': token,
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        if (metric != null && metric.isNotEmpty) 'metric': metric,
+        if (limit != null) 'limit': limit,
+        if (offset != null) 'offset': offset,
+        'bucket': bucket,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getEqubJoinedProgress({
+    required String wallet,
+    int? from,
+    int? to,
+    String? token,
+    String? status,
+    String bucket = 'day',
+  }) async {
+    final response = await _dio.get(
+      '/analytics/equbs/joined-progress',
+      queryParameters: {
+        'wallet': wallet,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (token != null && token.isNotEmpty && token != 'all') 'token': token,
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'bucket': bucket,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getEqubSummary({
+    required String wallet,
+    int? from,
+    int? to,
+    String? token,
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/analytics/equbs/summary',
+      queryParameters: {
+        'wallet': wallet,
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        if (token != null && token.isNotEmpty && token != 'all') 'token': token,
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   // ── Notifications ──────────────────────────────
-  Future<List<dynamic>> getNotifications({int limit = 50, int offset = 0}) async {
+  Future<List<dynamic>> getNotifications(
+      {int limit = 50, int offset = 0}) async {
     final response = await _dio.get('/notifications', queryParameters: {
       'limit': limit,
       'offset': offset,
@@ -450,6 +604,48 @@ class ApiClient {
 
   Future<void> markAllNotificationsRead() async {
     await _dio.patch('/notifications/read-all');
+  }
+
+  Future<Map<String, dynamic>> getNotificationsIncremental({
+    String? afterCreatedAt,
+    String? afterId,
+    int limit = 50,
+  }) async {
+    final response =
+        await _dio.get('/notifications/incremental', queryParameters: {
+      if (afterCreatedAt != null && afterCreatedAt.isNotEmpty)
+        'afterCreatedAt': afterCreatedAt,
+      if (afterId != null && afterId.isNotEmpty) 'afterId': afterId,
+      'limit': limit,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Stream<String>> openNotificationEventStream() async {
+    final response = await _dio.get<ResponseBody>(
+      '/notifications/stream',
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: {
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+        receiveTimeout: const Duration(minutes: 10),
+      ),
+    );
+
+    final body = response.data;
+    if (body == null) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        message: 'Notification stream unavailable',
+      );
+    }
+
+    return body.stream
+        .map<List<int>>((chunk) => chunk)
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
   }
 
   // ── Health ────────────────────────────────────

@@ -64,6 +64,12 @@ async function main() {
   const equbPoolAddr = await equbPool.getAddress();
   console.log('EqubPool deployed to:', equbPoolAddr);
 
+  // 7. Wire PayoutStream to EqubPool (one-time)
+  console.log('\n--- Wiring PayoutStream -> EqubPool ---');
+  const setEqubTx = await payoutStream.setEqubPool(equbPoolAddr);
+  await setEqubTx.wait();
+  console.log('PayoutStream equbPool set to:', equbPoolAddr);
+
   // Save deployment addresses
   const deployment = {
     network: network.name,

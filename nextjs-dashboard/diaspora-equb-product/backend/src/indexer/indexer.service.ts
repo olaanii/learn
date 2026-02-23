@@ -544,13 +544,19 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     });
     await this.memberRepo.save(poolMember);
 
-    this.notifications.create(
+    const txHash = this.extractTxHash(event);
+    this.emitNotification(
       member,
       'pool_joined',
       'Joined Pool',
       `You joined Tier ${pool.tier} pool #${pool.onChainPoolId}.`,
-      { poolId: pool.id, onChainPoolId: pool.onChainPoolId },
-    ).catch(() => {});
+      {
+        poolId: pool.id,
+        onChainPoolId: pool.onChainPoolId,
+        txHash,
+        idempotencyKey: `pool_joined:${pool.id}:${member}:${txHash ?? 'no_tx'}`,
+      },
+    );
   }
 
   private async handleContributionReceived(
@@ -591,13 +597,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
           if (contribCount >= members.length) {
             if (pool.createdBy) {
               const _t: NotificationType = 'all_contributed';
-              this.notifications.create(
+              this.emitNotification(
                 pool.createdBy,
                 _t,
                 'All Members Contributed',
                 `All ${members.length} members have contributed for round ${roundNum} of pool #${pool.onChainPoolId}. Please select the winner.`,
-                { poolId: pool.id, round: roundNum },
-              ).catch(() => {});
+                {
+                  poolId: pool.id,
+                  round: roundNum,
+                  idempotencyKey: `all_contributed:${pool.id}:${roundNum}`,
+                },
+              );
             }
           }
         }
@@ -622,13 +632,18 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       await this.poolRepo.save(pool).catch(() => {});
     }
 
-    this.notifications.create(
+    this.emitNotification(
       member,
       'contribution_confirmed',
       'Contribution Confirmed',
       `Your round ${roundNum} contribution to pool #${pool.onChainPoolId} is confirmed on-chain.`,
-      { poolId: pool.id, round: roundNum, txHash },
-    ).catch(() => {});
+      {
+        poolId: pool.id,
+        round: roundNum,
+        txHash,
+        idempotencyKey: `contribution_confirmed:${pool.id}:${member}:${roundNum}:${txHash ?? 'no_tx'}`,
+      },
+    );
     // After recording contribution, check if all members have contributed for this round and notify pool creator
     try {
       const members = await this.memberRepo.find({ where: { poolId: pool.id } });
@@ -637,13 +652,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
         if (contribCount >= members.length) {
           if (pool.createdBy) {
             const _t: NotificationType = 'all_contributed';
-            this.notifications.create(
+            this.emitNotification(
               pool.createdBy,
               _t,
               'All Members Contributed',
               `All ${members.length} members have contributed for round ${roundNum} of pool #${pool.onChainPoolId}. Please select the winner.`,
-              { poolId: pool.id, round: roundNum },
-            ).catch(() => {});
+              {
+                poolId: pool.id,
+                round: roundNum,
+                idempotencyKey: `all_contributed:${pool.id}:${roundNum}`,
+              },
+            );
           }
         }
       }
@@ -668,13 +687,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
 
     const members = await this.memberRepo.find({ where: { poolId: pool.id } });
     for (const m of members) {
-      this.notifications.create(
+      this.emitNotification(
         m.walletAddress,
         'round_closed',
         'Round Closed',
         `Round ${Number(round)} of pool #${pool.onChainPoolId} is closed. Round ${pool.currentRound} begins.`,
-        { poolId: pool.id, round: Number(round) },
-      ).catch(() => {});
+        {
+          poolId: pool.id,
+          round: Number(round),
+          idempotencyKey: `round_closed:${pool.id}:${Number(round)}:${m.walletAddress}`,
+        },
+      );
     }
   }
 
@@ -734,13 +757,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     ).toString();
     await this.payoutStreamRepo.save(stream);
 
-    this.notifications.create(
+    this.emitNotification(
       beneficiary,
       'payout_received',
       'Payout Received',
       `You received a payout of ${ethers.formatUnits(amount, 6)} from pool #${pool.onChainPoolId}.`,
-      { poolId: pool.id, amount: amount.toString() },
-    ).catch(() => {});
+      {
+        poolId: pool.id,
+        amount: amount.toString(),
+        idempotencyKey: `payout_received:${pool.id}:${beneficiary}:${stream.releasedRounds}`,
+      },
+    );
   }
 
   private async handleScoreUpdated(user: string, newScore: bigint) {
@@ -810,13 +837,16 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     collateral.slashedAmount = (currentSlashed + actualSlash).toString();
     await this.collateralRepo.save(collateral);
 
-    this.notifications.create(
+    this.emitNotification(
       user,
       'collateral_slashed',
       'Collateral Slashed',
       `${ethers.formatUnits(actualSlash, 6)} of your collateral has been slashed.`,
-      { amount: actualSlash.toString() },
-    ).catch(() => {});
+      {
+        amount: actualSlash.toString(),
+        idempotencyKey: `collateral_slashed:${user}:${actualSlash.toString()}:${currentSlashed.toString()}`,
+      },
+    );
   }
 
   private async handleDefaultTriggered(
@@ -850,13 +880,17 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       await this.contributionRepo.save(contribution);
     }
 
-    this.notifications.create(
+    this.emitNotification(
       member,
       'default_triggered',
       'Default Warning',
       `You defaulted on round ${roundNum} of pool #${pool.onChainPoolId}. Collateral may be slashed.`,
-      { poolId: pool.id, round: roundNum },
-    ).catch(() => {});
+      {
+        poolId: pool.id,
+        round: roundNum,
+        idempotencyKey: `default_triggered:${pool.id}:${member}:${roundNum}`,
+      },
+    );
   }
 
   private async handleStreamFrozen(
@@ -876,13 +910,41 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     stream.frozen = true;
     await this.payoutStreamRepo.save(stream);
 
-    this.notifications.create(
+    this.emitNotification(
       beneficiary,
       'stream_frozen',
       'Payout Stream Frozen',
       `Your payout stream for pool #${pool.onChainPoolId} has been frozen due to a default.`,
-      { poolId: pool.id },
-    ).catch(() => {});
+      {
+        poolId: pool.id,
+        idempotencyKey: `stream_frozen:${pool.id}:${beneficiary}`,
+      },
+    );
+  }
+
+  private extractTxHash(
+    event: ethers.EventLog | ethers.ContractEventPayload,
+  ): string | null {
+    if ('log' in event) {
+      return event.log?.transactionHash ?? null;
+    }
+    return (event as any).transactionHash ?? null;
+  }
+
+  private emitNotification(
+    walletAddress: string,
+    type: NotificationType,
+    title: string,
+    body: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    this.notifications
+      .create(walletAddress, type, title, body, metadata)
+      .catch((error) => {
+        this.logger.warn(
+          `Failed to emit notification [${type}] for ${walletAddress}: ${error?.message ?? error}`,
+        );
+      });
   }
 
   private async handleIdentityBound(wallet: string, identityHash: string) {

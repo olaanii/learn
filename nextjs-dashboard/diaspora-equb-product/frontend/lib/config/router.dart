@@ -15,6 +15,7 @@ import '../screens/withdraw_screen.dart';
 import '../screens/collateral_screen.dart';
 import '../screens/fund_wallet_screen.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/equb_insights_screen.dart';
 
 GoRouter createRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -133,6 +134,11 @@ GoRouter createRouter(AuthProvider authProvider) {
         path: '/notifications',
         name: 'notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/equb-insights',
+        name: 'equb-insights',
+        builder: (context, state) => const EqubInsightsScreen(),
       ),
     ],
   );

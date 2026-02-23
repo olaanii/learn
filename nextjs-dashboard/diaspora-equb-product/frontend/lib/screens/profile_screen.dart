@@ -9,6 +9,7 @@ import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import '../providers/credit_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 import '../services/wallet_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -172,11 +173,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () {
                   if (walletAddr != null) {
                     Clipboard.setData(ClipboardData(text: walletAddr));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Wallet address copied'),
-                        duration: Duration(seconds: 2),
-                      ),
+                    AppSnackbarService.instance.info(
+                      message: 'Wallet address copied',
+                      dedupeKey: 'profile_wallet_address_copied',
+                      duration: const Duration(seconds: 2),
                     );
                   }
                 },
@@ -416,17 +416,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? null
                       : () async {
                           if (wcAddress == null) return;
-                          final messenger = ScaffoldMessenger.of(context);
                           setState(() => _isBindingWallet = true);
                           await auth.bindWallet(wcAddress);
                           setState(() => _isBindingWallet = false);
                           if (mounted) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Wallet bound. App will use this address.'),
-                                duration: Duration(seconds: 2),
-                              ),
+                            AppSnackbarService.instance.success(
+                              message:
+                                  'Wallet bound. App will use this address.',
+                              dedupeKey: 'profile_wallet_bind_success',
+                              duration: const Duration(seconds: 2),
                             );
                           }
                         },

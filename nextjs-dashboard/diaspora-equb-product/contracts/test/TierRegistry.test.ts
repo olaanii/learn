@@ -6,12 +6,21 @@ import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 describe('TierRegistry', () => {
   let registry: TierRegistry;
   let owner: SignerWithAddress;
+  let other: SignerWithAddress;
 
   beforeEach(async () => {
-    [owner] = await ethers.getSigners();
+    [owner, other] = await ethers.getSigners();
     const Factory = await ethers.getContractFactory('TierRegistry');
     registry = await Factory.deploy();
     await registry.waitForDeployment();
+  });
+
+  describe('access control', () => {
+    it('should allow only owner to configure tier', async () => {
+      await expect(
+        registry.connect(other).configureTier(0, ethers.parseEther('10'), 500, true),
+      ).to.be.revertedWith('only owner');
+    });
   });
 
   describe('configureTier', () => {

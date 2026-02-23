@@ -1,4 +1,13 @@
-import { Body, Controller, Post, Get, Param, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Get,
+  Param,
+  Query,
+  Req,
+  Headers,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -14,6 +23,7 @@ import {
   RecordContributionDto,
   CloseRoundDto,
   ScheduleStreamDto,
+  CreateSeasonDto,
 } from './dto/pool.dto';
 
 @ApiTags('Pools')
@@ -29,6 +39,40 @@ export class PoolsController {
   ) {
     const result = await this.poolsService.buildSelectWinner(id, body as any);
     return result;
+  }
+
+  @Post(':poolId/rounds/active/close')
+  async closeActiveRound(
+    @Param('poolId') poolId: string,
+    @Req() req: any,
+  ) {
+    return this.poolsService.closeActiveRound(poolId, req?.user?.walletAddress);
+  }
+
+  @Post(':poolId/rounds/active/pick-winner')
+  async pickWinnerForActiveRound(
+    @Param('poolId') poolId: string,
+    @Body() body: { mode?: 'auto' },
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Req() req: any,
+  ) {
+    return this.poolsService.pickWinnerForActiveRound({
+      poolId,
+      mode: body?.mode ?? 'auto',
+      idempotencyKey,
+      caller: req?.user?.walletAddress,
+    });
+  }
+
+  @Post(':id/seasons')
+  @ApiOperation({
+    summary: 'Create Season N+1 for a completed season (admin only)',
+  })
+  createNextSeason(
+    @Param('id') id: string,
+    @Body() body: CreateSeasonDto,
+  ) {
+    return this.poolsService.createNextSeason(id, body);
   }
 
   // ─── TX Builder Endpoints (non-custodial: return unsigned TX for wallet signing) ──
@@ -62,8 +106,8 @@ export class PoolsController {
 
   @Post('build/join')
   @ApiOperation({ summary: 'Build unsigned TX to join an existing pool' })
-  buildJoinPool(@Body() body: { onChainPoolId: number }) {
-    return this.poolsService.buildJoinPool(body.onChainPoolId);
+  buildJoinPool(@Body() body: { onChainPoolId: number; caller?: string }) {
+    return this.poolsService.buildJoinPool(body.onChainPoolId, body.caller);
   }
 
   @Post('build/contribute')

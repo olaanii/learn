@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
+import { FaydaService } from './fayda.service';
 import { Identity } from '../entities/identity.entity';
 
 describe('AuthService', () => {
@@ -21,12 +22,21 @@ describe('AuthService', () => {
     verify: jest.fn(),
   };
 
+  const mockFaydaService = {
+    verify: jest.fn().mockResolvedValue({
+      verified: true,
+      identityHash: '0xabc',
+    }),
+    isRealIntegration: false,
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: FaydaService, useValue: mockFaydaService },
         { provide: getRepositoryToken(Identity), useValue: mockIdentityRepo },
       ],
     }).compile();
@@ -54,9 +64,11 @@ describe('AuthService', () => {
       const result = await service.verifyFayda('test-token');
 
       expect(result.accessToken).toBe('mock-jwt-token');
-      expect(result.identityHash).toMatch(/^0x[a-f0-9]{64}$/);
+      expect(result.identityHash).toBe('0xabc');
       expect(result.walletBindingStatus).toBe('unbound');
+      expect(result.faydaMode).toBe('mock');
       expect(mockJwtService.sign).toHaveBeenCalled();
+      expect(mockFaydaService.verify).toHaveBeenCalledWith('test-token');
     });
 
     it('should return existing identity if found', async () => {
@@ -70,8 +82,10 @@ describe('AuthService', () => {
       const result = await service.verifyFayda('test-token');
 
       expect(result.accessToken).toBe('mock-jwt-token');
+      expect(result.identityHash).toBe('0xabc');
       expect(result.walletBindingStatus).toBe('bound');
       expect(mockIdentityRepo.create).not.toHaveBeenCalled();
+      expect(mockFaydaService.verify).toHaveBeenCalledWith('test-token');
     });
   });
 });

@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../services/wallet_service.dart';
+import '../services/app_snackbar_service.dart';
 import '../config/theme.dart';
 
 class PoolBrowserScreen extends StatefulWidget {
@@ -23,6 +25,13 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     'Tier 2',
     'Tier 3'
   ];
+
+  static final Map<int, BigInt> _tierMaxContributionWei = {
+    0: BigInt.parse('1000000000000000000'),
+    1: BigInt.parse('10000000000000000000'),
+    2: BigInt.parse('50000000000000000000'),
+    3: BigInt.parse('200000000000000000000'),
+  };
 
   @override
   void initState() {
@@ -56,39 +65,39 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: const Text('Browse Pools'),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.white,
-          tabs: _tierLabels.map((label) => Tab(text: label)).toList(),
+          bottom: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            indicatorColor: Colors.white,
+            tabs: _tierLabels.map((label) => Tab(text: label)).toList(),
+          ),
         ),
-      ),
-      body: pools.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : pools.pools.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.pool, size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      Text('No pools available',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 16)),
-                      const SizedBox(height: 8),
-                      Text('Create one to get started!',
-                          style: TextStyle(color: Colors.grey[500])),
-                    ],
+        body: pools.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : pools.pools.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.pool, size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text('No pools available',
+                            style: TextStyle(
+                                color: Colors.grey[600], fontSize: 16)),
+                        const SizedBox(height: 8),
+                        Text('Create one to get started!',
+                            style: TextStyle(color: Colors.grey[500])),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: pools.pools.length,
+                    itemBuilder: (context, index) {
+                      final pool = pools.pools[index];
+                      return _buildPoolCard(context, pool);
+                    },
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: pools.pools.length,
-                  itemBuilder: (context, index) {
-                    final pool = pools.pools[index];
-                    return _buildPoolCard(context, pool);
-                  },
-                ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showCreatePoolDialog(context),
           icon: const Icon(Icons.add),
@@ -223,6 +232,27 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                     const InputDecoration(labelText: 'Contribution (wei)'),
                 keyboardType: TextInputType.number,
               ),
+              const SizedBox(height: 6),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: tierController,
+                builder: (context, value, _) {
+                  final tier = int.tryParse(value.text) ?? 0;
+                  final maxWei = _tierMaxContributionWei[tier];
+                  final helper = maxWei == null
+                      ? 'Valid tiers: 0-3'
+                      : 'Tier $tier max contribution: $maxWei wei';
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      helper,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: membersController,
@@ -241,7 +271,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                   padding: EdgeInsets.only(top: 12),
                   child: Text(
                     'Connect your wallet to create on-chain pools.',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                   ),
                 )
               else
@@ -262,66 +293,100 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
           ),
           ElevatedButton(
             onPressed: () async {
+              final tier = int.tryParse(tierController.text) ?? -1;
+              final maxMembers = int.tryParse(membersController.text) ?? 0;
+              final contributionWei =
+                  BigInt.tryParse(contributionController.text.trim());
+              final maxWeiForTier = _tierMaxContributionWei[tier];
+
+              if (maxWeiForTier == null) {
+                AppSnackbarService.instance.error(
+                  message: 'Invalid tier. Use 0, 1, 2, or 3.',
+                  dedupeKey: 'pool_create_invalid_tier',
+                );
+                return;
+              }
+
+              if (contributionWei == null || contributionWei <= BigInt.zero) {
+                AppSnackbarService.instance.error(
+                  message: 'Contribution must be a positive integer in wei.',
+                  dedupeKey: 'pool_create_invalid_contribution',
+                );
+                return;
+              }
+
+              if (contributionWei > maxWeiForTier) {
+                AppSnackbarService.instance.error(
+                  message:
+                      'Tier $tier max is $maxWeiForTier wei. Reduce contribution or choose higher tier.',
+                  dedupeKey: 'pool_create_tier_limit',
+                );
+                return;
+              }
+
+              if (maxMembers <= 1) {
+                AppSnackbarService.instance.error(
+                  message: 'Max members must be greater than 1.',
+                  dedupeKey: 'pool_create_invalid_members',
+                );
+                return;
+              }
+
               if (wallet.isConnected) {
                 Navigator.pop(ctx);
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Creating pool — confirm in your wallet...'),
-                      duration: Duration(seconds: 3),
-                    ),
-                  );
-                }
-
-                final txHash = await context.read<PoolProvider>().buildAndSignCreatePool(
-                  tier: int.tryParse(tierController.text) ?? 0,
-                  contributionAmount: contributionController.text,
-                  maxMembers: int.tryParse(membersController.text) ?? 5,
-                  treasury: treasuryController.text.isNotEmpty
-                      ? treasuryController.text
-                      : auth.walletAddress ?? '0x0000000000000000000000000000000000000000',
+                AppSnackbarService.instance.info(
+                  message: 'Creating pool — confirm in your wallet...',
+                  dedupeKey: 'pool_create_pending_wallet',
+                  duration: const Duration(seconds: 3),
                 );
+
+                final txHash =
+                    await context.read<PoolProvider>().buildAndSignCreatePool(
+                          tier: tier,
+                          contributionAmount: contributionController.text,
+                          maxMembers: maxMembers,
+                          treasury: treasuryController.text.isNotEmpty
+                              ? treasuryController.text
+                              : auth.walletAddress ??
+                                  '0x0000000000000000000000000000000000000000',
+                        );
 
                 if (context.mounted) {
                   if (txHash != null) {
+                    context.read<NotificationProvider>().triggerFastSync();
                     await context.read<PoolProvider>().loadPools();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Pool created and active. TX: ${txHash.substring(0, 16)}...',
-                          ),
-                          duration: const Duration(seconds: 5),
-                        ),
-                      );
-                    }
+                    AppSnackbarService.instance.success(
+                      message:
+                          'Pool created and active. TX: ${txHash.substring(0, 16)}...',
+                      dedupeKey: 'pool_create_success_$txHash',
+                      duration: const Duration(seconds: 5),
+                    );
                   } else {
-                    final err = context.read<PoolProvider>().errorMessage ?? 'Pool creation failed';
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          err.contains('rejected')
-                              ? '$err Make sure your wallet is on Creditcoin Testnet (chain ID 102031).'
-                              : err,
-                        ),
-                        backgroundColor: Colors.red.shade700,
-                        duration: const Duration(seconds: 5),
-                      ),
+                    final err = context.read<PoolProvider>().errorMessage ??
+                        'Pool creation failed';
+                    AppSnackbarService.instance.error(
+                      message: err.contains('rejected')
+                          ? '$err Make sure your wallet is on Creditcoin Testnet (chain ID 102031).'
+                          : err,
+                      dedupeKey: 'pool_create_failed',
+                      duration: const Duration(seconds: 5),
                     );
                   }
                 }
               } else {
                 final pool = await context.read<PoolProvider>().createPool(
-                  tier: int.tryParse(tierController.text) ?? 0,
-                  contributionAmount: contributionController.text,
-                  maxMembers: int.tryParse(membersController.text) ?? 5,
-                  treasury: treasuryController.text,
-                );
+                      tier: tier,
+                      contributionAmount: contributionController.text,
+                      maxMembers: maxMembers,
+                      treasury: treasuryController.text,
+                    );
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (pool != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Pool created (DB-only, connect wallet for on-chain).')),
+                  AppSnackbarService.instance.info(
+                    message:
+                        'Pool created (DB-only, connect wallet for on-chain).',
+                    dedupeKey: 'pool_create_db_only',
                   );
                 }
               }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
@@ -15,7 +16,18 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
+  static const _storage = FlutterSecureStorage();
+  static const int _pageSize = 50;
   String? _lastLoadedWallet;
+  int _currentLimit = _pageSize;
+  bool _loadingOlder = false;
+
+  String _rangePreset = '2D';
+  String _tokenFilter = 'All';
+  String _directionFilter = 'All';
+  String _statusFilter = 'All';
+  DateTime? _customFrom;
+  DateTime? _customTo;
 
   @override
   void didChangeDependencies() {
@@ -25,22 +37,506 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         _lastLoadedWallet != auth.walletAddress &&
         mounted) {
       _lastLoadedWallet = auth.walletAddress;
+      _currentLimit = _pageSize;
+      _loadingOlder = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _loadTransactions();
+        _restoreFiltersAndLoad();
       });
     } else if (auth.walletAddress == null) {
       _lastLoadedWallet = null;
     }
   }
 
-  void _loadTransactions() {
+  String? get _walletAddress => context.read<AuthProvider>().walletAddress;
+
+  String? get _filtersStorageKey {
+    final wallet = _walletAddress;
+    if (wallet == null || wallet.isEmpty) return null;
+    return 'tx_filters:${wallet.toLowerCase()}';
+  }
+
+  Future<void> _restoreFiltersAndLoad() async {
+    if (!mounted) return;
+
+    await _restoreFilters();
+    if (!mounted) return;
+
+    _loadTransactions();
+  }
+
+  Future<void> _restoreFilters() async {
+    final key = _filtersStorageKey;
+    if (key == null) return;
+
+    final raw = await _storage.read(key: key);
+    if (!mounted) return;
+
+    if (raw == null || raw.isEmpty) {
+      setState(() {
+        _rangePreset = '2D';
+        _tokenFilter = 'All';
+        _directionFilter = 'All';
+        _statusFilter = 'All';
+        _customFrom = null;
+        _customTo = null;
+      });
+      return;
+    }
+
+    final parts = raw.split('|');
+    final rangePreset = parts.isNotEmpty ? parts[0] : '2D';
+    final token = parts.length > 1 ? parts[1] : 'All';
+    final direction = parts.length > 2 ? parts[2] : 'All';
+    final status = parts.length > 3 ? parts[3] : 'All';
+    final customFromRaw = parts.length > 4 ? parts[4] : '';
+    final customToRaw = parts.length > 5 ? parts[5] : '';
+
+    DateTime? parseDate(String value) {
+      if (value.isEmpty) return null;
+      return DateTime.tryParse(value);
+    }
+
+    setState(() {
+      _rangePreset = _validRange(rangePreset) ? rangePreset : '2D';
+      _tokenFilter = _validToken(token) ? token : 'All';
+      _directionFilter = _validDirection(direction) ? direction : 'All';
+      _statusFilter = _validStatus(status) ? status : 'All';
+      _customFrom = parseDate(customFromRaw);
+      _customTo = parseDate(customToRaw);
+    });
+  }
+
+  Future<void> _saveFilters() async {
+    final key = _filtersStorageKey;
+    if (key == null) return;
+
+    final encoded = [
+      _rangePreset,
+      _tokenFilter,
+      _directionFilter,
+      _statusFilter,
+      _customFrom?.toIso8601String() ?? '',
+      _customTo?.toIso8601String() ?? '',
+    ].join('|');
+
+    await _storage.write(key: key, value: encoded);
+  }
+
+  bool _validRange(String v) =>
+      const {'2D', '7D', '30D', 'All', 'Custom'}.contains(v);
+  bool _validToken(String v) => const {'All', 'USDC', 'USDT', 'CTC'}.contains(v);
+  bool _validDirection(String v) =>
+      const {'All', 'Sent', 'Received'}.contains(v);
+  bool _validStatus(String v) => const {'All', 'Success', 'Failed'}.contains(v);
+
+  Future<void> _loadTransactions() async {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final wallet = context.read<WalletProvider>();
     if (auth.walletAddress != null) {
-      wallet.loadTransactions(auth.walletAddress!, limit: 50);
+      int? fromTimestamp;
+      int? toTimestamp;
+      final now = DateTime.now();
+      switch (_rangePreset) {
+        case '2D':
+          fromTimestamp = now
+              .subtract(const Duration(days: 2))
+              .millisecondsSinceEpoch;
+          toTimestamp = now.millisecondsSinceEpoch;
+          break;
+        case '7D':
+          fromTimestamp = now
+              .subtract(const Duration(days: 7))
+              .millisecondsSinceEpoch;
+          toTimestamp = now.millisecondsSinceEpoch;
+          break;
+        case '30D':
+          fromTimestamp = now
+              .subtract(const Duration(days: 30))
+              .millisecondsSinceEpoch;
+          toTimestamp = now.millisecondsSinceEpoch;
+          break;
+        case 'Custom':
+          fromTimestamp = _customFrom?.millisecondsSinceEpoch;
+          toTimestamp = _customTo?.millisecondsSinceEpoch;
+          break;
+        case 'All':
+        default:
+          break;
+      }
+
+      final direction = _directionFilter == 'All'
+          ? null
+          : _directionFilter.toLowerCase();
+      final status = _statusFilter == 'All' ? null : _statusFilter.toLowerCase();
+
+      await wallet.loadTransactions(
+        auth.walletAddress!,
+        token: _tokenFilter == 'All' ? 'ALL' : _tokenFilter,
+        limit: _currentLimit,
+        fromTimestamp: fromTimestamp,
+        toTimestamp: toTimestamp,
+        direction: direction,
+        status: status,
+      );
     }
+  }
+
+  void _resetPagination() {
+    _currentLimit = _pageSize;
+    _loadingOlder = false;
+  }
+
+  Future<void> _loadOlder() async {
+    if (_loadingOlder) return;
+
+    setState(() {
+      _loadingOlder = true;
+      _currentLimit += _pageSize;
+    });
+
+    try {
+      await _loadTransactions();
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loadingOlder = false;
+      });
+    }
+  }
+
+  Future<void> _setRangePreset(String preset) async {
+    if (!mounted) return;
+    if (_rangePreset == preset && preset != 'Custom') return;
+
+    if (preset == 'Custom') {
+      final now = DateTime.now();
+      final initialStart = _customFrom ?? now.subtract(const Duration(days: 2));
+      final initialEnd = _customTo ?? now;
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(now.year - 3),
+        lastDate: now,
+        initialDateRange: DateTimeRange(start: initialStart, end: initialEnd),
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() {
+        _rangePreset = 'Custom';
+        _customFrom = DateTime(picked.start.year, picked.start.month, picked.start.day);
+        _customTo = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59, 999);
+        _resetPagination();
+      });
+      await _saveFilters();
+      await _loadTransactions();
+      return;
+    }
+
+    setState(() {
+      _rangePreset = preset;
+      _resetPagination();
+    });
+    await _saveFilters();
+    await _loadTransactions();
+  }
+
+  Future<void> _setTokenFilter(String value) async {
+    if (_tokenFilter == value) return;
+    setState(() {
+      _tokenFilter = value;
+      _resetPagination();
+    });
+    await _saveFilters();
+    await _loadTransactions();
+  }
+
+  Future<void> _setDirectionFilter(String value) async {
+    if (_directionFilter == value) return;
+    setState(() {
+      _directionFilter = value;
+      _resetPagination();
+    });
+    await _saveFilters();
+    await _loadTransactions();
+  }
+
+  Future<void> _setStatusFilter(String value) async {
+    if (_statusFilter == value) return;
+    setState(() {
+      _statusFilter = value;
+      _resetPagination();
+    });
+    await _saveFilters();
+    await _loadTransactions();
+  }
+
+  bool get _hasActiveFilters {
+    if (_rangePreset != '2D') return true;
+    if (_tokenFilter != 'All') return true;
+    if (_directionFilter != 'All') return true;
+    if (_statusFilter != 'All') return true;
+    if (_customFrom != null || _customTo != null) return true;
+    return false;
+  }
+
+  Future<void> _clearFiltersToDefault() async {
+    setState(() {
+      _rangePreset = '2D';
+      _tokenFilter = 'All';
+      _directionFilter = 'All';
+      _statusFilter = 'All';
+      _customFrom = null;
+      _customTo = null;
+      _resetPagination();
+    });
+    await _saveFilters();
+    await _loadTransactions();
+  }
+
+  Widget _buildStateCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? action,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 48,
+                color: AppTheme.textTertiary.withValues(alpha: 0.55)),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 16),
+              action,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> source) {
+    final now = DateTime.now();
+    DateTime? rangeStart;
+    DateTime? rangeEnd;
+
+    switch (_rangePreset) {
+      case '2D':
+        rangeStart = now.subtract(const Duration(days: 2));
+        rangeEnd = now;
+        break;
+      case '7D':
+        rangeStart = now.subtract(const Duration(days: 7));
+        rangeEnd = now;
+        break;
+      case '30D':
+        rangeStart = now.subtract(const Duration(days: 30));
+        rangeEnd = now;
+        break;
+      case 'Custom':
+        rangeStart = _customFrom;
+        rangeEnd = _customTo;
+        break;
+      case 'All':
+      default:
+        break;
+    }
+
+    bool matches(Map<String, dynamic> tx) {
+      final token = (tx['token']?.toString().toUpperCase() ?? 'USDC');
+      final type = (tx['type']?.toString().toLowerCase() ?? 'received');
+      final isFailed = tx['isError'] == true || tx['isError']?.toString() == '1';
+
+      final ts = tx['timestamp'];
+      DateTime? txDate;
+      if (ts is num && ts.toInt() > 0) {
+        txDate = DateTime.fromMillisecondsSinceEpoch(ts.toInt());
+      }
+
+      if (_tokenFilter != 'All' && token != _tokenFilter) return false;
+
+      if (_directionFilter == 'Sent' && type != 'sent') return false;
+      if (_directionFilter == 'Received' && type != 'received') return false;
+
+      if (_statusFilter == 'Failed' && !isFailed) return false;
+      if (_statusFilter == 'Success' && isFailed) return false;
+
+      if (rangeStart != null && rangeEnd != null) {
+        if (txDate == null) return false;
+        if (txDate.isBefore(rangeStart) || txDate.isAfter(rangeEnd)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    final filtered = source.where(matches).toList();
+    filtered.sort((a, b) {
+      final bBlock = (b['blockNumber'] as num?) ?? 0;
+      final aBlock = (a['blockNumber'] as num?) ?? 0;
+      return bBlock.compareTo(aBlock);
+    });
+    return filtered;
+  }
+
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+      child: Row(
+        children: [
+          _buildChoiceChip(
+            label: _rangePreset,
+            onPressed: () async {
+              final selected = await _showChoiceSheet(
+                title: 'Time Range',
+                options: const ['2D', '7D', '30D', 'All', 'Custom'],
+                selected: _rangePreset,
+              );
+              if (selected != null) await _setRangePreset(selected);
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildChoiceChip(
+            label: _tokenFilter,
+            onPressed: () async {
+              final selected = await _showChoiceSheet(
+                title: 'Token',
+                options: const ['All', 'USDC', 'USDT', 'CTC'],
+                selected: _tokenFilter,
+              );
+              if (selected != null) await _setTokenFilter(selected);
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildChoiceChip(
+            label: _directionFilter,
+            onPressed: () async {
+              final selected = await _showChoiceSheet(
+                title: 'Direction',
+                options: const ['All', 'Sent', 'Received'],
+                selected: _directionFilter,
+              );
+              if (selected != null) await _setDirectionFilter(selected);
+            },
+          ),
+          const SizedBox(width: 8),
+          _buildChoiceChip(
+            label: _statusFilter,
+            onPressed: () async {
+              final selected = await _showChoiceSheet(
+                title: 'Status',
+                options: const ['All', 'Success', 'Failed'],
+                selected: _statusFilter,
+              );
+              if (selected != null) await _setStatusFilter(selected);
+            },
+          ),
+          if (_rangePreset == 'Custom' && _customFrom != null && _customTo != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                '${DateFormat('MMM d').format(_customFrom!)} - ${DateFormat('MMM d').format(_customTo!)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceChip({required String label, required VoidCallback onPressed}) {
+    return ActionChip(
+      onPressed: onPressed,
+      backgroundColor: AppTheme.cardWhite,
+      side: BorderSide(color: AppTheme.textTertiary.withValues(alpha: 0.35)),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.expand_more_rounded, size: 16, color: AppTheme.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showChoiceSheet({
+    required String title,
+    required List<String> options,
+    required String selected,
+  }) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...options.map(
+                (option) => ListTile(
+                  title: Text(option),
+                  trailing: option == selected
+                      ? const Icon(Icons.check_rounded, color: AppTheme.primaryColor)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(option),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -66,7 +562,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               const SizedBox(width: 4),
             ],
           ),
-          body: body,
+          body: Column(
+            children: [
+              _buildFilterChips(),
+              Expanded(child: body),
+            ],
+          ),
         ),
       );
     }
@@ -93,6 +594,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ],
           ),
         ),
+        _buildFilterChips(),
         Expanded(child: body),
       ],
     );
@@ -101,7 +603,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget _buildBody() {
     return Consumer2<AuthProvider, WalletProvider>(
       builder: (context, auth, wallet, _) {
+        if (auth.walletAddress == null) {
+          return _buildStateCard(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Connect wallet to view transactions',
+            subtitle: 'Your transfer history appears after wallet binding.',
+          );
+        }
+
         final txList = wallet.transactions;
+        final filteredTxList = _applyFilters(txList);
+        final canLoadOlder =
+            txList.length >= _currentLimit && !_loadingOlder && !wallet.isLoading;
 
         // When we have a wallet and empty list and not loading, trigger load once
         if (auth.walletAddress != null &&
@@ -111,79 +624,111 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           _lastLoadedWallet = auth.walletAddress;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            wallet.loadTransactions(auth.walletAddress!, limit: 50);
+            _loadTransactions();
           });
         }
 
         if (wallet.isLoading && txList.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (txList.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.receipt_long_rounded,
-                      size: 48,
-                      color: AppTheme.textTertiary.withValues(alpha: 0.5)),
-                  const SizedBox(height: 16),
-                  Text(
-                    wallet.errorMessage ?? 'No transactions yet',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Your token transfers will appear here once your wallet is funded.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                  if (wallet.errorMessage != null) ...[
-                    const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: _loadTransactions,
-                      icon: const Icon(Icons.refresh_rounded, size: 20),
-                      label: const Text('Retry'),
-                    ),
-                  ],
-                ],
-              ),
+          return _buildStateCard(
+            icon: Icons.history_toggle_off_rounded,
+            title: 'Loading transactions…',
+            subtitle: 'Fetching your latest activity for the selected filters.',
+            action: const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.4)),
             ),
           );
         }
 
-        final grouped = _groupByDay(txList);
+        if (wallet.errorMessage != null && txList.isEmpty) {
+          return _buildStateCard(
+            icon: Icons.error_outline_rounded,
+            title: wallet.errorMessage!,
+            subtitle: 'Could not fetch transactions. Please retry.',
+            action: TextButton.icon(
+              onPressed: _loadTransactions,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text('Retry'),
+            ),
+          );
+        }
+
+        if (filteredTxList.isEmpty) {
+          if (txList.isEmpty) {
+            return _buildStateCard(
+              icon: Icons.receipt_long_rounded,
+              title: 'No transactions yet',
+              subtitle: 'Your token transfers will appear here once your wallet is funded.',
+            );
+          }
+
+          return _buildStateCard(
+            icon: Icons.filter_alt_off_rounded,
+            title: 'No transactions for current filters',
+            subtitle: 'Adjust filters or reset to default 2D view.',
+            action: _hasActiveFilters
+                ? TextButton.icon(
+                    onPressed: _clearFiltersToDefault,
+                    icon: const Icon(Icons.restart_alt_rounded, size: 20),
+                    label: const Text('Reset filters'),
+                  )
+                : null,
+          );
+        }
+
+        final grouped = _groupByDay(filteredTxList);
 
         return RefreshIndicator(
           onRefresh: () async => _loadTransactions(),
-          child: ListView.builder(
+          child: ListView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            itemCount: grouped.length,
-            itemBuilder: (context, index) {
-              final group = grouped[index];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (index > 0) const SizedBox(height: 24),
-                  _buildGroupHeader(group.label),
-                  const SizedBox(height: 12),
-                  _buildGroupCard(group.transactions),
-                ],
-              );
-            },
+            children: [
+              if (wallet.isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              for (var index = 0; index < grouped.length; index++) ...[
+                if (index > 0) const SizedBox(height: 24),
+                _buildGroupHeader(grouped[index].label),
+                const SizedBox(height: 12),
+                _buildGroupCard(grouped[index].transactions),
+              ],
+              if (wallet.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: TextButton.icon(
+                    onPressed: _loadTransactions,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(wallet.errorMessage!),
+                  ),
+                ),
+              if (canLoadOlder)
+                Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: Center(
+                    child: OutlinedButton.icon(
+                      onPressed: _loadOlder,
+                      icon: const Icon(Icons.history_rounded, size: 18),
+                      label: const Text('Load older'),
+                    ),
+                  ),
+                ),
+              if (_loadingOlder)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },

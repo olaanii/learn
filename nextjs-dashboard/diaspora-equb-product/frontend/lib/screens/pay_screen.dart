@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 
 class PayScreen extends StatefulWidget {
   const PayScreen({super.key});
@@ -68,22 +70,20 @@ class _PayScreenState extends State<PayScreen> {
     // For MVP: prompt for recipient address
     final recipient = _recipientController.text.trim();
     if (recipient.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a recipient address')),
+      AppSnackbarService.instance.error(
+        message: 'Enter a recipient address',
+        dedupeKey: 'pay_missing_recipient',
       );
       return;
     }
 
     setState(() => _isSending = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Opening MetaMask to confirm…'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    AppSnackbarService.instance.info(
+      message: 'Opening MetaMask to confirm…',
+      dedupeKey: 'pay_metamask_opening',
+      duration: const Duration(seconds: 2),
+    );
 
     final txHash = await wallet.buildAndSignTransfer(
       from: auth.walletAddress!,
@@ -96,21 +96,19 @@ class _PayScreenState extends State<PayScreen> {
     setState(() => _isSending = false);
 
     if (txHash != null) {
+      context.read<NotificationProvider>().triggerFastSync();
       await wallet.refreshAfterTx(auth.walletAddress!, token: wallet.token);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sent! Tx: $txHash'),
-          duration: const Duration(seconds: 4),
-        ),
+      AppSnackbarService.instance.success(
+        message: 'Sent! Tx: $txHash',
+        dedupeKey: 'pay_success_$txHash',
+        duration: const Duration(seconds: 4),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(wallet.errorMessage ?? 'Transfer failed'),
-          backgroundColor: Colors.red.shade700,
-        ),
+      AppSnackbarService.instance.error(
+        message: wallet.errorMessage ?? 'Transfer failed',
+        dedupeKey: 'pay_failed',
       );
     }
   }
@@ -120,7 +118,8 @@ class _PayScreenState extends State<PayScreen> {
     return Consumer<WalletProvider>(
       builder: (context, wallet, _) {
         return Container(
-          decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+          decoration:
+              const BoxDecoration(gradient: AppTheme.backgroundGradient),
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: AppBar(

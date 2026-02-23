@@ -2,6 +2,9 @@
 pragma solidity ^0.8.20;
 
 contract PayoutStream {
+    address public owner;
+    address public equbPool;
+
     struct Stream {
         uint256 total;
         uint256 upfrontPercent;
@@ -24,6 +27,28 @@ contract PayoutStream {
     );
     event RoundReleased(uint256 indexed poolId, address indexed beneficiary, uint256 amount);
     event StreamFrozen(uint256 indexed poolId, address indexed beneficiary);
+    event EqubPoolSet(address indexed equbPoolAddress);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "only owner");
+        _;
+    }
+
+    modifier onlyEqubPool() {
+        require(msg.sender == equbPool, "only equb pool");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function setEqubPool(address equbPoolAddress) external onlyOwner {
+        require(equbPoolAddress != address(0), "invalid equb pool");
+        require(equbPool == address(0), "equb pool already set");
+        equbPool = equbPoolAddress;
+        emit EqubPoolSet(equbPoolAddress);
+    }
 
     function createStream(
         uint256 poolId,
@@ -31,7 +56,7 @@ contract PayoutStream {
         uint256 total,
         uint256 upfrontPercent,
         uint256 totalRounds
-    ) external {
+    ) external onlyEqubPool {
         require(upfrontPercent <= 30, "upfront too high");
         require(totalRounds > 0, "invalid rounds");
         uint256 upfront = (total * upfrontPercent) / 100;
@@ -49,7 +74,7 @@ contract PayoutStream {
         emit StreamCreated(poolId, beneficiary, total, upfrontPercent, roundAmount, totalRounds);
     }
 
-    function releaseRound(uint256 poolId, address beneficiary) external {
+    function releaseRound(uint256 poolId, address beneficiary) external onlyEqubPool {
         Stream storage stream = streams[poolId][beneficiary];
         require(!stream.frozen, "stream frozen");
         require(stream.releasedRounds < stream.totalRounds, "all rounds released");
@@ -60,7 +85,7 @@ contract PayoutStream {
         emit RoundReleased(poolId, beneficiary, amount);
     }
 
-    function freezeRemaining(uint256 poolId, address beneficiary) external {
+    function freezeRemaining(uint256 poolId, address beneficiary) external onlyEqubPool {
         Stream storage stream = streams[poolId][beneficiary];
         stream.frozen = true;
         emit StreamFrozen(poolId, beneficiary);

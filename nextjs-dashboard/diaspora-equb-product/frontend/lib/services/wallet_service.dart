@@ -1,11 +1,11 @@
-import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show ChangeNotifier, debugPrint, kIsWeb;
 import 'package:reown_core/reown_core.dart' show PairingMetadata;
 import 'package:reown_sign/reown_sign.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
 import 'ethereum_provider_stub.dart'
-    if (dart.library.js_interop) 'ethereum_provider_web.dart'
-    as eth_provider;
+    if (dart.library.js_interop) 'ethereum_provider_web.dart' as eth_provider;
 
 /// Service that manages WalletConnect v2 sessions for client-side TX signing.
 ///
@@ -94,7 +94,8 @@ class WalletService extends ChangeNotifier {
         _walletAddress = address;
         _isConnecting = false;
         notifyListeners();
-        debugPrint('[WalletService] Connected via MetaMask extension: $address');
+        debugPrint(
+            '[WalletService] Connected via MetaMask extension: $address');
         return address;
       }
       _errorMessage = 'No accounts returned from MetaMask';
@@ -177,7 +178,8 @@ class WalletService extends ChangeNotifier {
 
     final chainIdRaw = unsignedTx['chainId'];
     final chainIdHex = chainIdRaw != null
-        ? _toHex(chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
+        ? _toHex(
+            chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
         : _toHex(AppConfig.chainId.toString());
 
     final txParams = {
@@ -260,7 +262,8 @@ class WalletService extends ChangeNotifier {
     // On web, use the injected MetaMask extension
     if (kIsWeb && eth_provider.hasInjectedProvider) {
       try {
-        final sig = await eth_provider.personalSignViaInjected(message, _walletAddress!);
+        final sig = await eth_provider.personalSignViaInjected(
+            message, _walletAddress!);
         if (sig != null) return sig;
         _errorMessage = 'Signing rejected';
         notifyListeners();
@@ -343,7 +346,26 @@ class WalletService extends ChangeNotifier {
   /// Convert a decimal string to hex string with 0x prefix.
   String _toHex(String decimalOrHex) {
     if (decimalOrHex.startsWith('0x')) return decimalOrHex;
-    final value = BigInt.tryParse(decimalOrHex) ?? BigInt.zero;
+
+    // Integer strings (e.g. gas, chainId, wei values)
+    final intValue = BigInt.tryParse(decimalOrHex);
+    if (intValue != null) {
+      return '0x${intValue.toRadixString(16)}';
+    }
+
+    // Decimal strings (e.g. "2.000000000000000000" native CTC amount)
+    // are interpreted as 18-decimal units and converted to wei.
+    final looksDecimal = decimalOrHex.contains('.');
+    if (looksDecimal) {
+      try {
+        final wei = EtherAmountEx.parseUnits(decimalOrHex, 18);
+        return '0x${wei.toRadixString(16)}';
+      } catch (_) {
+        // fall through to zero for malformed values
+      }
+    }
+
+    final value = BigInt.zero;
     return '0x${value.toRadixString(16)}';
   }
 
@@ -357,9 +379,11 @@ class WalletService extends ChangeNotifier {
       if (uri != null) {
         final encodedUri = Uri.encodeComponent(uri);
         final deepLink = Uri.parse('metamask://wc?uri=$encodedUri');
-        final launched = await launchUrl(deepLink, mode: LaunchMode.externalApplication);
+        final launched =
+            await launchUrl(deepLink, mode: LaunchMode.externalApplication);
         if (launched) return;
-        final universalLink = Uri.parse('https://link.metamask.io/wc?uri=$encodedUri');
+        final universalLink =
+            Uri.parse('https://link.metamask.io/wc?uri=$encodedUri');
         await launchUrl(universalLink, mode: LaunchMode.externalApplication);
       } else {
         await launchUrl(
@@ -370,5 +394,26 @@ class WalletService extends ChangeNotifier {
     } catch (_) {
       // Deep link not available; user can scan QR code or open wallet manually
     }
+  }
+}
+
+class EtherAmountEx {
+  static BigInt parseUnits(String value, int decimals) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return BigInt.zero;
+
+    final negative = trimmed.startsWith('-');
+    final normalized = negative ? trimmed.substring(1) : trimmed;
+    final parts = normalized.split('.');
+    final whole = parts[0].isEmpty ? '0' : parts[0];
+    final fractionRaw = parts.length > 1 ? parts[1] : '';
+
+    final fraction = fractionRaw.length > decimals
+        ? fractionRaw.substring(0, decimals)
+        : fractionRaw.padRight(decimals, '0');
+
+    final combined = '$whole$fraction';
+    final parsed = BigInt.tryParse(combined) ?? BigInt.zero;
+    return negative ? -parsed : parsed;
   }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 
 class FundWalletScreen extends StatefulWidget {
   const FundWalletScreen({super.key});
@@ -168,13 +169,11 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 // Token chips
                 Row(
                   children: [
-                    _buildTokenChip('USDC', _selectedFaucetToken == 'USDC',
-                        () {
+                    _buildTokenChip('USDC', _selectedFaucetToken == 'USDC', () {
                       setState(() => _selectedFaucetToken = 'USDC');
                     }),
                     const SizedBox(width: 10),
-                    _buildTokenChip('USDT', _selectedFaucetToken == 'USDT',
-                        () {
+                    _buildTokenChip('USDT', _selectedFaucetToken == 'USDT', () {
                       setState(() => _selectedFaucetToken = 'USDT');
                     }),
                   ],
@@ -315,10 +314,10 @@ class _FundWalletScreenState extends State<FundWalletScreen>
       return;
     }
 
-    final amount =
-        double.tryParse(_faucetAmountController.text.trim()) ?? 1000;
+    final amount = double.tryParse(_faucetAmountController.text.trim()) ?? 1000;
     if (amount <= 0 || amount > 10000) {
-      setState(() => _faucetResult = 'error:Amount must be between 1 and 10,000');
+      setState(
+          () => _faucetResult = 'error:Amount must be between 1 and 10,000');
       return;
     }
 
@@ -525,11 +524,10 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 GestureDetector(
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: walletAddr));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Wallet address copied!'),
-                        duration: Duration(seconds: 2),
-                      ),
+                    AppSnackbarService.instance.info(
+                      message: 'Wallet address copied!',
+                      dedupeKey: 'fund_wallet_address_copied',
+                      duration: const Duration(seconds: 2),
                     );
                   },
                   child: Container(
@@ -666,13 +664,13 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 // Token selector
                 Row(
                   children: [
-                    _buildTokenChip(
-                        'USDC', _selectedExternalToken == 'USDC', () {
+                    _buildTokenChip('USDC', _selectedExternalToken == 'USDC',
+                        () {
                       setState(() => _selectedExternalToken = 'USDC');
                     }),
                     const SizedBox(width: 10),
-                    _buildTokenChip(
-                        'USDT', _selectedExternalToken == 'USDT', () {
+                    _buildTokenChip('USDT', _selectedExternalToken == 'USDT',
+                        () {
                       setState(() => _selectedExternalToken = 'USDT');
                     }),
                   ],
@@ -730,8 +728,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     final amount = _externalAmountController.text.trim();
 
     if (from.isEmpty || amount.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
+      AppSnackbarService.instance.error(
+        message: 'Please fill in all fields',
+        dedupeKey: 'fund_wallet_external_missing_fields',
       );
       return;
     }
@@ -748,18 +747,15 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     if (!mounted) return;
 
     if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Transfer transaction built! Sign it from the sender wallet.'),
-          duration: Duration(seconds: 3),
-        ),
+      AppSnackbarService.instance.success(
+        message: 'Transfer transaction built! Sign it from the sender wallet.',
+        dedupeKey: 'fund_wallet_external_transfer_built',
+        duration: const Duration(seconds: 3),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(wallet.errorMessage ?? 'Failed to build transfer'),
-        ),
+      AppSnackbarService.instance.error(
+        message: wallet.errorMessage ?? 'Failed to build transfer',
+        dedupeKey: 'fund_wallet_external_transfer_failed',
       );
     }
   }
@@ -832,8 +828,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                     _buildPaymentMethodBadge(
                         'Mastercard', const Color(0xFFEB001B)),
                     const SizedBox(width: 8),
-                    _buildPaymentMethodBadge(
-                        'Apple Pay', AppTheme.textPrimary),
+                    _buildPaymentMethodBadge('Apple Pay', AppTheme.textPrimary),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -846,16 +841,14 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                         children: [
                           Icon(Icons.lock_rounded,
                               size: 12,
-                              color:
-                                  AppTheme.positive.withValues(alpha: 0.8)),
+                              color: AppTheme.positive.withValues(alpha: 0.8)),
                           const SizedBox(width: 4),
                           Text(
                             'Secure',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
-                              color:
-                                  AppTheme.positive.withValues(alpha: 0.8),
+                              color: AppTheme.positive.withValues(alpha: 0.8),
                             ),
                           ),
                         ],
@@ -1016,7 +1009,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                         : const Icon(Icons.shopping_cart_checkout_rounded,
                             size: 20),
                     label: Text(
-                      _cardLoading ? 'Processing...' : 'Buy $_selectedCardToken',
+                      _cardLoading
+                          ? 'Processing...'
+                          : 'Buy $_selectedCardToken',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -1069,8 +1064,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Divider(height: 1, color: Color(0xFFE5E7EB)),
           ),
-          _buildSummaryRow(
-              'Total charge', '\$${total.toStringAsFixed(2)}',
+          _buildSummaryRow('Total charge', '\$${total.toStringAsFixed(2)}',
               bold: true),
           const SizedBox(height: 8),
           _buildSummaryRow(
@@ -1116,8 +1110,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     final cvv = _cardCvvController.text.trim();
 
     if (amount.isEmpty || cardNum.isEmpty || expiry.isEmpty || cvv.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all card details')),
+      AppSnackbarService.instance.error(
+        message: 'Please fill in all card details',
+        dedupeKey: 'fund_wallet_card_missing_fields',
       );
       return;
     }
@@ -1145,13 +1140,12 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     setState(() => _cardLoading = false);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      AppSnackbarService.instance.success(
+        message:
             'Test purchase complete! $amount $_selectedCardToken will be credited to your wallet.',
-          ),
-          duration: const Duration(seconds: 3),
-        ),
+        dedupeKey:
+            'fund_wallet_card_purchase_success_$amount$_selectedCardToken',
+        duration: const Duration(seconds: 3),
       );
       // Refresh balance
       if (auth.walletAddress != null) {

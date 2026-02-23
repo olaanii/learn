@@ -24,11 +24,17 @@ contract EqubPool {
         uint256 contributionAmount;
         uint256 maxMembers;
         uint256 currentRound;
+        uint256 lastClosedRound;
+        uint256 currentSeason;
+        address creator;
         address treasury;
         address token; // address(0) = native CTC; otherwise ERC-20 address
         address[] members;
         mapping(address => bool) isMember;
-        mapping(address => bool) hasReceivedPayout;
+        mapping(address => bool) isFrozenMember;
+        mapping(uint256 => address) winnerForRound;
+        mapping(uint256 => bool) winnerScheduledForRound;
+        mapping(uint256 => mapping(address => bool)) hasWonInSeason;
         mapping(uint256 => mapping(address => bool)) contributedInRound;
     }
 
@@ -40,6 +46,12 @@ contract EqubPool {
 
     mapping(uint256 => Pool) private pools;
     uint256 public poolCount;
+
+    modifier onlyPoolCreator(uint256 poolId) {
+        require(pools[poolId].creator != address(0), "pool not found");
+        require(pools[poolId].creator == msg.sender, "only creator");
+        _;
+    }
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
@@ -67,6 +79,11 @@ contract EqubPool {
         uint256 rounds
     );
     event RoundClosed(uint256 indexed poolId, uint256 round);
+    event RoundWinnerSelected(
+        uint256 indexed poolId,
+        uint256 indexed round,
+        address indexed winner
+    );
     event CollateralLocked(
         uint256 indexed poolId,
         address indexed member,
@@ -147,6 +164,9 @@ contract EqubPool {
         pool.contributionAmount = contributionAmount;
         pool.maxMembers = maxMembers;
         pool.currentRound = 1;
+        pool.lastClosedRound = 0;
+        pool.currentSeason = 1;
+        pool.creator = msg.sender;
         pool.treasury = treasury;
         pool.token = token;
 
@@ -208,10 +228,11 @@ contract EqubPool {
         emit ContributionReceived(poolId, msg.sender, pool.currentRound);
     }
 
-    function triggerDefault(uint256 poolId, address member) external {
+    function triggerDefault(uint256 poolId, address member) external onlyPoolCreator(poolId) {
         Pool storage pool = pools[poolId];
         require(pool.isMember[member], "not member");
 
+        pool.isFrozenMember[member] = true;
         payoutStream.freezeRemaining(poolId, member);
         collateralVault.compensatePool(
             pool.treasury,
@@ -224,7 +245,7 @@ contract EqubPool {
         emit PoolCompensated(poolId, member, pool.contributionAmount);
     }
 
-    function closeRound(uint256 poolId) external {
+    function closeRound(uint256 poolId) external onlyPoolCreator(poolId) {
         Pool storage pool = pools[poolId];
         uint256 memberCount = pool.members.length;
         for (uint256 i = 0; i < memberCount; i++) {
@@ -232,6 +253,7 @@ contract EqubPool {
             if (
                 !pool.contributedInRound[pool.currentRound][member]
             ) {
+                pool.isFrozenMember[member] = true;
                 payoutStream.freezeRemaining(poolId, member);
                 collateralVault.compensatePool(
                     pool.treasury,
@@ -246,7 +268,13 @@ contract EqubPool {
             }
         }
 
-        emit RoundClosed(poolId, pool.currentRound);
+        uint256 closingRound = pool.currentRound;
+        address winner = _pickSeasonWinner(pool, poolId, closingRound);
+        pool.winnerForRound[closingRound] = winner;
+
+        emit RoundWinnerSelected(poolId, closingRound, winner);
+        emit RoundClosed(poolId, closingRound);
+        pool.lastClosedRound = closingRound;
         pool.currentRound += 1;
     }
 
@@ -277,9 +305,21 @@ contract EqubPool {
         uint256 total,
         uint256 upfrontPercent,
         uint256 totalRounds
-    ) external {
+    ) external onlyPoolCreator(poolId) {
         Pool storage pool = pools[poolId];
+        require(pool.lastClosedRound > 0, "no closed round");
+        uint256 targetRound = pool.lastClosedRound;
+        require(
+            !pool.winnerScheduledForRound[targetRound],
+            "winner already scheduled"
+        );
+        address expectedWinner = pool.winnerForRound[targetRound];
+        require(expectedWinner != address(0), "no eligible winner");
+        require(beneficiary == expectedWinner, "not rotating winner");
         require(pool.isMember[beneficiary], "not member");
+        require(!pool.isFrozenMember[beneficiary], "member frozen");
+        require(pool.contributedInRound[targetRound][beneficiary], "winner not contributed");
+
         payoutStream.createStream(
             poolId,
             beneficiary,
@@ -287,7 +327,111 @@ contract EqubPool {
             upfrontPercent,
             totalRounds
         );
+        pool.winnerScheduledForRound[targetRound] = true;
+
         emit PayoutStreamScheduled(poolId, beneficiary, total, totalRounds);
+    }
+
+    function rotatingWinnerForLastClosedRound(
+        uint256 poolId
+    ) external view returns (uint256 round, address winner) {
+        Pool storage pool = pools[poolId];
+        round = pool.lastClosedRound;
+        if (round == 0) {
+            return (0, address(0));
+        }
+        winner = pool.winnerForRound[round];
+    }
+
+    function poolCreator(uint256 poolId) external view returns (address) {
+        return pools[poolId].creator;
+    }
+
+    function roundWinner(uint256 poolId, uint256 round) external view returns (address) {
+        return pools[poolId].winnerForRound[round];
+    }
+
+    function winnerScheduled(uint256 poolId, uint256 round) external view returns (bool) {
+        return pools[poolId].winnerScheduledForRound[round];
+    }
+
+    function currentSeason(uint256 poolId) external view returns (uint256) {
+        return pools[poolId].currentSeason;
+    }
+
+    function currentRound(uint256 poolId) external view returns (uint256) {
+        return pools[poolId].currentRound;
+    }
+
+    function _pickSeasonWinner(
+        Pool storage pool,
+        uint256 poolId,
+        uint256 round
+    ) internal returns (address) {
+        uint256 season = pool.currentSeason;
+        uint256 eligibleCount = _eligibleCount(pool, season, round);
+        if (eligibleCount == 0) {
+            season += 1;
+            pool.currentSeason = season;
+            eligibleCount = _eligibleCount(pool, season, round);
+        }
+
+        require(eligibleCount > 0, "no eligible winner");
+
+        uint256 random = uint256(
+            keccak256(
+                abi.encodePacked(
+                    block.prevrandao,
+                    block.timestamp,
+                    poolId,
+                    round,
+                    msg.sender
+                )
+            )
+        );
+        uint256 pick = random % eligibleCount;
+
+        uint256 memberCount = pool.members.length;
+        uint256 seen = 0;
+        for (uint256 i = 0; i < memberCount; i++) {
+            address candidate = pool.members[i];
+            if (_isEligibleWinner(pool, season, round, candidate)) {
+                if (seen == pick) {
+                    pool.hasWonInSeason[season][candidate] = true;
+                    return candidate;
+                }
+                seen += 1;
+            }
+        }
+
+        return address(0);
+    }
+
+    function _eligibleCount(
+        Pool storage pool,
+        uint256 season,
+        uint256 round
+    ) internal view returns (uint256 count) {
+        uint256 memberCount = pool.members.length;
+        for (uint256 i = 0; i < memberCount; i++) {
+            if (_isEligibleWinner(pool, season, round, pool.members[i])) {
+                count += 1;
+            }
+        }
+    }
+
+    function _isEligibleWinner(
+        Pool storage pool,
+        uint256 season,
+        uint256 round,
+        address candidate
+    ) internal view returns (bool) {
+        return (
+            pool.isMember[candidate] &&
+            !pool.isFrozenMember[candidate] &&
+            pool.contributedInRound[round][candidate] &&
+            !pool.hasWonInSeason[season][candidate]
+        );
     }
 
     function lockPartialCollateral(

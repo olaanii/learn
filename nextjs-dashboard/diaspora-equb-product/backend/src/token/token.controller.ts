@@ -6,7 +6,12 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { TokenService } from './token.service';
-import { FaucetDto, TransferDto, WithdrawDto } from './dto/token.dto';
+import {
+  FaucetDto,
+  GetTransactionsQueryDto,
+  TransferDto,
+  WithdrawDto,
+} from './dto/token.dto';
 
 @ApiTags('Token')
 @ApiBearerAuth()
@@ -42,17 +47,46 @@ export class TokenController {
     required: false,
     description: 'Max transactions to return',
   })
+  @ApiQuery({
+    name: 'fromTimestamp',
+    required: false,
+    description: 'Lower bound timestamp (ms epoch, inclusive)',
+  })
+  @ApiQuery({
+    name: 'toTimestamp',
+    required: false,
+    description: 'Upper bound timestamp (ms epoch, inclusive)',
+  })
+  @ApiQuery({
+    name: 'direction',
+    required: false,
+    description: 'Direction filter: sent | received',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Status filter: success | failed',
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    description: 'Pagination cursor (reserved for future paging)',
+  })
   getTransactions(
-    @Query('walletAddress') walletAddress: string,
-    @Query('token') token?: string,
-    @Query('limit') limit?: number,
+    @Query() query: GetTransactionsQueryDto,
   ) {
-    const limitNum =
-      limit != null ? Number(limit) : 50;
+    const limitNum = query.limit != null ? Number(query.limit) : 50;
     return this.tokenService.getTransactions(
-      walletAddress,
-      token || 'USDC',
+      query.walletAddress,
+      query.token || 'USDC',
       Number.isFinite(limitNum) ? limitNum : 50,
+      {
+        fromTimestamp: query.fromTimestamp,
+        toTimestamp: query.toTimestamp,
+        direction: query.direction,
+        status: query.status,
+        cursor: query.cursor,
+      },
     );
   }
 
@@ -87,7 +121,7 @@ export class TokenController {
   })
   buildWithdraw(@Body() dto: WithdrawDto) {
     // Withdraw is the same as transfer at the token level
-    return this.tokenService.buildTransfer(
+    return this.tokenService.buildWithdraw(
       dto.from,
       dto.to,
       dto.amount,

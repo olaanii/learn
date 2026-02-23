@@ -1,5 +1,62 @@
-import { IsString, IsNotEmpty, Matches, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  Matches,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  IsIn,
+  IsInt,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class GetTransactionsQueryDto {
+  @ApiProperty({ description: 'EVM wallet address' })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'walletAddress must be a valid EVM address' })
+  walletAddress: string;
+
+  @ApiPropertyOptional({ description: 'Token symbol (USDC, USDT, CTC, ALL)', example: 'USDC', default: 'USDC' })
+  @IsOptional()
+  @IsString()
+  token?: string;
+
+  @ApiPropertyOptional({ description: 'Max transactions to return', example: 50, default: 50 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Lower bound timestamp in milliseconds since epoch (inclusive)' })
+  @IsOptional()
+  @IsInt()
+  fromTimestamp?: number;
+
+  @ApiPropertyOptional({ description: 'Upper bound timestamp in milliseconds since epoch (inclusive)' })
+  @IsOptional()
+  @IsInt()
+  toTimestamp?: number;
+
+  @ApiPropertyOptional({ description: 'Direction filter', enum: ['sent', 'received'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['sent', 'received'])
+  direction?: 'sent' | 'received';
+
+  @ApiPropertyOptional({ description: 'Status filter', enum: ['success', 'failed'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['success', 'failed'])
+  status?: 'success' | 'failed';
+
+  @ApiPropertyOptional({ description: 'Pagination cursor (reserved for future paging)' })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+}
 
 export class FaucetDto {
   @ApiProperty({ description: 'Wallet address to receive test tokens' })

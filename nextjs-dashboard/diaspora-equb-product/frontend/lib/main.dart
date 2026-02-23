@@ -6,6 +6,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'config/theme.dart';
 import 'config/router.dart';
 import 'services/api_client.dart';
+import 'services/app_snackbar_service.dart';
 import 'services/wallet_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/pool_provider.dart';
@@ -13,6 +14,7 @@ import 'providers/credit_provider.dart';
 import 'providers/wallet_provider.dart';
 import 'providers/collateral_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/equb_insights_provider.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
@@ -30,13 +32,25 @@ Future<void> main() async {
   final walletProvider = WalletProvider(apiClient, walletService);
   final collateralProvider = CollateralProvider(apiClient, walletService);
   final notificationProvider = NotificationProvider(apiClient);
+  final equbInsightsProvider = EqubInsightsProvider(apiClient);
 
   await authProvider.tryAutoLogin();
 
-  if (authProvider.isAuthenticated) {
-    unawaited(notificationProvider.refreshUnreadCount());
-    notificationProvider.startPolling();
-  }
+  notificationProvider.handleAuthStateChanged(authProvider.isAuthenticated);
+
+  var previousAuthState = authProvider.isAuthenticated;
+  authProvider.addListener(() {
+    final isAuthenticated = authProvider.isAuthenticated;
+    if (isAuthenticated == previousAuthState) {
+      return;
+    }
+
+    previousAuthState = isAuthenticated;
+    notificationProvider.handleAuthStateChanged(isAuthenticated);
+    if (!isAuthenticated) {
+      equbInsightsProvider.clearWalletContext();
+    }
+  });
 
   final router = createRouter(authProvider);
 
@@ -49,6 +63,7 @@ Future<void> main() async {
       ChangeNotifierProvider.value(value: walletProvider),
       ChangeNotifierProvider.value(value: collateralProvider),
       ChangeNotifierProvider.value(value: notificationProvider),
+      ChangeNotifierProvider.value(value: equbInsightsProvider),
     ],
     child: DiasporaEqubApp(router: router),
   );
@@ -58,8 +73,8 @@ Future<void> main() async {
       (options) {
         options.dsn = _sentryDsn;
         options.tracesSampleRate = 0.2;
-        options.environment =
-            const String.fromEnvironment('NODE_ENV', defaultValue: 'development');
+        options.environment = const String.fromEnvironment('NODE_ENV',
+            defaultValue: 'development');
       },
       appRunner: () => runApp(app),
     );
@@ -68,20 +83,44 @@ Future<void> main() async {
   }
 }
 
-class DiasporaEqubApp extends StatelessWidget {
+class DiasporaEqubApp extends StatefulWidget {
   final GoRouter router;
 
   const DiasporaEqubApp({super.key, required this.router});
+
+  @override
+  State<DiasporaEqubApp> createState() => _DiasporaEqubAppState();
+}
+
+class _DiasporaEqubAppState extends State<DiasporaEqubApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    context.read<NotificationProvider>().handleAppLifecycleChanged(state);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'Diaspora Equb',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: AppSnackbarService.instance.messengerKey,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      routerConfig: router,
+      routerConfig: widget.router,
     );
   }
 }

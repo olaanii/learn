@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collateral_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 import '../services/wallet_service.dart';
 
 class CollateralScreen extends StatefulWidget {
@@ -65,42 +67,32 @@ class _CollateralScreenState extends State<CollateralScreen> {
     if (auth.walletAddress == null) return;
 
     if (!walletSvc.isConnected) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Connect your wallet first')),
-        );
-      }
+      AppSnackbarService.instance.warning(
+        message: 'Connect your wallet first',
+        dedupeKey: 'collateral_wallet_not_connected',
+      );
       return;
     }
 
     final tokenBalance =
         double.tryParse(wallet.balanceOf(_selectedToken)) ?? 0.0;
     if (parsedAmount > tokenBalance) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Insufficient $_selectedToken balance (\$${tokenBalance.toStringAsFixed(2)})',
-            ),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
+      AppSnackbarService.instance.error(
+        message:
+            'Insufficient $_selectedToken balance (\$${tokenBalance.toStringAsFixed(2)})',
+        dedupeKey: 'collateral_insufficient_balance',
+      );
       return;
     }
 
     setState(() => _isDepositing = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Locking $amount $_selectedToken as collateral — confirm in your wallet...',
-          ),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
+    AppSnackbarService.instance.info(
+      message:
+          'Locking $amount $_selectedToken as collateral — confirm in your wallet...',
+      dedupeKey: 'collateral_deposit_pending',
+      duration: const Duration(seconds: 4),
+    );
 
     final txHash = await collateral.buildAndSignDepositToken(
       amount: amount,
@@ -112,6 +104,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
     setState(() => _isDepositing = false);
 
     if (txHash != null) {
+      context.read<NotificationProvider>().triggerFastSync();
       _depositController.clear();
       await wallet.loadAllBalances(auth.walletAddress!);
       if (!mounted) return;
@@ -122,21 +115,16 @@ class _CollateralScreenState extends State<CollateralScreen> {
         wallet.loadAllBalances(addr);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      AppSnackbarService.instance.success(
+        message:
             '$_selectedToken collateral locked! TX: ${txHash.substring(0, 16)}...',
-          ),
-          duration: const Duration(seconds: 4),
-        ),
+        dedupeKey: 'collateral_deposit_success_$txHash',
+        duration: const Duration(seconds: 4),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(collateral.errorMessage ?? 'Deposit failed or rejected'),
-          backgroundColor: Colors.red.shade700,
-        ),
+      AppSnackbarService.instance.error(
+        message: collateral.errorMessage ?? 'Deposit failed or rejected',
+        dedupeKey: 'collateral_deposit_failed',
       );
     }
   }
@@ -154,30 +142,22 @@ class _CollateralScreenState extends State<CollateralScreen> {
     final available = collateral.totalLocked;
     final requestedAmount = double.tryParse(amount) ?? 0;
     if (requestedAmount <= 0 || requestedAmount > available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            requestedAmount > available
-                ? 'Amount exceeds locked balance (\$${available.toStringAsFixed(2)})'
-                : 'Enter a valid amount',
-          ),
-        ),
+      AppSnackbarService.instance.error(
+        message: requestedAmount > available
+            ? 'Amount exceeds locked balance (\$${available.toStringAsFixed(2)})'
+            : 'Enter a valid amount',
+        dedupeKey: 'collateral_release_invalid_amount',
       );
       return;
     }
 
     setState(() => _isReleasing = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Releasing $amount $_selectedToken from collateral...',
-          ),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+    AppSnackbarService.instance.info(
+      message: 'Releasing $amount $_selectedToken from collateral...',
+      dedupeKey: 'collateral_release_pending',
+      duration: const Duration(seconds: 3),
+    );
 
     final txHash = await collateral.releaseTokenCollateral(
       walletAddress: auth.walletAddress!,
@@ -189,6 +169,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
     setState(() => _isReleasing = false);
 
     if (txHash != null) {
+      context.read<NotificationProvider>().triggerFastSync();
       _releaseController.clear();
       await wallet.loadAllBalances(auth.walletAddress!);
       if (!mounted) return;
@@ -199,21 +180,16 @@ class _CollateralScreenState extends State<CollateralScreen> {
         wallet.loadAllBalances(addr);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      AppSnackbarService.instance.success(
+        message:
             'Collateral released! $_selectedToken returned to your wallet.',
-          ),
-          duration: const Duration(seconds: 4),
-        ),
+        dedupeKey: 'collateral_release_success_$txHash',
+        duration: const Duration(seconds: 4),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(collateral.errorMessage ?? 'Release failed'),
-          backgroundColor: Colors.red.shade700,
-        ),
+      AppSnackbarService.instance.error(
+        message: collateral.errorMessage ?? 'Release failed',
+        dedupeKey: 'collateral_release_failed',
       );
     }
   }
@@ -551,7 +527,9 @@ class _CollateralScreenState extends State<CollateralScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? color.withValues(alpha: 0.15) : const Color(0xFFF7F8FA),
+            color: isSelected
+                ? color.withValues(alpha: 0.15)
+                : const Color(0xFFF7F8FA),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isSelected ? color : const Color(0xFFE5E7EB),
@@ -781,8 +759,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                            Icons.account_balance_wallet_outlined,
+                        const Icon(Icons.account_balance_wallet_outlined,
                             size: 18),
                         const SizedBox(width: 8),
                         Text(
@@ -973,12 +950,10 @@ class _CollateralScreenState extends State<CollateralScreen> {
           if (hasLocked) ...[
             const SizedBox(height: 12),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: AppTheme.positive.withValues(alpha: 0.08),
-                borderRadius:
-                    BorderRadius.circular(AppTheme.cardRadiusSmall),
+                borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
               ),
               child: Row(
                 children: [
@@ -1000,14 +975,11 @@ class _CollateralScreenState extends State<CollateralScreen> {
             ),
             const SizedBox(height: 16),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFFF7F8FA),
-                borderRadius:
-                    BorderRadius.circular(AppTheme.cardRadiusSmall),
-                border:
-                    Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+                border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
               ),
               child: TextField(
                 controller: _releaseController,
@@ -1103,8 +1075,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
         child: Column(
           children: [
             Icon(Icons.shield_outlined,
-                size: 48,
-                color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             const Text(
               'No collateral locked yet',
@@ -1180,9 +1151,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
             child: Icon(
               Icons.lock_outline,
               size: 22,
-              color: isCtc
-                  ? AppTheme.primaryColor
-                  : const Color(0xFF2775CA),
+              color: isCtc ? AppTheme.primaryColor : const Color(0xFF2775CA),
             ),
           ),
           const SizedBox(width: 14),

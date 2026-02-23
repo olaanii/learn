@@ -190,6 +190,42 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Build and sign on-chain identity binding TX via IdentityRegistry.
+  /// Required before joinPool succeeds on-chain.
+  Future<String?> bindIdentityOnChain() async {
+    if (_identityHash == null || _walletAddress == null) {
+      _errorMessage =
+          'Missing identity or wallet. Complete login and wallet binding first.';
+      notifyListeners();
+      return null;
+    }
+
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final unsignedTx = await _api.buildStoreOnChain(
+        identityHash: _identityHash!,
+        walletAddress: _walletAddress!,
+      );
+
+      final txHash = await _walletService.signAndSendTransaction(unsignedTx);
+      if (txHash == null) {
+        _errorMessage = _walletService.errorMessage ??
+            'Identity binding transaction rejected';
+        notifyListeners();
+        return null;
+      }
+
+      notifyListeners();
+      return txHash;
+    } catch (e) {
+      _errorMessage = 'Failed to bind identity on-chain: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
   /// Valid EVM address regex (0x + 40 hex chars).
   static final _evmRegex = RegExp(r'^0x[a-fA-F0-9]{40}$');
 

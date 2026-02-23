@@ -4,19 +4,71 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
 import { PayoutStreamEntity } from '../entities/payout-stream.entity';
+import { Season } from '../entities/season.entity';
+import { Round } from '../entities/round.entity';
+import { IdempotencyKey } from '../entities/idempotency-key.entity';
 import { ethers } from 'ethers';
+import { createHash, randomInt } from 'crypto';
 import { Web3Service, UnsignedTxDto } from '../web3/web3.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PoolsService {
   private readonly logger = new Logger(PoolsService.name);
+  private readonly selectWinnerCloseCooldownMs = 8000;
+  private readonly selectWinnerCloseGuard = new Map<string, number>();
+
+  private logPoolLifecycleTelemetry(payload: {
+    action: 'close_active_round' | 'pick_winner_active_round' | 'create_next_season';
+    poolId: string;
+    seasonId?: string;
+    roundId?: string;
+    status: 'success' | 'error';
+    durationMs: number;
+    errorCode?: string;
+  }) {
+    this.logger.log(`telemetry.pool_lifecycle ${JSON.stringify(payload)}`);
+  }
+
+  private enforceSelectWinnerCloseCooldown(
+    poolId: string,
+    caller: string,
+  ): void {
+    const now = Date.now();
+    const key = `${poolId}:${caller.toLowerCase()}`;
+    const lastAttempt = this.selectWinnerCloseGuard.get(key);
+
+    if (lastAttempt) {
+      const elapsed = now - lastAttempt;
+      if (elapsed < this.selectWinnerCloseCooldownMs) {
+        const waitSec = Math.ceil(
+          (this.selectWinnerCloseCooldownMs - elapsed) / 1000,
+        );
+        throw new HttpException(
+          `Please wait ${waitSec}s before retrying close-round winner selection for this pool.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    this.selectWinnerCloseGuard.set(key, now);
+
+    if (this.selectWinnerCloseGuard.size > 1000) {
+      const cutoff = now - this.selectWinnerCloseCooldownMs * 2;
+      for (const [guardKey, timestamp] of this.selectWinnerCloseGuard) {
+        if (timestamp < cutoff) this.selectWinnerCloseGuard.delete(guardKey);
+      }
+    }
+  }
 
   constructor(
     @InjectRepository(Pool)
@@ -27,8 +79,530 @@ export class PoolsService {
     private readonly contributionRepo: Repository<Contribution>,
     @InjectRepository(PayoutStreamEntity)
     private readonly payoutStreamRepo: Repository<PayoutStreamEntity>,
+    @InjectRepository(Season)
+    private readonly seasonRepo: Repository<Season>,
+    @InjectRepository(Round)
+    private readonly roundRepo: Repository<Round>,
+    @InjectRepository(IdempotencyKey)
+    private readonly idempotencyKeyRepo: Repository<IdempotencyKey>,
+    private readonly dataSource: DataSource,
     private readonly web3Service: Web3Service,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  private explicitError(
+    code: string,
+    message: string,
+    status = HttpStatus.BAD_REQUEST,
+  ): never {
+    throw new HttpException({ code, message }, status);
+  }
+
+  private poolRepository(manager?: EntityManager): Repository<Pool> {
+    return manager ? manager.getRepository(Pool) : this.poolRepo;
+  }
+
+  private seasonRepository(manager?: EntityManager): Repository<Season> {
+    return manager ? manager.getRepository(Season) : this.seasonRepo;
+  }
+
+  private roundRepository(manager?: EntityManager): Repository<Round> {
+    return manager ? manager.getRepository(Round) : this.roundRepo;
+  }
+
+  private idempotencyRepository(
+    manager?: EntityManager,
+  ): Repository<IdempotencyKey> {
+    return manager
+      ? manager.getRepository(IdempotencyKey)
+      : this.idempotencyKeyRepo;
+  }
+
+  private deriveCompletedRounds(currentRound: number, totalRounds: number): number {
+    return Math.min(Math.max(currentRound - 1, 0), totalRounds);
+  }
+
+  private pickRandomIndex(maxExclusive: number): number {
+    if (maxExclusive <= 0) {
+      this.explicitError(
+        'VALIDATION_ERROR',
+        'No candidates available for winner selection.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return randomInt(maxExclusive);
+  }
+
+  private async ensureSeasonState(
+    pool: Pool,
+    manager?: EntityManager,
+  ): Promise<Season> {
+    const seasonRepo = this.seasonRepository(manager);
+    const poolRepo = this.poolRepository(manager);
+
+    let latestSeason = await seasonRepo.findOne({
+      where: { poolId: pool.id },
+      order: { seasonNumber: 'DESC' },
+    });
+
+    if (!latestSeason) {
+      latestSeason = seasonRepo.create({
+        poolId: pool.id,
+        seasonNumber: 1,
+        status: 'active',
+        totalRounds: pool.maxMembers,
+        completedRounds: 0,
+        contributionAmount: pool.contributionAmount,
+        token: pool.token,
+        payoutSplitPct: 20,
+        cadence: null,
+        startedAt: new Date(),
+        completedAt: null,
+      });
+    }
+
+    let changed = false;
+    const completedRounds = this.deriveCompletedRounds(
+      pool.currentRound,
+      latestSeason.totalRounds,
+    );
+
+    if (latestSeason.completedRounds !== completedRounds) {
+      latestSeason.completedRounds = completedRounds;
+      changed = true;
+    }
+
+    const shouldComplete = completedRounds >= latestSeason.totalRounds;
+    if (shouldComplete && latestSeason.status !== 'completed') {
+      latestSeason.status = 'completed';
+      latestSeason.completedAt = latestSeason.completedAt ?? new Date();
+      changed = true;
+    }
+
+    if (!shouldComplete && latestSeason.status === 'completed') {
+      latestSeason.status = 'active';
+      latestSeason.completedAt = null;
+      changed = true;
+    }
+
+    if (changed || !latestSeason.id) {
+      latestSeason = await seasonRepo.save(latestSeason);
+    }
+
+    if (shouldComplete && pool.status !== 'completed') {
+      pool.status = 'completed';
+      await poolRepo.save(pool);
+    }
+
+    return latestSeason;
+  }
+
+  private async assertSeasonActive(
+    pool: Pool,
+    manager?: EntityManager,
+  ): Promise<Season> {
+    const season = await this.ensureSeasonState(pool, manager);
+    if (season.status === 'completed') {
+      this.explicitError(
+        'SEASON_COMPLETE',
+        'Season is completed. Configure next season to continue.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return season;
+  }
+
+  private normalizeWallet(wallet: string | undefined | null): string {
+    if (!wallet) {
+      this.explicitError(
+        'NOT_POOL_ADMIN',
+        'Only pool admin can perform this action.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    try {
+      return ethers.getAddress(wallet!);
+    } catch {
+      this.explicitError(
+        'NOT_POOL_ADMIN',
+        'Only pool admin can perform this action.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private assertAdmin(pool: Pool, caller: string): void {
+    if (!pool.createdBy) {
+      this.explicitError(
+        'NOT_POOL_ADMIN',
+        'Only pool admin can perform this action.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (pool.createdBy.toLowerCase() !== caller.toLowerCase()) {
+      this.explicitError(
+        'NOT_POOL_ADMIN',
+        'Only pool admin can perform this action.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private toRoundStatus(status: string): 'open' | 'closed' | 'winner_picked' {
+    if (status === 'winner_picked') return 'winner_picked';
+    if (status === 'closed' || status === 'round-closed') return 'closed';
+    return 'open';
+  }
+
+  private buildStateResponse(pool: Pool, season: Season, round: Round) {
+    return {
+      pool: {
+        ...pool,
+        activeSeasonId: season.id,
+        activeRoundId: round.id,
+        currentRound: round.roundNumber,
+      },
+      season: {
+        id: season.id,
+        seasonNumber: season.seasonNumber,
+        status: season.status,
+        totalRounds: season.totalRounds,
+        completedRounds: season.completedRounds,
+      },
+      round: {
+        id: round.id,
+        roundNumber: round.roundNumber,
+        status: round.status,
+        closedAt: round.closedAt,
+        winnerPickedAt: round.winnerPickedAt,
+        winnerWallet: round.winnerWallet,
+      },
+    };
+  }
+
+  private async ensureActiveRound(
+    pool: Pool,
+    season: Season,
+    manager?: EntityManager,
+  ): Promise<Round> {
+    const roundRepo = this.roundRepository(manager);
+    const poolRepo = this.poolRepository(manager);
+
+    let activeRound: Round | null = null;
+    if (pool.activeRoundId) {
+      activeRound = await roundRepo.findOne({
+        where: { id: pool.activeRoundId, poolId: pool.id, seasonId: season.id },
+      });
+    }
+
+    if (!activeRound) {
+      const targetRoundNumber =
+        pool.currentRound && pool.currentRound > 0
+          ? pool.currentRound
+          : season.completedRounds + 1;
+      activeRound = await roundRepo.findOne({
+        where: {
+          poolId: pool.id,
+          seasonId: season.id,
+          roundNumber: targetRoundNumber,
+        },
+      });
+
+      if (!activeRound) {
+        activeRound = roundRepo.create({
+          poolId: pool.id,
+          seasonId: season.id,
+          roundNumber: targetRoundNumber,
+          status: this.toRoundStatus(pool.status),
+          closedAt: null,
+          winnerPickedAt: null,
+          winnerWallet: null,
+        });
+        activeRound = await roundRepo.save(activeRound);
+      }
+
+      pool.activeRoundId = activeRound.id;
+      pool.currentRound = activeRound.roundNumber;
+      await poolRepo.save(pool);
+    }
+
+    return activeRound;
+  }
+
+  async closeActiveRound(poolId: string, callerRaw: string | undefined) {
+    const startedAt = Date.now();
+    const caller = this.normalizeWallet(callerRaw);
+
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const poolRepo = this.poolRepository(manager);
+        const roundRepo = this.roundRepository(manager);
+
+        const pool = await poolRepo.findOne({
+          where: { id: poolId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!pool) {
+          throw new NotFoundException(`Pool ${poolId} not found`);
+        }
+
+        this.assertAdmin(pool, caller);
+        const season = await this.assertSeasonActive(pool, manager);
+        const activeRound = await this.ensureActiveRound(pool, season, manager);
+        const lockedRound = await roundRepo.findOne({
+          where: { id: activeRound.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!lockedRound) {
+          throw new NotFoundException('Active round not found');
+        }
+
+        if (lockedRound.status !== 'open') {
+          this.explicitError(
+            'ROUND_NOT_OPEN',
+            'Active round is not open.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        lockedRound.status = 'closed';
+        lockedRound.closedAt = new Date();
+        await roundRepo.save(lockedRound);
+
+        pool.status = 'round-closed';
+        await poolRepo.save(pool);
+
+        return this.buildStateResponse(pool, season, lockedRound);
+      });
+
+      this.logPoolLifecycleTelemetry({
+        action: 'close_active_round',
+        poolId,
+        seasonId: result.season?.id,
+        roundId: result.round?.id,
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+      });
+
+      return result;
+    } catch (error) {
+      this.logPoolLifecycleTelemetry({
+        action: 'close_active_round',
+        poolId,
+        status: 'error',
+        durationMs: Date.now() - startedAt,
+        errorCode:
+          error instanceof HttpException
+            ? ((error.getResponse() as any)?.code ?? 'HTTP_EXCEPTION')
+            : 'UNHANDLED_ERROR',
+      });
+      throw error;
+    }
+  }
+
+  async pickWinnerForActiveRound(params: {
+    poolId: string;
+    mode: 'auto';
+    idempotencyKey?: string;
+    caller?: string;
+  }) {
+    const startedAt = Date.now();
+    const caller = this.normalizeWallet(params.caller);
+    const route = `POST:/pools/${params.poolId}/rounds/active/pick-winner`;
+    const idempotencyKey = (params.idempotencyKey ?? '').trim();
+    if (!idempotencyKey) {
+      this.explicitError(
+        'VALIDATION_ERROR',
+        'Idempotency-Key header is required.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify({ mode: params.mode }))
+      .digest('hex');
+
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const poolRepo = this.poolRepository(manager);
+        const seasonRepo = this.seasonRepository(manager);
+        const roundRepo = this.roundRepository(manager);
+        const memberRepo = manager.getRepository(PoolMember);
+        const idempotencyRepo = this.idempotencyRepository(manager);
+
+        const replay = await idempotencyRepo.findOne({
+          where: { route, key: idempotencyKey },
+        });
+        if (replay) {
+          if (replay.requestHash !== requestHash) {
+            this.explicitError(
+              'IDEMPOTENCY_REPLAY_CONFLICT',
+              'Idempotency key already used with a different payload.',
+              HttpStatus.CONFLICT,
+            );
+          }
+          return replay.responseBody;
+        }
+
+        const pool = await poolRepo.findOne({
+          where: { id: params.poolId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!pool) {
+          throw new NotFoundException(`Pool ${params.poolId} not found`);
+        }
+
+        this.assertAdmin(pool, caller);
+        const season = await this.assertSeasonActive(pool, manager);
+        const activeRound = await this.ensureActiveRound(pool, season, manager);
+        const lockedRound = await roundRepo.findOne({
+          where: { id: activeRound.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!lockedRound) {
+          throw new NotFoundException('Active round not found');
+        }
+
+        if (lockedRound.status === 'open') {
+          this.explicitError(
+            'WINNER_BEFORE_CLOSE',
+            'Close the active round before picking winner.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        if (lockedRound.status === 'winner_picked') {
+          this.explicitError(
+            'ROUND_ALREADY_PICKED',
+            'Winner is already picked for the active round.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        const members = await memberRepo.find({
+          where: { poolId: pool.id },
+          order: { joinedAt: 'ASC' },
+        });
+        if (!members.length) {
+          this.explicitError(
+            'VALIDATION_ERROR',
+            'No pool members available for winner selection.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const priorWinners = await roundRepo.find({
+          where: {
+            poolId: pool.id,
+            seasonId: season.id,
+            status: 'winner_picked',
+          },
+        });
+        const priorWinnerWallets = new Set(
+          priorWinners
+            .map((round) => round.winnerWallet?.toLowerCase())
+            .filter((wallet): wallet is string => !!wallet),
+        );
+
+        const eligibleMembers = members.filter(
+          (member) => !priorWinnerWallets.has(member.walletAddress.toLowerCase()),
+        );
+        if (!eligibleMembers.length) {
+          this.explicitError(
+            'NO_ELIGIBLE_WINNER',
+            'All members have already won in this season. Configure next season to continue.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        const winnerIndex = this.pickRandomIndex(eligibleMembers.length);
+        const winnerWallet = ethers.getAddress(
+          eligibleMembers[winnerIndex].walletAddress,
+        );
+
+        lockedRound.status = 'winner_picked';
+        lockedRound.winnerWallet = winnerWallet;
+        lockedRound.winnerPickedAt = new Date();
+        await roundRepo.save(lockedRound);
+
+        season.completedRounds += 1;
+
+        let responseRound = lockedRound;
+        if (season.completedRounds >= season.totalRounds) {
+          season.status = 'completed';
+          season.completedAt = season.completedAt ?? new Date();
+          pool.status = 'completed';
+        } else {
+          const nextRound = roundRepo.create({
+            poolId: pool.id,
+            seasonId: season.id,
+            roundNumber: lockedRound.roundNumber + 1,
+            status: 'open',
+            closedAt: null,
+            winnerPickedAt: null,
+            winnerWallet: null,
+          });
+          responseRound = await roundRepo.save(nextRound);
+          pool.activeRoundId = responseRound.id;
+          pool.currentRound = responseRound.roundNumber;
+          pool.status = 'active';
+        }
+
+        await seasonRepo.save(season);
+        pool.activeSeasonId = season.id;
+        if (season.status === 'completed') {
+          pool.activeRoundId = lockedRound.id;
+        }
+        await poolRepo.save(pool);
+
+        const response = {
+          ...this.buildStateResponse(pool, season, responseRound),
+          winner: {
+            wallet: winnerWallet,
+          },
+        };
+
+        await idempotencyRepo.save(
+          idempotencyRepo.create({
+            route,
+            key: idempotencyKey,
+            requestHash,
+            responseBody: response,
+          }),
+        );
+
+        return response;
+      });
+
+      const resultRound = (result as any)?.round;
+      const resultSeason = (result as any)?.season;
+      this.logPoolLifecycleTelemetry({
+        action: 'pick_winner_active_round',
+        poolId: params.poolId,
+        seasonId: resultSeason?.id,
+        roundId: resultRound?.id,
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+      });
+
+      return result;
+    } catch (error) {
+      this.logPoolLifecycleTelemetry({
+        action: 'pick_winner_active_round',
+        poolId: params.poolId,
+        status: 'error',
+        durationMs: Date.now() - startedAt,
+        errorCode:
+          error instanceof HttpException
+            ? ((error.getResponse() as any)?.code ?? 'HTTP_EXCEPTION')
+            : 'UNHANDLED_ERROR',
+      });
+      throw error;
+    }
+  }
 
   // ─── TX Builder Methods (return unsigned calldata for client-side signing) ───
 
@@ -86,12 +660,38 @@ export class PoolsService {
     }
 
     const equbPool = this.web3Service.getEqubPool();
-    // Use the v2 overload that includes the token parameter
-    const data = equbPool.interface.encodeFunctionData(
-      'createPool(uint8,uint256,uint256,address,address)',
-      [tier, contributionAmount, maxMembers, treasury, tokenAddress],
-    );
-    const to = await equbPool.getAddress();
+    const wantsTokenPool = tokenAddress.toLowerCase() != zeroAddr.toLowerCase();
+    const v2Sig = 'createPool(uint8,uint256,uint256,address,address)';
+    const legacySig = 'createPool(uint8,uint256,uint256,address)';
+    const v2Selector = ethers.id(v2Sig).slice(2, 10).toLowerCase();
+    const equbPoolAddress = await equbPool.getAddress();
+    const code = (
+      await this.web3Service.getProvider().getCode(equbPoolAddress)
+    ).toLowerCase();
+    const supportsV2 = code.includes(v2Selector);
+
+    let data: string;
+    if (supportsV2) {
+      data = equbPool.interface.encodeFunctionData(
+        v2Sig,
+        [tier, contributionAmount, maxMembers, treasury, tokenAddress],
+      );
+    } else {
+      if (wantsTokenPool) {
+        throw new BadRequestException(
+          `Deployed EQUB_POOL_ADDRESS (${equbPoolAddress}) is a legacy EqubPool and does not support token pools (missing createPool(uint8,uint256,uint256,address,address)). Redeploy v2 EqubPool and update EQUB_POOL_ADDRESS.`,
+        );
+      }
+
+      this.logger.warn(
+        `Deployed EQUB_POOL_ADDRESS (${equbPoolAddress}) does not expose createPool(uint8,uint256,uint256,address,address); falling back to legacy createPool(uint8,uint256,uint256,address).`,
+      );
+      data = equbPool.interface.encodeFunctionData(
+        legacySig,
+        [tier, contributionAmount, maxMembers, treasury],
+      );
+    }
+    const to = equbPoolAddress;
 
     return this.web3Service.buildUnsignedTx(to, data, '0', '500000');
   }
@@ -99,8 +699,25 @@ export class PoolsService {
   /**
    * Build unsigned TX to join an existing pool on-chain.
    */
-  async buildJoinPool(onChainPoolId: number): Promise<UnsignedTxDto> {
+  async buildJoinPool(
+    onChainPoolId: number,
+    caller?: string,
+  ): Promise<UnsignedTxDto> {
     this.logger.log(`Building joinPool TX: poolId=${onChainPoolId}`);
+
+    if (caller) {
+      if (!ethers.isAddress(caller)) {
+        throw new BadRequestException('Invalid caller address');
+      }
+      const normalizedCaller = ethers.getAddress(caller);
+      const identityRegistry = this.web3Service.getIdentityRegistry();
+      const identity = await identityRegistry.identityOf(normalizedCaller);
+      if (identity === ethers.ZeroHash) {
+        throw new BadRequestException(
+          'Wallet identity is not bound on-chain. Complete wallet binding (store on-chain) before joining a pool.',
+        );
+      }
+    }
 
     const equbPool = this.web3Service.getEqubPool();
     const data = equbPool.interface.encodeFunctionData('joinPool', [
@@ -125,24 +742,101 @@ export class PoolsService {
     contributionAmount: string,
     tokenAddress?: string,
   ): Promise<UnsignedTxDto> {
-    const isErc20 =
-      tokenAddress &&
-      tokenAddress !== '0x0000000000000000000000000000000000000000';
+    const zeroAddress = '0x0000000000000000000000000000000000000000';
+    let isErc20 = false;
+
+    const equbPool = this.web3Service.getEqubPool();
+    const equbPoolAddress = await equbPool.getAddress();
+    const code = (
+      await this.web3Service.getProvider().getCode(equbPoolAddress)
+    ).toLowerCase();
+    const poolTokenSelector = ethers
+      .id('poolToken(uint256)')
+      .slice(2, 10)
+      .toLowerCase();
+    const supportsPoolToken = code.includes(poolTokenSelector);
+
+    if (supportsPoolToken) {
+      try {
+        const onChainToken = await equbPool.poolToken(onChainPoolId);
+        isErc20 =
+          typeof onChainToken === 'string' &&
+          onChainToken.toLowerCase() !== zeroAddress.toLowerCase();
+      } catch (e) {
+        this.logger.warn(
+          `Could not read poolToken(${onChainPoolId}); falling back to native contribution mode: ${e}`,
+        );
+        isErc20 = false;
+      }
+    }
 
     this.logger.log(
       `Building contribute TX: poolId=${onChainPoolId}, amount=${contributionAmount}, erc20=${!!isErc20}`,
     );
 
-    const equbPool = this.web3Service.getEqubPool();
+    if (
+      !isErc20 &&
+      tokenAddress &&
+      tokenAddress.toLowerCase() !== zeroAddress.toLowerCase()
+    ) {
+      this.logger.warn(
+        `Frontend requested ERC-20 contribution for pool ${onChainPoolId}, but on-chain pool mode is native. Using native value amount.`,
+      );
+    }
+
     const data = equbPool.interface.encodeFunctionData('contribute', [
       onChainPoolId,
     ]);
-    const to = await equbPool.getAddress();
+    const to = equbPoolAddress;
 
-    // For ERC-20 pools, value is 0; for native CTC pools, value = contributionAmount
-    const value = isErc20 ? '0' : contributionAmount;
+    // For ERC-20 pools, value is 0.
+    // For native pools, derive exact expected amount from createPool tx to avoid
+    // DB/display unit mismatches (e.g., "2.000000000000000000" vs on-chain 2 wei).
+    const value = isErc20
+      ? '0'
+      : await this.resolveNativeContributionValue(onChainPoolId, contributionAmount);
 
     return this.web3Service.buildUnsignedTx(to, data, value, '200000');
+  }
+
+  private async resolveNativeContributionValue(
+    onChainPoolId: number,
+    fallbackContributionAmount: string,
+  ): Promise<string> {
+    const pool = await this.poolRepo.findOne({ where: { onChainPoolId } });
+    if (!pool?.txHash) {
+      return fallbackContributionAmount;
+    }
+
+    try {
+      const tx = await this.web3Service.getProvider().getTransaction(pool.txHash);
+      if (!tx?.data) {
+        return fallbackContributionAmount;
+      }
+
+      const equbPool = this.web3Service.getEqubPool();
+      const parsed = equbPool.interface.parseTransaction({ data: tx.data });
+      if (!parsed?.args || parsed.args.length < 2) {
+        return fallbackContributionAmount;
+      }
+
+      const amountArg = parsed.args[1];
+      const amount =
+        typeof amountArg === 'bigint'
+          ? amountArg.toString()
+          : String((amountArg as any)?.toString?.() ?? amountArg);
+
+      if (amount && /^\d+$/.test(amount)) {
+        return amount;
+      }
+
+      return fallbackContributionAmount;
+    } catch (e) {
+      this.logger.warn(
+        `Could not resolve native contribution amount from create tx for onChainPoolId=${onChainPoolId}: ${e}`,
+      );
+      return fallbackContributionAmount;
+    }
   }
 
   /**
@@ -183,6 +877,11 @@ export class PoolsService {
    */
   async buildCloseRound(onChainPoolId: number): Promise<UnsignedTxDto> {
     this.logger.log(`Building closeRound TX: poolId=${onChainPoolId}`);
+
+    const pool = await this.poolRepo.findOne({ where: { onChainPoolId } });
+    if (pool) {
+      await this.assertSeasonActive(pool);
+    }
 
     const equbPool = this.web3Service.getEqubPool();
     const data = equbPool.interface.encodeFunctionData('closeRound', [
@@ -268,8 +967,47 @@ export class PoolsService {
       throw new NotFoundException(`Pool ${poolId} not found`);
     }
     await this.backfillPoolFromCreationTx(pool);
+    const season = await this.ensureSeasonState(pool);
+    const activeRound = await this.ensureActiveRound(pool, season);
+    const currentRoundStatus =
+      activeRound.status === 'winner_picked'
+        ? 'winner_picked'
+        : activeRound.status === 'closed'
+          ? 'closed'
+          : 'open';
+    pool.activeSeasonId = season.id;
+    pool.activeRoundId = activeRound.id;
+    pool.currentRound = activeRound.roundNumber;
+    await this.poolRepo.save(pool);
     // Return plain object so createdBy/treasury are never stripped by serialization
-    return { ...pool, createdBy: pool.createdBy ?? null };
+    return {
+      ...pool,
+      createdBy: pool.createdBy ?? null,
+      currentRoundStatus,
+      currentRoundWinner: activeRound.winnerWallet,
+      season: {
+        id: season.id,
+        seasonNumber: season.seasonNumber,
+        status: season.status,
+        totalRounds: season.totalRounds,
+        completedRounds: season.completedRounds,
+        contributionAmount: season.contributionAmount,
+        token: season.token,
+        payoutSplitPct: season.payoutSplitPct,
+        cadence: season.cadence,
+        startedAt: season.startedAt,
+        completedAt: season.completedAt,
+      },
+      activeRound: {
+        id: activeRound.id,
+        roundNumber: activeRound.roundNumber,
+        status: activeRound.status,
+        closedAt: activeRound.closedAt,
+        winnerPickedAt: activeRound.winnerPickedAt,
+        winnerWallet: activeRound.winnerWallet,
+      },
+      seasonComplete: season.status === 'completed',
+    };
   }
 
   /**
@@ -397,6 +1135,8 @@ export class PoolsService {
     const provider = this.web3Service.getProvider();
     const equbPool = this.web3Service.getEqubPool();
     const equbPoolAddress = (await equbPool.getAddress()).toLowerCase();
+    const tx = await provider.getTransaction(hash);
+    const createdBy = tx?.from ? ethers.getAddress(tx.from) : null;
 
     // Wait for receipt (poll up to ~2 min)
     let receipt: ethers.TransactionReceipt | null = null;
@@ -409,13 +1149,30 @@ export class PoolsService {
       throw new BadRequestException('Transaction not mined yet. Try again in a moment.');
     }
     if (receipt.status === 0) {
-      throw new BadRequestException('Transaction reverted on-chain. Pool was not created.');
+      if (createdBy) {
+        this.notifications
+          .create(
+            createdBy,
+            'pool_created',
+            'Pool Creation Failed',
+            'Pool creation transaction reverted on-chain.',
+            {
+              txHash: hash.toLowerCase(),
+              status: 'failed',
+              kind: 'transaction',
+              idempotencyKey: `pool_created_failed:${createdBy.toLowerCase()}:${hash.toLowerCase()}`,
+            },
+          )
+          .catch((error) => {
+            this.logger.warn(`Failed to emit pool_created failure notification: ${error?.message ?? error}`);
+          });
+      }
+      throw new BadRequestException(
+        'Transaction reverted on-chain. Pool was not created. If your EqubPool address points to an older contract version, update EQUB_POOL_ADDRESS (and related contracts) in .env and restart backend.',
+      );
     }
-
-    const tx = await provider.getTransaction(hash);
     if (!tx) throw new BadRequestException('Transaction not found');
 
-    const createdBy = tx.from ? ethers.getAddress(tx.from) : null;
     let treasury = '0x0000000000000000000000000000000000000000';
     if (tx.data) {
       const parsed = equbPool.interface.parseTransaction({ data: tx.data });
@@ -427,15 +1184,69 @@ export class PoolsService {
     }
 
     const iface = equbPool.interface;
-    const poolCreatedTopic = iface.getEvent('PoolCreated')?.topicHash;
-    const log = receipt.logs.find(
-      (l) => l.address.toLowerCase() === equbPoolAddress && (poolCreatedTopic && l.topics[0] === poolCreatedTopic),
-    );
-    if (!log) throw new BadRequestException('PoolCreated event not found in transaction');
+    const zeroAddr = '0x0000000000000000000000000000000000000000';
 
-    const decoded = iface.parseLog({ topics: log.topics as string[], data: log.data });
-    if (!decoded || decoded.name !== 'PoolCreated') throw new BadRequestException('Failed to parse PoolCreated');
-    const [poolId, contributionAmount, maxMembers, token] = decoded.args;
+    let poolId: bigint | undefined;
+    let contributionAmount: bigint | undefined;
+    let maxMembers: bigint | undefined;
+    let token: string = zeroAddr;
+
+    // Try v2 PoolCreated(poolId, contributionAmount, maxMembers, token) first.
+    const v2Topic = iface.getEvent('PoolCreated')?.topicHash;
+    const v2Log = receipt.logs.find(
+      (l) => l.address.toLowerCase() === equbPoolAddress && (v2Topic && l.topics[0] === v2Topic),
+    );
+    if (v2Log) {
+      const decoded = iface.parseLog({
+        topics: v2Log.topics as string[],
+        data: v2Log.data,
+      });
+      if (decoded && decoded.name === 'PoolCreated') {
+        [poolId, contributionAmount, maxMembers, token] = decoded.args as unknown as [
+          bigint,
+          bigint,
+          bigint,
+          string,
+        ];
+      }
+    }
+
+    // Fallback for legacy deployment:
+    // PoolCreated(poolId, contributionAmount, maxMembers) without token arg.
+    if (poolId === undefined) {
+      const legacyEventIface = new ethers.Interface([
+        'event PoolCreated(uint256 indexed poolId, uint256 contributionAmount, uint256 maxMembers)',
+      ]);
+      const legacyTopic = legacyEventIface.getEvent('PoolCreated')?.topicHash;
+      const legacyLog = receipt.logs.find(
+        (l) =>
+          l.address.toLowerCase() === equbPoolAddress &&
+          (legacyTopic && l.topics[0] === legacyTopic),
+      );
+      if (legacyLog) {
+        const decodedLegacy = legacyEventIface.parseLog({
+          topics: legacyLog.topics as string[],
+          data: legacyLog.data,
+        });
+        if (decodedLegacy && decodedLegacy.name === 'PoolCreated') {
+          [poolId, contributionAmount, maxMembers] = decodedLegacy.args as unknown as [
+            bigint,
+            bigint,
+            bigint,
+          ];
+        }
+      }
+    }
+
+    if (
+      poolId === undefined ||
+      contributionAmount === undefined ||
+      maxMembers === undefined
+    ) {
+      throw new BadRequestException(
+        'PoolCreated event not found or could not be parsed from transaction logs. Ensure EQUB_POOL_ADDRESS matches the deployed EqubPool contract for this tx.',
+      );
+    }
 
     const onChainPoolId = Number(poolId);
     const existing = await this.poolRepo.findOne({ where: { onChainPoolId } });
@@ -449,12 +1260,38 @@ export class PoolsService {
       currentRound: 1,
       treasury,
       createdBy,
-      token: token && typeof token === 'string' ? token : (token as any)?.toString?.() ?? '0x0000000000000000000000000000000000000000',
+      token:
+        token && typeof token === 'string'
+          ? token
+          : (token as any)?.toString?.() ?? zeroAddr,
       status: 'active',
       txHash: hash.toLowerCase(),
     });
     const saved = await this.poolRepo.save(pool);
     this.logger.log(`createPoolFromCreationTx: created pool id=${saved.id}, onChainPoolId=${onChainPoolId}`);
+
+    if (createdBy) {
+      this.notifications
+        .create(
+          createdBy,
+          'pool_created',
+          'Pool Created',
+          `Your pool was created successfully (Pool #${onChainPoolId}).`,
+          {
+            poolId: saved.id,
+            onChainPoolId,
+            contributionAmount: contributionAmount.toString(),
+            maxMembers: Number(maxMembers),
+            token: pool.token,
+            txHash: hash.toLowerCase(),
+            idempotencyKey: `pool_created:${createdBy.toLowerCase()}:${onChainPoolId}:${hash.toLowerCase()}`,
+          },
+        )
+        .catch((error) => {
+          this.logger.warn(`Failed to emit pool_created notification: ${error?.message ?? error}`);
+        });
+    }
+
     return saved;
   }
 
@@ -551,6 +1388,8 @@ export class PoolsService {
       throw new NotFoundException(`Pool ${poolId} not found`);
     }
 
+    await this.assertSeasonActive(pool);
+
     const contributions = await this.contributionRepo.find({
       where: { poolId, round },
     });
@@ -570,9 +1409,10 @@ export class PoolsService {
     }
 
     pool.currentRound = round + 1;
-    // Persist transient closed status so UI can show round-closed
-    pool.status = 'round-closed';
+    const seasonCompleted = pool.currentRound > pool.maxMembers;
+    pool.status = seasonCompleted ? 'completed' : 'round-closed';
     await this.poolRepo.save(pool);
+    const season = await this.ensureSeasonState(pool);
 
     return {
       poolId,
@@ -580,8 +1420,118 @@ export class PoolsService {
       contributors,
       defaulters,
       nextRound: round + 1,
-      status: 'round-closed',
+      status: seasonCompleted ? 'completed' : 'round-closed',
+      season,
     };
+  }
+
+  async createNextSeason(
+    poolId: string,
+    dto: {
+      caller: string;
+      contributionAmount?: string;
+      token?: string;
+      payoutSplitPct?: number;
+      cadence?: string;
+    },
+  ) {
+    const startedAt = Date.now();
+
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const poolRepo = this.poolRepository(manager);
+        const seasonRepo = this.seasonRepository(manager);
+
+        const pool = await poolRepo.findOne({ where: { id: poolId } });
+        if (!pool) {
+          throw new NotFoundException(`Pool ${poolId} not found`);
+        }
+
+        if (!pool.createdBy) {
+          this.explicitError(
+            'NOT_POOL_ADMIN',
+            'Only pool admin can create a new season.',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+
+        const caller = ethers.getAddress(dto.caller);
+        if (caller.toLowerCase() !== pool.createdBy.toLowerCase()) {
+          this.explicitError(
+            'NOT_POOL_ADMIN',
+            'Only pool admin can create a new season.',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+
+        const latestSeason = await this.ensureSeasonState(pool, manager);
+        if (latestSeason.status !== 'completed') {
+          this.explicitError(
+            'SEASON_NOT_COMPLETED',
+            'Current season must be completed before creating the next season.',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        const contributionAmount =
+          dto.contributionAmount ?? latestSeason.contributionAmount ?? pool.contributionAmount;
+        const token = dto.token ?? latestSeason.token ?? pool.token;
+        const payoutSplitPct = dto.payoutSplitPct ?? latestSeason.payoutSplitPct ?? 20;
+        const cadence = dto.cadence ?? latestSeason.cadence ?? null;
+
+        const newSeason = seasonRepo.create({
+          poolId: pool.id,
+          seasonNumber: latestSeason.seasonNumber + 1,
+          status: 'active',
+          totalRounds: pool.maxMembers,
+          completedRounds: 0,
+          contributionAmount,
+          token,
+          payoutSplitPct,
+          cadence,
+          startedAt: new Date(),
+          completedAt: null,
+        });
+        const savedSeason = await seasonRepo.save(newSeason);
+
+        pool.currentRound = 1;
+        pool.status = 'active';
+        pool.contributionAmount = contributionAmount;
+        pool.token = token;
+        const savedPool = await poolRepo.save(pool);
+
+        return {
+          pool: savedPool,
+          season: savedSeason,
+          round: {
+            roundNumber: 1,
+            status: 'open',
+          },
+        };
+      });
+
+      this.logPoolLifecycleTelemetry({
+        action: 'create_next_season',
+        poolId,
+        seasonId: (result as any)?.season?.id,
+        status: 'success',
+        durationMs: Date.now() - startedAt,
+      });
+
+      return result;
+    } catch (error) {
+      this.logPoolLifecycleTelemetry({
+        action: 'create_next_season',
+        poolId,
+        status: 'error',
+        durationMs: Date.now() - startedAt,
+        errorCode:
+          error instanceof HttpException
+            ? ((error.getResponse() as any)?.code ?? 'HTTP_EXCEPTION')
+            : 'UNHANDLED_ERROR',
+      });
+      throw error;
+    }
   }
 
   async scheduleStream(
@@ -635,13 +1585,16 @@ export class PoolsService {
 
   /**
    * Build unsigned transactions for selecting a winner and scheduling payout.
-   * This validates that all members have contributed for the current round
-   * and that the caller is the pool creator.
+    * Winner selection is chain-authoritative (set on closeRound in EqubPool).
+    * Flow:
+    *  1) Call once to get closeTx and sign/send it.
+    *  2) After close tx confirms, call again to receive scheduleTx with on-chain winner.
    */
   async buildSelectWinner(
     poolId: string,
     dto: {
-      winner: string;
+      phase?: 'auto' | 'close' | 'schedule';
+      winner?: string;
       total: string;
       upfrontPercent: number;
       totalRounds: number;
@@ -650,6 +1603,7 @@ export class PoolsService {
   ) {
     const pool = await this.poolRepo.findOne({ where: { id: poolId }, relations: ['members'] });
     if (!pool) throw new NotFoundException(`Pool ${poolId} not found`);
+    await this.assertSeasonActive(pool);
 
     // Verify caller is pool creator
     if (!pool.createdBy) throw new BadRequestException('Pool creator not known; cannot authorize winner selection');
@@ -660,26 +1614,141 @@ export class PoolsService {
       throw new BadRequestException('Only pool creator may select the winner');
     }
 
-    // Verify all members have contributed for the current round
-    const round = pool.currentRound;
-    const contributions = await this.contributionRepo.find({ where: { poolId: pool.id, round } });
-    const memberCount = pool.members.length;
-    if (contributions.length < memberCount) {
-      throw new BadRequestException('Not all members have contributed for this round');
-    }
-
     if (!pool.onChainPoolId) throw new BadRequestException('Pool not linked to on-chain pool');
 
-    // Build unsigned closeRound tx and scheduleStream tx (for frontend signing)
-    const closeTx = await this.buildCloseRound(pool.onChainPoolId);
-    const scheduleTx = await this.buildScheduleStream(
-      pool.onChainPoolId,
-      dto.winner,
-      dto.total,
-      dto.upfrontPercent,
-      dto.totalRounds,
-    );
+    const phase = dto.phase ?? 'auto';
 
-    return { closeTx, scheduleTx };
+    const shouldBuildCloseTx = phase !== 'schedule';
+    const shouldAttemptSchedule = phase !== 'close';
+
+    if (shouldBuildCloseTx) {
+      this.enforceSelectWinnerCloseCooldown(poolId, callerNorm);
+    }
+
+    let closeTx: UnsignedTxDto | null = null;
+    if (shouldBuildCloseTx) {
+      closeTx = await this.buildCloseRound(pool.onChainPoolId);
+    }
+
+    if (!shouldAttemptSchedule) {
+      return {
+        closeTx,
+        scheduleTx: null,
+        winner: null,
+        round: pool.currentRound,
+        warning: null,
+        nextAction: 'sign_close_tx_then_requery_for_schedule',
+      };
+    }
+
+    const equbPool = this.web3Service.getEqubPool();
+    const zero = '0x0000000000000000000000000000000000000000';
+
+    let closedRound = 0;
+    let winnerRaw: string = zero;
+    let winnerViewUnavailable = false;
+
+    try {
+      const [closedRoundRaw, lastWinnerRaw] =
+        await equbPool.rotatingWinnerForLastClosedRound(pool.onChainPoolId);
+      closedRound = Number(closedRoundRaw);
+      winnerRaw = typeof lastWinnerRaw === 'string' ? lastWinnerRaw : String(lastWinnerRaw);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const likelyNotReady =
+        msg.includes('require(false)') || msg.includes('no data present');
+
+      if (!likelyNotReady) {
+        winnerViewUnavailable = true;
+        this.logger.warn(
+          `rotatingWinnerForLastClosedRound unavailable/reverted for poolId=${pool.onChainPoolId}: ${e}`,
+        );
+      }
+
+      // Fallback for contracts exposing roundWinner/currentRound but not rotatingWinnerForLastClosedRound.
+      try {
+        const currentRoundRaw = await equbPool.currentRound(pool.onChainPoolId);
+        const candidateRound = Number(currentRoundRaw) - 1;
+        if (candidateRound > 0) {
+          const candidateWinner = await equbPool.roundWinner(
+            pool.onChainPoolId,
+            candidateRound,
+          );
+          closedRound = candidateRound;
+          winnerRaw =
+            typeof candidateWinner === 'string'
+              ? candidateWinner
+              : String(candidateWinner);
+          winnerViewUnavailable = false;
+        }
+      } catch (fallbackErr) {
+        const fallbackMsg =
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        const likelyNotReady =
+          fallbackMsg.includes('require(false)') ||
+          fallbackMsg.includes('no data present');
+        if (!likelyNotReady) {
+          this.logger.warn(
+            `roundWinner/currentRound fallback unavailable for poolId=${pool.onChainPoolId}: ${fallbackErr}`,
+          );
+        }
+      }
+    }
+
+    let scheduleTx: UnsignedTxDto | null = null;
+    let winner: string | null = null;
+
+    if (closedRound > 0 && typeof winnerRaw === 'string' && winnerRaw.toLowerCase() !== zero.toLowerCase()) {
+      let alreadyScheduled = false;
+      try {
+        alreadyScheduled = await equbPool.winnerScheduled(
+          pool.onChainPoolId,
+          closedRound,
+        );
+      } catch (e) {
+        this.logger.warn(
+          `winnerScheduled unavailable/reverted for poolId=${pool.onChainPoolId}, round=${closedRound}: ${e}`,
+        );
+      }
+
+      if (!alreadyScheduled) {
+        winner = ethers.getAddress(winnerRaw);
+
+        if (dto.winner) {
+          const provided = ethers.getAddress(dto.winner);
+          if (provided.toLowerCase() !== winner.toLowerCase()) {
+            throw new BadRequestException(
+              `Provided winner does not match on-chain selected winner for closed round ${closedRound}`,
+            );
+          }
+        }
+
+        scheduleTx = await this.buildScheduleStream(
+          pool.onChainPoolId,
+          winner,
+          dto.total,
+          dto.upfrontPercent,
+          dto.totalRounds,
+        );
+      }
+    }
+
+    return {
+      closeTx,
+      scheduleTx,
+      winner,
+      round: closedRound || pool.currentRound,
+      warning:
+        winnerViewUnavailable && !scheduleTx
+          ? 'Winner read method is unavailable on deployed EqubPool. Close the round and requery. If scheduleTx never appears, deploy the latest EqubPool or use manual winner flow.'
+          : null,
+      nextAction: scheduleTx
+        ? 'sign_schedule_tx'
+        : winnerViewUnavailable
+          ? 'sign_close_tx_then_requery_or_upgrade_contract'
+          : phase === 'schedule'
+            ? 'await_close_confirmation_then_requery_schedule'
+            : 'sign_close_tx_then_requery_for_schedule',
+    };
   }
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 
 class WithdrawScreen extends StatefulWidget {
   final bool standalone;
@@ -34,14 +36,12 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
     if (widget.standalone) {
       return Container(
-        decoration:
-            const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
             leading: IconButton(
-              icon:
-                  const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.maybePop(context),
             ),
             title: const Text('Withdraw'),
@@ -88,22 +88,20 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     final to = _accountController.text.trim();
     final amount = _amountController.text.trim();
     if (to.isEmpty || amount.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
+      AppSnackbarService.instance.error(
+        message: 'Please fill in all fields',
+        dedupeKey: 'withdraw_missing_fields',
       );
       return;
     }
 
     setState(() => _isSubmitting = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Opening MetaMask to confirm…'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    AppSnackbarService.instance.info(
+      message: 'Opening MetaMask to confirm…',
+      dedupeKey: 'withdraw_metamask_opening',
+      duration: const Duration(seconds: 2),
+    );
 
     final txHash = await wallet.buildAndSignWithdraw(
       from: auth.walletAddress!,
@@ -117,27 +115,21 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => _isSubmitting = false);
 
     if (txHash != null) {
+      context.read<NotificationProvider>().triggerFastSync();
       await wallet.refreshAfterTx(auth.walletAddress!, token: _currency);
       if (!mounted) return;
 
       setState(() => _txResult = 'Sent! Tx: ${txHash.substring(0, 10)}…');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Withdraw sent. Tx: $txHash'),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'OK',
-            onPressed: () {},
-          ),
-        ),
+      AppSnackbarService.instance.success(
+        message: 'Withdraw sent. Tx: $txHash',
+        dedupeKey: 'withdraw_success_$txHash',
+        duration: const Duration(seconds: 4),
       );
     } else {
       setState(() => _txResult = wallet.errorMessage ?? 'Withdraw failed');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(wallet.errorMessage ?? 'Withdraw failed'),
-          backgroundColor: Colors.red.shade700,
-        ),
+      AppSnackbarService.instance.error(
+        message: wallet.errorMessage ?? 'Withdraw failed',
+        dedupeKey: 'withdraw_failed',
       );
     }
   }

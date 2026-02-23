@@ -13,10 +13,19 @@ export type NotificationType =
   | 'contribution_confirmed'
   | 'default_triggered'
   | 'collateral_slashed'
+  | 'collateral_deposit_confirmed'
+  | 'collateral_released'
   | 'pool_joined'
+  | 'pool_created'
   | 'stream_frozen'
+  | 'transfer_built'
+  | 'withdraw_built'
+  | 'faucet_credited'
+  | 'wallet_bound'
   | 'credit_updated'
   | 'system';
+
+export type NotificationStatus = 'pending' | 'confirmed' | 'failed';
 
 @Entity('notifications')
 export class Notification {

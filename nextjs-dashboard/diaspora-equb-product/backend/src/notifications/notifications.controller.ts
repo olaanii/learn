@@ -30,6 +30,38 @@ export class NotificationsController {
     return this.service.findForWallet(wallet, +limit, +offset);
   }
 
+  @Get('incremental')
+  @ApiOperation({
+    summary:
+      'Get notifications created after a cursor (replay-safe incremental sync)',
+  })
+  async incremental(
+    @Req() req: any,
+    @Query('afterCreatedAt') afterCreatedAt?: string,
+    @Query('afterId') afterId?: string,
+    @Query('limit') limit = 50,
+  ) {
+    const wallet: string = req.user?.walletAddress;
+    if (!wallet) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    let parsedAfter: Date | undefined;
+    if (afterCreatedAt) {
+      const date = new Date(afterCreatedAt);
+      if (!Number.isNaN(date.getTime())) {
+        parsedAfter = date;
+      }
+    }
+
+    return this.service.findForWalletIncremental(
+      wallet,
+      parsedAfter,
+      afterId,
+      +limit,
+    );
+  }
+
   @Get('unread-count')
   @ApiOperation({ summary: 'Get unread notification count' })
   async unreadCount(@Req() req: any) {
@@ -62,11 +94,13 @@ export class NotificationsController {
     summary: 'SSE stream of real-time notifications for the authenticated user',
   })
   stream(@Req() req: any): Observable<MessageEvent> {
-    const wallet: string = req.user?.walletAddress;
+    const wallet: string = String(req.user?.walletAddress || '')
+      .trim()
+      .toLowerCase();
     return this.service.events$.pipe(
-      filter((evt) => evt.walletAddress === wallet),
+      filter((evt) => evt.walletAddress.toLowerCase() === wallet),
       map((evt) => ({
-        data: JSON.stringify(evt.notification),
+        data: evt.notification,
       })),
     );
   }

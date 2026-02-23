@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 contract TierRegistry {
+    address public owner;
+
     struct TierConfig {
         uint256 maxPoolSize;
         uint256 collateralRateBps;
@@ -12,12 +14,21 @@ contract TierRegistry {
 
     event TierConfigured(uint8 indexed tier, uint256 maxPoolSize, uint256 collateralRateBps, bool enabled);
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "only owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
     function configureTier(
         uint8 tier,
         uint256 maxPoolSize,
         uint256 collateralRateBps,
         bool enabled
-    ) external {
+    ) external onlyOwner {
         tiers[tier] = TierConfig({
             maxPoolSize: maxPoolSize,
             collateralRateBps: collateralRateBps,

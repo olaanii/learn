@@ -26,19 +26,16 @@ class WalletProvider extends ChangeNotifier {
   WalletProvider(this._api, this._walletService);
 
   /// The formatted balance for the currently selected token.
-  String get balance =>
-      _balances[_selectedToken]?['formatted'] ?? '0.00';
+  String get balance => _balances[_selectedToken]?['formatted'] ?? '0.00';
 
   /// The raw balance for the currently selected token.
-  String get rawBalance =>
-      _balances[_selectedToken]?['balance'] ?? '0';
+  String get rawBalance => _balances[_selectedToken]?['balance'] ?? '0';
 
   /// The currently selected token symbol.
   String get token => _selectedToken;
 
   /// Decimals for the currently selected token.
-  int get decimals =>
-      _balances[_selectedToken]?['decimals'] ?? 6;
+  int get decimals => _balances[_selectedToken]?['decimals'] ?? 6;
 
   /// All loaded token balances (for multi-token display).
   Map<String, Map<String, dynamic>> get allBalances => _balances;
@@ -101,38 +98,39 @@ class WalletProvider extends ChangeNotifier {
   }
 
   /// Load transaction history for a wallet.
-  /// Fetches USDC and USDT independently so one failure does not block the other.
-  /// Merges and sorts by block number.
-  Future<void> loadTransactions(String walletAddress,
-      {String? token, int limit = 50}) async {
+  /// Fetches transactions using optional server-side filters.
+  Future<void> loadTransactions(
+    String walletAddress, {
+    String token = 'ALL',
+    int limit = 50,
+    int? fromTimestamp,
+    int? toTimestamp,
+    String? direction,
+    String? status,
+    String? cursor,
+  }) async {
     _startLoading();
     _errorMessage = null;
     _transactions = [];
 
     try {
-      if (token != null) {
-        final data = await _api.getTokenTransactions(
-          walletAddress,
-          token: token,
-          limit: limit,
-        );
-        _transactions = data.whereType<Map<String, dynamic>>().toList();
-      } else {
-        try {
-          final data = await _api.getTokenTransactions(
-            walletAddress,
-            token: 'USDC',
-            limit: limit,
-          );
-          final list = data.whereType<Map<String, dynamic>>().toList();
-          list.sort((a, b) {
-            final bBlock = (b['blockNumber'] as num?) ?? 0;
-            final aBlock = (a['blockNumber'] as num?) ?? 0;
-            return bBlock.compareTo(aBlock);
-          });
-          _transactions = list.take(limit).toList();
-        } catch (_) {}
-      }
+      final data = await _api.getTokenTransactions(
+        walletAddress,
+        token: token,
+        limit: limit,
+        fromTimestamp: fromTimestamp,
+        toTimestamp: toTimestamp,
+        direction: direction,
+        status: status,
+        cursor: cursor,
+      );
+      final list = data.whereType<Map<String, dynamic>>().toList();
+      list.sort((a, b) {
+        final bBlock = (b['blockNumber'] as num?) ?? 0;
+        final aBlock = (a['blockNumber'] as num?) ?? 0;
+        return bBlock.compareTo(aBlock);
+      });
+      _transactions = list.take(limit).toList();
     } catch (e) {
       _errorMessage = 'Failed to load transactions';
     }
@@ -166,7 +164,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Please connect via WalletConnect.';
+        _errorMessage =
+            'Wallet not connected. Please connect via WalletConnect.';
         _stopLoading();
         return null;
       }
@@ -221,7 +220,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage =
+            'Wallet not connected. Connect via WalletConnect to sign.';
         _stopLoading();
         return null;
       }
@@ -252,7 +252,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage =
+            'Wallet not connected. Connect via WalletConnect to sign.';
         _stopLoading();
         return null;
       }
@@ -288,7 +289,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage =
+            'Wallet not connected. Connect via WalletConnect to sign.';
         _stopLoading();
         return null;
       }
@@ -370,7 +372,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage =
+            'Wallet not connected. Connect via WalletConnect to sign.';
         _stopLoading();
         return null;
       }
@@ -410,7 +413,8 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage =
+            'Wallet not connected. Connect via WalletConnect to sign.';
         _stopLoading();
         return null;
       }

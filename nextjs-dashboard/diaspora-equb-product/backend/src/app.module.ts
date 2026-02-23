@@ -20,6 +20,7 @@ import { TokenModule } from './token/token.module';
 import { HealthModule } from './health/health.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     HealthModule,
     IndexerModule,
     NotificationsModule,
+    AnalyticsModule,
   ],
   providers: [
     // Global JWT authentication guard

@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { Identity } from '../entities/identity.entity';
 import { Web3Service, UnsignedTxDto } from '../web3/web3.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class IdentityService {
@@ -18,6 +19,7 @@ export class IdentityService {
     @InjectRepository(Identity)
     private readonly identityRepo: Repository<Identity>,
     private readonly web3Service: Web3Service,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async bindWallet(identityHash: string, walletAddress: string) {
@@ -46,7 +48,7 @@ export class IdentityService {
     }
     if (
       existingByHash.walletAddress &&
-      existingByHash.walletAddress !== walletAddress
+      existingByHash.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
     ) {
       throw new ConflictException(
         'Identity is already bound to another wallet',
@@ -57,6 +59,22 @@ export class IdentityService {
     existingByHash.walletAddress = walletAddress;
     existingByHash.bindingStatus = 'bound';
     await this.identityRepo.save(existingByHash);
+
+    this.notifications
+      .create(
+        walletAddress,
+        'wallet_bound',
+        'Wallet Bound',
+        'Your wallet has been successfully bound to your verified identity.',
+        {
+          identityHash,
+          walletAddress,
+          idempotencyKey: `wallet_bound:${walletAddress.toLowerCase()}:${identityHash.toLowerCase()}`,
+        },
+      )
+      .catch((error) => {
+        this.logger.warn(`Failed to emit wallet_bound notification: ${error?.message ?? error}`);
+      });
 
     this.logger.log(`Wallet ${walletAddress} bound to identity ${identityHash}`);
 
@@ -85,7 +103,7 @@ export class IdentityService {
     if (!identity) {
       throw new NotFoundException('Identity not found');
     }
-    if (identity.walletAddress !== walletAddress) {
+    if (identity.walletAddress?.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new ConflictException('Wallet does not match bound identity');
     }
 
@@ -116,7 +134,7 @@ export class IdentityService {
     if (!identity) {
       throw new NotFoundException('Identity not found');
     }
-    if (identity.walletAddress !== walletAddress) {
+    if (identity.walletAddress?.toLowerCase() !== walletAddress.toLowerCase()) {
       throw new ConflictException('Wallet does not match bound identity');
     }
 

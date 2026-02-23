@@ -65,9 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           },
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
+            physics: BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 4),
         ],
         const Spacer(),
-        _buildHeaderIcon(Icons.show_chart_rounded),
+        GestureDetector(
+          onTap: () => context.push('/equb-insights'),
+          child: _buildHeaderIcon(Icons.show_chart_rounded),
+        ),
         const SizedBox(width: 8),
         _buildNotificationBell(context),
         const SizedBox(width: 8),

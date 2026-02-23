@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { Collateral } from '../entities/collateral.entity';
 import { Web3Service, UnsignedTxDto } from '../web3/web3.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const ERC20_IFACE = new ethers.Interface([
   'function transfer(address to, uint256 amount) returns (bool)',
@@ -27,6 +28,7 @@ export class CollateralService {
     private readonly collateralRepo: Repository<Collateral>,
     private readonly web3Service: Web3Service,
     private readonly configService: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {
     this.tokenAddresses = {
       USDC: this.configService.get<string>(
@@ -158,6 +160,24 @@ export class CollateralService {
     collateral.lockedAmount = (currentLocked + lockAmount).toString();
     await this.collateralRepo.save(collateral);
 
+    this.notifications
+      .create(
+        walletAddress,
+        'collateral_deposit_confirmed',
+        'Collateral Deposit Confirmed',
+        `${amount} ${tokenSymbol.toUpperCase()} collateral deposit was confirmed.`,
+        {
+          amount,
+          token: tokenSymbol.toUpperCase(),
+          txHash,
+          lockedAmount: collateral.lockedAmount,
+          idempotencyKey: `collateral_deposit_confirmed:${walletAddress.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}:${txHash.toLowerCase()}`,
+        },
+      )
+      .catch((error) => {
+        this.logger.warn(`Failed to emit collateral_deposit_confirmed notification: ${error?.message ?? error}`);
+      });
+
     return {
       walletAddress,
       amount,
@@ -178,62 +198,105 @@ export class CollateralService {
     amount: string,
     tokenSymbol: string = 'USDC',
   ) {
-    const signer = this.web3Service.getDeployerSigner();
-    if (!signer) {
-      throw new BadRequestException(
-        'Deployer not configured — cannot release token collateral.',
+    try {
+      const signer = this.web3Service.getDeployerSigner();
+      if (!signer) {
+        throw new BadRequestException(
+          'Deployer not configured — cannot release token collateral.',
+        );
+      }
+
+      const tokenAddress = this.getTokenAddress(tokenSymbol);
+      const decimals = await this.getTokenDecimals(tokenSymbol);
+      const amountWei = ethers.parseUnits(amount, decimals);
+
+      // Verify the user has enough locked collateral
+      const collateral = await this.collateralRepo.findOne({
+        where: { walletAddress },
+      });
+      if (!collateral) {
+        throw new NotFoundException('No collateral found for this wallet');
+      }
+
+      const currentLocked = this.parseAmountToBigInt(collateral.lockedAmount);
+      const releaseAmt = this.parseAmountToBigInt(amount);
+      if (releaseAmt > currentLocked) {
+        throw new BadRequestException(
+          `Release amount exceeds locked balance (locked: ${collateral.lockedAmount})`,
+        );
+      }
+
+      this.logger.log(
+        `Releasing token collateral: ${amount} ${tokenSymbol} → ${walletAddress}`,
       );
-    }
 
-    const tokenAddress = this.getTokenAddress(tokenSymbol);
-    const decimals = await this.getTokenDecimals(tokenSymbol);
-    const amountWei = ethers.parseUnits(amount, decimals);
+      const contract = new ethers.Contract(tokenAddress, ERC20_IFACE, signer);
+      const tx = await contract.transfer(walletAddress, amountWei);
+      const receipt = await tx.wait();
 
-    // Verify the user has enough locked collateral
-    const collateral = await this.collateralRepo.findOne({
-      where: { walletAddress },
-    });
-    if (!collateral) {
-      throw new NotFoundException('No collateral found for this wallet');
-    }
-
-    const currentLocked = this.parseAmountToBigInt(collateral.lockedAmount);
-    const releaseAmt = this.parseAmountToBigInt(amount);
-    if (releaseAmt > currentLocked) {
-      throw new BadRequestException(
-        `Release amount exceeds locked balance (locked: ${collateral.lockedAmount})`,
+      // Update DB
+      collateral.lockedAmount = (currentLocked - releaseAmt).toString();
+      const currentAvailable = this.parseAmountToBigInt(
+        collateral.availableBalance,
       );
+      collateral.availableBalance = (currentAvailable + releaseAmt).toString();
+      await this.collateralRepo.save(collateral);
+
+      this.logger.log(
+        `Token collateral released in block ${receipt.blockNumber}: ${tx.hash}`,
+      );
+
+      this.notifications
+        .create(
+          walletAddress,
+          'collateral_released',
+          'Collateral Released',
+          `${amount} ${tokenSymbol.toUpperCase()} collateral has been released to your wallet.`,
+          {
+            amount,
+            token: tokenSymbol.toUpperCase(),
+            txHash: tx.hash,
+            status: 'confirmed',
+            kind: 'transaction',
+            lockedAmount: collateral.lockedAmount,
+            availableBalance: collateral.availableBalance,
+            idempotencyKey: `collateral_released:${walletAddress.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}:${tx.hash.toLowerCase()}`,
+          },
+        )
+        .catch((error) => {
+          this.logger.warn(`Failed to emit collateral_released notification: ${error?.message ?? error}`);
+        });
+
+      return {
+        walletAddress,
+        amount,
+        tokenSymbol,
+        txHash: tx.hash,
+        lockedAmount: collateral.lockedAmount,
+        availableBalance: collateral.availableBalance,
+        status: 'released',
+      };
+    } catch (error) {
+      this.notifications
+        .create(
+          walletAddress,
+          'collateral_released',
+          'Collateral Release Failed',
+          `Collateral release failed for ${amount} ${tokenSymbol.toUpperCase()}.`,
+          {
+            amount,
+            token: tokenSymbol.toUpperCase(),
+            status: 'failed',
+            kind: 'transaction',
+            error: (error as any)?.message ?? String(error),
+            idempotencyKey: `collateral_released_failed:${walletAddress.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((emitError) => {
+          this.logger.warn(`Failed to emit collateral release failure notification: ${emitError?.message ?? emitError}`);
+        });
+      throw error;
     }
-
-    this.logger.log(
-      `Releasing token collateral: ${amount} ${tokenSymbol} → ${walletAddress}`,
-    );
-
-    const contract = new ethers.Contract(tokenAddress, ERC20_IFACE, signer);
-    const tx = await contract.transfer(walletAddress, amountWei);
-    const receipt = await tx.wait();
-
-    // Update DB
-    collateral.lockedAmount = (currentLocked - releaseAmt).toString();
-    const currentAvailable = this.parseAmountToBigInt(
-      collateral.availableBalance,
-    );
-    collateral.availableBalance = (currentAvailable + releaseAmt).toString();
-    await this.collateralRepo.save(collateral);
-
-    this.logger.log(
-      `Token collateral released in block ${receipt.blockNumber}: ${tx.hash}`,
-    );
-
-    return {
-      walletAddress,
-      amount,
-      tokenSymbol,
-      txHash: tx.hash,
-      lockedAmount: collateral.lockedAmount,
-      availableBalance: collateral.availableBalance,
-      status: 'released',
-    };
   }
 
   // ─── Read Methods ──────────────────────────────────────────────────────────

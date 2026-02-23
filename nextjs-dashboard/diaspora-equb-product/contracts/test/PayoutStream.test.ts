@@ -7,6 +7,7 @@ describe('PayoutStream', () => {
   let stream: PayoutStream;
   let owner: SignerWithAddress;
   let beneficiary: SignerWithAddress;
+  let attacker: SignerWithAddress;
 
   const POOL_ID = 1;
   const TOTAL = ethers.parseEther('100');
@@ -14,10 +15,43 @@ describe('PayoutStream', () => {
   const TOTAL_ROUNDS = 8;
 
   beforeEach(async () => {
-    [owner, beneficiary] = await ethers.getSigners();
+    [owner, beneficiary, attacker] = await ethers.getSigners();
     const Factory = await ethers.getContractFactory('PayoutStream');
     stream = await Factory.deploy();
     await stream.waitForDeployment();
+    await stream.setEqubPool(owner.address);
+  });
+
+  describe('access control', () => {
+    it('should allow only owner to set equb pool', async () => {
+      const anotherPool = beneficiary.address;
+      const fresh = await (await ethers.getContractFactory('PayoutStream')).deploy();
+      await fresh.waitForDeployment();
+
+      await expect(
+        fresh.connect(attacker).setEqubPool(anotherPool),
+      ).to.be.revertedWith('only owner');
+
+      await expect(fresh.setEqubPool(owner.address))
+        .to.emit(fresh, 'EqubPoolSet')
+        .withArgs(owner.address);
+    });
+
+    it('should block non-equbPool from mutating streams', async () => {
+      await expect(
+        stream.connect(attacker).createStream(POOL_ID, beneficiary.address, TOTAL, UPFRONT_PERCENT, TOTAL_ROUNDS),
+      ).to.be.revertedWith('only equb pool');
+
+      await stream.createStream(POOL_ID, beneficiary.address, TOTAL, UPFRONT_PERCENT, TOTAL_ROUNDS);
+
+      await expect(
+        stream.connect(attacker).releaseRound(POOL_ID, beneficiary.address),
+      ).to.be.revertedWith('only equb pool');
+
+      await expect(
+        stream.connect(attacker).freezeRemaining(POOL_ID, beneficiary.address),
+      ).to.be.revertedWith('only equb pool');
+    });
   });
 
   describe('createStream', () => {

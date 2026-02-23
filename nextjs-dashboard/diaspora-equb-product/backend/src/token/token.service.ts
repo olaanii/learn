@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
 import { IndexerService } from '../indexer/indexer.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Standard ERC-20 ABI for balance and transfer
 const ERC20_ABI = [
@@ -20,6 +21,18 @@ const ERC20_ABI = [
 
 const ERC20_TRANSFER_SELECTOR = '0xa9059cbb';
 
+type TransactionDirection = 'sent' | 'received';
+type TransactionStatus = 'success' | 'failed';
+
+interface TransactionFilters {
+  fromTimestamp?: number;
+  toTimestamp?: number;
+  direction?: TransactionDirection;
+  status?: TransactionStatus;
+  token?: string;
+  cursor?: string;
+}
+
 @Injectable()
 export class TokenService {
   private readonly logger = new Logger(TokenService.name);
@@ -30,6 +43,7 @@ export class TokenService {
     private readonly web3Service: Web3Service,
     private readonly configService: ConfigService,
     private readonly indexerService: IndexerService,
+    private readonly notifications: NotificationsService,
   ) {
     this.chainId = this.configService.get<number>('CHAIN_ID', 102031);
 
@@ -121,6 +135,7 @@ export class TokenService {
     walletAddress: string,
     tokenSymbol: string = 'USDC',
     limit: number = 50,
+    filters: TransactionFilters = {},
   ): Promise<any[]> {
     const limitNum = Number(limit) || 50;
     try {
@@ -139,8 +154,14 @@ export class TokenService {
         if (h && !byHash.has(h)) byHash.set(h, tx);
       }
       const merged = Array.from(byHash.values());
-      merged.sort((a, b) => (b.blockNumber || 0) - (a.blockNumber || 0));
-      const out = merged.slice(0, limitNum);
+      const out = this.applyTransactionFilters(
+        merged,
+        {
+          ...filters,
+          token: tokenSymbol,
+        },
+        limitNum,
+      );
       this.logger.log(
         `[Blockscout] merged ${txList.length} txlist + ${tokenTxList.length} tokentx => ${out.length} unique`,
       );
@@ -155,6 +176,7 @@ export class TokenService {
         walletAddress,
         tokenSymbol,
         limitNum,
+        filters,
       );
     } catch (err) {
       this.logger.warn(
@@ -317,6 +339,7 @@ export class TokenService {
     walletAddress: string,
     tokenSymbol: string,
     limit: number,
+    filters: TransactionFilters = {},
   ): Promise<any[]> {
     try {
       // Normalize address so event filters match (RPC/index can be case-sensitive)
@@ -415,6 +438,7 @@ export class TokenService {
           token: tokenSymbol.toUpperCase(),
           txHash: event.transactionHash,
           blockNumber: event.blockNumber,
+          isError: false,
         })),
         ...allReceived.map((event: any) => ({
           type: 'received',
@@ -425,18 +449,14 @@ export class TokenService {
           token: tokenSymbol.toUpperCase(),
           txHash: event.transactionHash,
           blockNumber: event.blockNumber,
+          isError: false,
         })),
       ];
 
       allEvents.sort((a, b) => b.blockNumber - a.blockNumber);
-      const trimmed = allEvents.slice(0, limit);
 
-      this.logger.log(
-        `Found ${allEvents.length} ${tokenSymbol} events, returning top ${trimmed.length}`,
-      );
-
-      // Resolve timestamps for each unique block
-      const uniqueBlocks = [...new Set(trimmed.map((t) => t.blockNumber))];
+      // Resolve timestamps for each unique block before applying time filters
+      const uniqueBlocks = [...new Set(allEvents.map((t) => t.blockNumber))];
       const blockTimestamps: Record<number, number> = {};
       await Promise.all(
         uniqueBlocks.map(async (bn) => {
@@ -449,18 +469,81 @@ export class TokenService {
         }),
       );
 
-      return trimmed.map((tx) => ({
+      const withTimestamps = allEvents.map((tx) => ({
         ...tx,
         timestamp: blockTimestamps[tx.blockNumber]
           ? blockTimestamps[tx.blockNumber] * 1000
           : null,
       }));
+
+      const filtered = this.applyTransactionFilters(
+        withTimestamps,
+        {
+          ...filters,
+          token: tokenSymbol,
+        },
+        limit,
+      );
+
+      this.logger.log(
+        `Found ${allEvents.length} ${tokenSymbol} events, returning ${filtered.length} after filters`,
+      );
+
+      return filtered;
     } catch (error) {
       this.logger.warn(
         `Failed to fetch on-chain transactions for ${walletAddress}: ${error.message}`,
       );
       return [];
     }
+  }
+
+  private applyTransactionFilters(
+    transactions: any[],
+    filters: TransactionFilters,
+    limit: number,
+  ): any[] {
+    const tokenFilter = (filters.token || '').trim().toUpperCase();
+    const fromTs = Number(filters.fromTimestamp);
+    const toTs = Number(filters.toTimestamp);
+
+    const filtered = transactions.filter((tx) => {
+      const txToken = String(tx?.token || '').toUpperCase();
+      if (tokenFilter && tokenFilter !== 'ALL' && txToken !== tokenFilter) {
+        return false;
+      }
+
+      if (filters.direction && tx?.type !== filters.direction) {
+        return false;
+      }
+
+      if (filters.status) {
+        const failed = tx?.isError === true || tx?.isError === '1';
+        if (filters.status === 'failed' && !failed) return false;
+        if (filters.status === 'success' && failed) return false;
+      }
+
+      const timestamp = Number(tx?.timestamp);
+      if (Number.isFinite(fromTs)) {
+        if (!Number.isFinite(timestamp) || timestamp < fromTs) return false;
+      }
+      if (Number.isFinite(toTs)) {
+        if (!Number.isFinite(timestamp) || timestamp > toTs) return false;
+      }
+
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      const bTs = Number(b?.timestamp);
+      const aTs = Number(a?.timestamp);
+      if (Number.isFinite(aTs) && Number.isFinite(bTs) && aTs !== bTs) {
+        return bTs - aTs;
+      }
+      return (b?.blockNumber || 0) - (a?.blockNumber || 0);
+    });
+
+    return filtered.slice(0, limit);
   }
 
   /**
@@ -480,38 +563,144 @@ export class TokenService {
     tokenAddress: string;
     estimatedGas: string;
   }> {
-    const tokenAddress = this.getTokenAddress(tokenSymbol);
-    const contract = this.getTokenContract(tokenSymbol);
-    const decimals = await contract.decimals();
-    const amountWei = ethers.parseUnits(amount, decimals);
-
-    // Encode the transfer function call
-    const iface = new ethers.Interface(ERC20_ABI);
-    const data = iface.encodeFunctionData('transfer', [to, amountWei]);
-
-    // Estimate gas
-    let estimatedGas = '60000'; // Default fallback
     try {
-      const gasEstimate = await this.web3Service
-        .getProvider()
-        .estimateGas({
-          from,
-          to: tokenAddress,
-          data,
-        });
-      estimatedGas = gasEstimate.toString();
-    } catch (_e) {
-      this.logger.warn('Gas estimation failed, using default');
-    }
+      const tokenAddress = this.getTokenAddress(tokenSymbol);
+      const contract = this.getTokenContract(tokenSymbol);
+      const decimals = await contract.decimals();
+      const amountWei = ethers.parseUnits(amount, decimals);
 
-    return {
-      to: tokenAddress,
-      data,
-      value: '0',
-      chainId: this.chainId,
-      tokenAddress,
-      estimatedGas,
-    };
+      // Encode the transfer function call
+      const iface = new ethers.Interface(ERC20_ABI);
+      const data = iface.encodeFunctionData('transfer', [to, amountWei]);
+
+      // Estimate gas
+      let estimatedGas = '60000'; // Default fallback
+      try {
+        const gasEstimate = await this.web3Service
+          .getProvider()
+          .estimateGas({
+            from,
+            to: tokenAddress,
+            data,
+          });
+        estimatedGas = gasEstimate.toString();
+      } catch (_e) {
+        this.logger.warn('Gas estimation failed, using default');
+      }
+
+      this.notifications
+        .create(
+          from,
+          'transfer_built',
+          'Transfer Prepared',
+          `Transfer of ${amount} ${tokenSymbol.toUpperCase()} prepared for signing.`,
+          {
+            from,
+            to,
+            token: tokenSymbol.toUpperCase(),
+            amount,
+            status: 'pending',
+            kind: 'transaction',
+            idempotencyKey: `transfer_built:${from.toLowerCase()}:${to.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((error) => {
+          this.logger.warn(`Failed to emit transfer_built notification: ${error?.message ?? error}`);
+        });
+
+      return {
+        to: tokenAddress,
+        data,
+        value: '0',
+        chainId: this.chainId,
+        tokenAddress,
+        estimatedGas,
+      };
+    } catch (error) {
+      this.notifications
+        .create(
+          from,
+          'transfer_built',
+          'Transfer Failed',
+          `Transfer build failed for ${amount} ${tokenSymbol.toUpperCase()}.`,
+          {
+            from,
+            to,
+            token: tokenSymbol.toUpperCase(),
+            amount,
+            status: 'failed',
+            kind: 'transaction',
+            error: (error as any)?.message ?? String(error),
+            idempotencyKey: `transfer_built_failed:${from.toLowerCase()}:${to.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((emitError) => {
+          this.logger.warn(`Failed to emit transfer failure notification: ${emitError?.message ?? emitError}`);
+        });
+      throw error;
+    }
+  }
+
+  async buildWithdraw(
+    from: string,
+    to: string,
+    amount: string,
+    tokenSymbol: string = 'USDC',
+  ): Promise<{
+    to: string;
+    data: string;
+    value: string;
+    chainId: number;
+    tokenAddress: string;
+    estimatedGas: string;
+  }> {
+    try {
+      const unsignedTx = await this.buildTransfer(from, to, amount, tokenSymbol);
+
+      this.notifications
+        .create(
+          from,
+          'withdraw_built',
+          'Withdraw Prepared',
+          `Withdraw of ${amount} ${tokenSymbol.toUpperCase()} prepared for signing.`,
+          {
+            from,
+            to,
+            token: tokenSymbol.toUpperCase(),
+            amount,
+            status: 'pending',
+            kind: 'transaction',
+            idempotencyKey: `withdraw_built:${from.toLowerCase()}:${to.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((error) => {
+          this.logger.warn(`Failed to emit withdraw_built notification: ${error?.message ?? error}`);
+        });
+
+      return unsignedTx;
+    } catch (error) {
+      this.notifications
+        .create(
+          from,
+          'withdraw_built',
+          'Withdraw Failed',
+          `Withdraw build failed for ${amount} ${tokenSymbol.toUpperCase()}.`,
+          {
+            from,
+            to,
+            token: tokenSymbol.toUpperCase(),
+            amount,
+            status: 'failed',
+            kind: 'transaction',
+            error: (error as any)?.message ?? String(error),
+            idempotencyKey: `withdraw_built_failed:${from.toLowerCase()}:${to.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((emitError) => {
+          this.logger.warn(`Failed to emit withdraw failure notification: ${emitError?.message ?? emitError}`);
+        });
+      throw error;
+    }
   }
 
   /**
@@ -557,6 +746,25 @@ export class TokenService {
         `[FAUCET] Confirmed in block ${receipt.blockNumber}. ${amount} ${tokenSymbol} minted to ${walletAddress}`,
       );
 
+      this.notifications
+        .create(
+          walletAddress,
+          'faucet_credited',
+          'Faucet Credited',
+          `${amount} ${tokenSymbol.toUpperCase()} has been credited to your wallet.`,
+          {
+            amount: amount.toString(),
+            token: tokenSymbol.toUpperCase(),
+            txHash: tx.hash,
+            status: 'confirmed',
+            kind: 'transaction',
+            idempotencyKey: `faucet_credited:${walletAddress.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}:${tx.hash.toLowerCase()}`,
+          },
+        )
+        .catch((error) => {
+          this.logger.warn(`Failed to emit faucet_credited notification: ${error?.message ?? error}`);
+        });
+
       return {
         success: true,
         txHash: tx.hash,
@@ -567,6 +775,27 @@ export class TokenService {
       };
     } catch (error) {
       this.logger.error(`[FAUCET] Mint failed: ${error.message}`);
+
+      this.notifications
+        .create(
+          walletAddress,
+          'system',
+          'Faucet Failed',
+          `Faucet credit failed for ${amount} ${tokenSymbol.toUpperCase()}.`,
+          {
+            amount: amount.toString(),
+            token: tokenSymbol.toUpperCase(),
+            status: 'failed',
+            kind: 'transaction',
+            operation: 'faucet_credit',
+            error: (error as any)?.message ?? String(error),
+            idempotencyKey: `faucet_failed:${walletAddress.toLowerCase()}:${tokenSymbol.toUpperCase()}:${amount}`,
+          },
+        )
+        .catch((emitError) => {
+          this.logger.warn(`Failed to emit faucet failure notification: ${emitError?.message ?? emitError}`);
+        });
+
       throw new Error(
         `Faucet mint failed: ${error.shortMessage || error.message}. Make sure the deployer has CTC for gas.`,
       );

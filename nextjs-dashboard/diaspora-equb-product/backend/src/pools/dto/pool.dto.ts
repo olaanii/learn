@@ -112,3 +112,40 @@ export class ScheduleStreamDto {
   @IsPositive()
   totalRounds: number;
 }
+
+export class CreateSeasonDto {
+  @ApiProperty({ description: 'Caller wallet address (must be pool creator/admin)' })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'caller must be a valid EVM address' })
+  caller: string;
+
+  @ApiPropertyOptional({
+    description: 'Contribution amount in wei (optional; defaults to previous season/pool value)',
+    example: '1000000000000000000',
+  })
+  @IsOptional()
+  @IsString()
+  contributionAmount?: string;
+
+  @ApiPropertyOptional({
+    description: 'ERC-20 token address (optional; defaults to previous season/pool token)',
+    example: '0x0000000000000000000000000000000000000000',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'token must be a valid EVM address' })
+  token?: string;
+
+  @ApiPropertyOptional({ description: 'Upfront payout split percent', example: 20, minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  payoutSplitPct?: number;
+
+  @ApiPropertyOptional({ description: 'Cadence label for season', example: 'weekly' })
+  @IsOptional()
+  @IsString()
+  cadence?: string;
+}

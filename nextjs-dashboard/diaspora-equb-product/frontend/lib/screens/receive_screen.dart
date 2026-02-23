@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/app_snackbar_service.dart';
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
@@ -187,11 +188,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       onTap: () {
         if (walletAddr != null) {
           Clipboard.setData(ClipboardData(text: walletAddr));
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Wallet address copied'),
-              duration: Duration(seconds: 2),
-            ),
+          AppSnackbarService.instance.info(
+            message: 'Wallet address copied',
+            dedupeKey: 'receive_wallet_address_copied',
+            duration: const Duration(seconds: 2),
           );
         }
       },
@@ -340,11 +340,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         _buildActionItem(Icons.share_outlined, 'Share', () {
           if (walletAddr != null) {
             Clipboard.setData(ClipboardData(text: walletAddr));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Wallet address copied to share'),
-                duration: Duration(seconds: 2),
-              ),
+            AppSnackbarService.instance.info(
+              message: 'Wallet address copied to share',
+              dedupeKey: 'receive_wallet_address_share_copy',
+              duration: const Duration(seconds: 2),
             );
           }
         }),

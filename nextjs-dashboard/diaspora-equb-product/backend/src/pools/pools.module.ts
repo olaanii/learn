@@ -6,10 +6,23 @@ import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
 import { PayoutStreamEntity } from '../entities/payout-stream.entity';
+import { Season } from '../entities/season.entity';
+import { Round } from '../entities/round.entity';
+import { IdempotencyKey } from '../entities/idempotency-key.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Pool, PoolMember, Contribution, PayoutStreamEntity]),
+    TypeOrmModule.forFeature([
+      Pool,
+      PoolMember,
+      Contribution,
+      PayoutStreamEntity,
+      Season,
+      Round,
+      IdempotencyKey,
+    ]),
+    NotificationsModule,
   ],
   controllers: [PoolsController],
   providers: [PoolsService],

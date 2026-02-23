@@ -1,9 +1,22 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  IsIn,
+} from 'class-validator';
 
 export class SelectWinnerDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  winner: string; // wallet address of the winner
+  @IsIn(['auto', 'close', 'schedule'])
+  phase?: 'auto' | 'close' | 'schedule';
+
+  @IsString()
+  @IsOptional()
+  winner?: string; // optional override; must match rotating winner if provided
 
   @IsString()
   @IsNotEmpty()

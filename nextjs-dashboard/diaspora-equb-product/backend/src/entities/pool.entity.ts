@@ -5,9 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { PoolMember } from './pool-member.entity';
 import { Contribution } from './contribution.entity';
+import { Season } from './season.entity';
+import { Round } from './round.entity';
 
 @Entity('pools')
 export class Pool {
@@ -41,6 +45,12 @@ export class Pool {
   @Column({ type: 'varchar', length: 66, nullable: true })
   txHash: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  activeSeasonId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  activeRoundId: string | null;
+
   /** Address that signed the createPool transaction (pool creator / admin for close round, pick winner). */
   @Column({ type: 'varchar', length: 42, nullable: true })
   createdBy: string | null;
@@ -50,6 +60,20 @@ export class Pool {
 
   @OneToMany(() => Contribution, (contribution) => contribution.pool)
   contributions: Contribution[];
+
+  @OneToMany(() => Season, (season) => season.pool)
+  seasons: Season[];
+
+  @OneToMany(() => Round, (round) => round.pool)
+  rounds: Round[];
+
+  @ManyToOne(() => Season, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'activeSeasonId' })
+  activeSeason: Season | null;
+
+  @ManyToOne(() => Round, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'activeRoundId' })
+  activeRound: Round | null;
 
   @CreateDateColumn()
   createdAt: Date;
