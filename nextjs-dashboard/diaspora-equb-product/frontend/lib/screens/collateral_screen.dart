@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collateral_provider.dart';
+import '../providers/network_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../services/app_snackbar_service.dart';
@@ -197,7 +198,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -219,20 +220,20 @@ class _CollateralScreenState extends State<CollateralScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildWalletBalanceCard(wallet),
+                  _buildWalletBalanceCard(context, wallet),
                   const SizedBox(height: 20),
-                  _buildSummaryCards(collateral),
+                  _buildSummaryCards(context, collateral),
                   const SizedBox(height: 28),
-                  _buildDepositSection(collateral, wallet),
+                  _buildDepositSection(context, collateral, wallet),
                   const SizedBox(height: 20),
-                  _buildReleaseSection(collateral),
+                  _buildReleaseSection(context, collateral),
                   const SizedBox(height: 28),
                   Text(
                     'Collateral Entries',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 16),
-                  _buildCollateralList(collateral),
+                  _buildCollateralList(context, collateral),
                 ],
               ),
             );
@@ -242,7 +243,8 @@ class _CollateralScreenState extends State<CollateralScreen> {
     );
   }
 
-  Widget _buildWalletBalanceCard(WalletProvider wallet) {
+  Widget _buildWalletBalanceCard(BuildContext context, WalletProvider wallet) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final usdcBalance = double.tryParse(wallet.balanceOf('USDC')) ?? 0.0;
     final usdtBalance = double.tryParse(wallet.balanceOf('USDT')) ?? 0.0;
     final totalBalance = usdcBalance + usdtBalance;
@@ -251,64 +253,40 @@ class _CollateralScreenState extends State<CollateralScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.accentYellow,
+        color: isDark ? AppTheme.darkSurface : AppTheme.primaryColor,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.cardShadow,
+        boxShadow: AppTheme.cardShadowFor(context),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: AppTheme.textPrimary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.account_balance_wallet_rounded,
-                  size: 22,
-                  color: AppTheme.textPrimary,
+                  size: 20,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Wallet Balance',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    wallet.isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            '\$${totalBalance.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                  ],
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Wallet Balance',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white70,
+                  ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, size: 22),
-                color: AppTheme.textPrimary.withValues(alpha: 0.6),
-                onPressed: () {
+              GestureDetector(
+                onTap: () {
                   final auth = context.read<AuthProvider>();
                   if (auth.walletAddress != null) {
                     context
@@ -319,9 +297,36 @@ class _CollateralScreenState extends State<CollateralScreen> {
                         .loadCollateral(auth.walletAddress!);
                   }
                 },
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.refresh_rounded,
+                      size: 16, color: Colors.white70),
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          wallet.isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Text(
+                  '\$${totalBalance.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -352,10 +357,11 @@ class _CollateralScreenState extends State<CollateralScreen> {
     required double balance,
     required bool isLoading,
   }) {
+    final color = symbol == 'USDC' ? AppTheme.accentYellow : AppTheme.positive;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.textPrimary.withValues(alpha: 0.07),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -364,23 +370,21 @@ class _CollateralScreenState extends State<CollateralScreen> {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: symbol == 'USDC'
-                  ? const Color(0xFF2775CA)
-                  : const Color(0xFF26A17B),
+              color: color,
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 symbol == 'USDC' ? '\$' : '₮',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -390,26 +394,17 @@ class _CollateralScreenState extends State<CollateralScreen> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: Colors.white60,
                   ),
                 ),
-                isLoading
-                    ? const Text(
-                        '...',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      )
-                    : Text(
-                        '\$${balance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
+                Text(
+                  isLoading ? '...' : '\$${balance.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
               ],
             ),
           ),
@@ -418,24 +413,26 @@ class _CollateralScreenState extends State<CollateralScreen> {
     );
   }
 
-  Widget _buildSummaryCards(CollateralProvider collateral) {
+  Widget _buildSummaryCards(BuildContext context, CollateralProvider collateral) {
     return Row(
       children: [
         Expanded(
           child: _buildSummaryCard(
+            context: context,
             icon: Icons.lock_outline,
             label: 'Locked',
-            subtitle: 'USDC/USDT collateral',
             value: '\$${collateral.totalLocked.toStringAsFixed(2)}',
-            color: AppTheme.primaryColor,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? AppTheme.darkPrimary
+                : AppTheme.primaryColor,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildSummaryCard(
+            context: context,
             icon: Icons.lock_open_outlined,
             label: 'Available',
-            subtitle: 'Can be released',
             value: '\$${collateral.totalAvailable.toStringAsFixed(2)}',
             color: AppTheme.positive,
           ),
@@ -445,62 +442,57 @@ class _CollateralScreenState extends State<CollateralScreen> {
   }
 
   Widget _buildSummaryCard({
+    required BuildContext context,
     required IconData icon,
     required String label,
-    String? subtitle,
     required String value,
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.cardShadow,
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+        boxShadow: AppTheme.subtleShadowFor(context),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, size: 20, color: color),
           ),
-          const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.textTertiary,
-              ),
-            ),
-          ],
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppTheme.textPrimary,
-              ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textTertiaryColor(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimaryColor(context),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -508,62 +500,74 @@ class _CollateralScreenState extends State<CollateralScreen> {
     );
   }
 
-  Widget _buildTokenSelector() {
-    return Row(
-      children: [
-        _buildTokenOption('USDC', const Color(0xFF2775CA), '\$'),
-        const SizedBox(width: 10),
-        _buildTokenOption('USDT', const Color(0xFF26A17B), '₮'),
-      ],
+  Widget _buildTokenSelector(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : AppTheme.backgroundLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _buildTokenTab('USDC', '\$'),
+          _buildTokenTab('USDT', '₮'),
+        ],
+      ),
     );
   }
 
-  Widget _buildTokenOption(String symbol, Color color, String icon) {
+  Widget _buildTokenTab(String symbol, String icon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _selectedToken == symbol;
+    final color = symbol == 'USDC'
+        ? (isDark ? AppTheme.darkPrimary : AppTheme.primaryColor)
+        : AppTheme.positive;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedToken = symbol),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? color.withValues(alpha: 0.15)
-                : const Color(0xFFF7F8FA),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? color : const Color(0xFFE5E7EB),
-              width: isSelected ? 2 : 1,
-            ),
+                ? AppTheme.cardColor(context)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected ? AppTheme.subtleShadowFor(context) : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 24,
-                height: 24,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: isSelected
+                      ? color
+                      : color.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
                     icon,
-                    style: const TextStyle(
-                      fontSize: 12,
+                    style: TextStyle(
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: isSelected ? Colors.white : color,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Text(
                 symbol,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? color : AppTheme.textSecondary,
+                  color: isSelected
+                      ? AppTheme.textPrimaryColor(context)
+                      : AppTheme.textTertiaryColor(context),
                 ),
               ),
             ],
@@ -574,141 +578,144 @@ class _CollateralScreenState extends State<CollateralScreen> {
   }
 
   Widget _buildDepositSection(
+    BuildContext context,
     CollateralProvider collateral,
     WalletProvider wallet,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tokenBalance =
         double.tryParse(wallet.balanceOf(_selectedToken)) ?? 0.0;
     final depositAmount = double.tryParse(_depositController.text.trim()) ?? 0;
     final hasValidAmount = depositAmount > 0 && depositAmount <= tokenBalance;
+    final tokenColor = _selectedToken == 'USDC'
+        ? (isDark ? AppTheme.darkPrimary : AppTheme.primaryColor)
+        : AppTheme.positive;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.cardShadow,
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+        boxShadow: AppTheme.subtleShadowFor(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_outline,
-                    size: 18, color: AppTheme.primaryColor),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Lock Collateral',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Lock USDC or USDT to join higher-tier pools.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            'Lock Collateral',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimaryColor(context),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
+          Text(
+            'Lock USDC or USDT to join higher-tier equbs.',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiaryColor(context),
+            ),
+          ),
+          const SizedBox(height: 18),
 
           // Token selector
-          _buildTokenSelector(),
-          const SizedBox(height: 14),
+          _buildTokenSelector(context),
+          const SizedBox(height: 16),
 
-          // Current balance of selected token
+          // Amount input with balance display
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F4FF),
-              borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+              color: isDark
+                  ? AppTheme.darkSurface
+                  : AppTheme.backgroundLight,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppTheme.textHintColor(context).withValues(alpha: 0.3),
+              ),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Icon(
-                  Icons.account_balance_wallet_outlined,
-                  size: 16,
-                  color: _selectedToken == 'USDC'
-                      ? const Color(0xFF2775CA)
-                      : const Color(0xFF26A17B),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$_selectedToken balance: ',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Amount',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textTertiaryColor(context),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          _depositController.text =
+                              tokenBalance.toStringAsFixed(2);
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.account_balance_wallet_outlined,
+                                size: 13, color: tokenColor),
+                            const SizedBox(width: 4),
+                            Text(
+                              '\$${tokenBalance.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: tokenColor,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'MAX',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: tokenColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  '\$${tokenBalance.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                  child: TextField(
+                    controller: _depositController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimaryColor(context),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0.00',
+                      hintStyle: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textHintColor(context),
+                      ),
+                      prefixText: '\$ ',
+                      prefixStyle: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimaryColor(context),
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Amount input
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7F8FA),
-              borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-              border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-            ),
-            child: TextField(
-              controller: _depositController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Amount ($_selectedToken)',
-                hintStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.textHint,
-                ),
-                prefixText: '\$ ',
-                prefixStyle: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-              ),
             ),
           ),
 
@@ -716,6 +723,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
           if (depositAmount > 0) ...[
             const SizedBox(height: 12),
             _buildBalancePreview(
+              context: context,
               label: 'After locking',
               currentBalance: tokenBalance,
               changeAmount: depositAmount,
@@ -725,12 +733,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
             ),
           ],
 
-          const SizedBox(height: 6),
-          const Text(
-            'Your wallet (MetaMask) will pop up to sign this transaction.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 52,
@@ -740,37 +743,44 @@ class _CollateralScreenState extends State<CollateralScreen> {
                       ? null
                       : _depositCollateral,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.darkButton,
-                foregroundColor: Colors.white,
+                backgroundColor: AppTheme.buttonColor(context),
+                foregroundColor: AppTheme.buttonTextColor(context),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(26),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 elevation: 0,
               ),
               child: _isDepositing
-                  ? const SizedBox(
-                      height: 24,
-                      width: 24,
+                  ? SizedBox(
+                      height: 22,
+                      width: 22,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                        strokeWidth: 2.5,
+                        color: AppTheme.buttonTextColor(context),
                       ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.account_balance_wallet_outlined,
-                            size: 18),
+                        const Icon(Icons.lock_outline, size: 18),
                         const SizedBox(width: 8),
                         Text(
                           'Lock $_selectedToken & Sign',
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'Your wallet will pop up to sign this transaction.',
+              style: TextStyle(
+                  fontSize: 11, color: AppTheme.textTertiaryColor(context)),
             ),
           ),
         ],
@@ -779,6 +789,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
   }
 
   Widget _buildBalancePreview({
+    required BuildContext context,
     required String label,
     required double currentBalance,
     required double changeAmount,
@@ -795,12 +806,12 @@ class _CollateralScreenState extends State<CollateralScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isNegative
-            ? Colors.red.shade50
+            ? AppTheme.negative.withValues(alpha: 0.06)
             : AppTheme.positive.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
         border: Border.all(
           color: isNegative
-              ? Colors.red.shade200
+              ? AppTheme.negative.withValues(alpha: 0.2)
               : AppTheme.positive.withValues(alpha: 0.2),
           width: 1,
         ),
@@ -812,17 +823,17 @@ class _CollateralScreenState extends State<CollateralScreen> {
             children: [
               Text(
                 'Current $tokenSymbol',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textTertiary,
+                  color: AppTheme.textTertiaryColor(context),
                 ),
               ),
               Text(
                 '\$${currentBalance.toStringAsFixed(2)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
             ],
@@ -833,9 +844,9 @@ class _CollateralScreenState extends State<CollateralScreen> {
             children: [
               Text(
                 isDeduction ? 'Locking' : 'Receiving',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textTertiary,
+                  color: AppTheme.textTertiaryColor(context),
                 ),
               ),
               Text(
@@ -854,10 +865,10 @@ class _CollateralScreenState extends State<CollateralScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
               Text(
@@ -865,7 +876,7 @@ class _CollateralScreenState extends State<CollateralScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: isNegative ? Colors.red : AppTheme.textPrimary,
+                  color: isNegative ? AppTheme.negative : AppTheme.textPrimaryColor(context),
                 ),
               ),
             ],
@@ -874,15 +885,15 @@ class _CollateralScreenState extends State<CollateralScreen> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    size: 14, color: Colors.red.shade600),
+                const Icon(Icons.warning_amber_rounded,
+                    size: 14, color: AppTheme.negative),
                 const SizedBox(width: 4),
                 Text(
                   'Insufficient $tokenSymbol balance',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.red.shade600,
+                    color: AppTheme.negative,
                   ),
                 ),
               ],
@@ -893,205 +904,462 @@ class _CollateralScreenState extends State<CollateralScreen> {
     );
   }
 
-  Widget _buildReleaseSection(CollateralProvider collateral) {
+  Widget _buildReleaseSection(
+      BuildContext context, CollateralProvider collateral) {
     final hasLocked = collateral.totalLocked > 0;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.cardShadow,
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+        boxShadow: AppTheme.subtleShadowFor(context),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.positive.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_open_outlined,
-                    size: 18, color: AppTheme.positive),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Release Collateral',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      hasLocked
-                          ? 'Release locked USDC/USDT back to your wallet.'
-                          : 'No locked collateral to release.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppTheme.positive.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.lock_open_outlined,
+                size: 20, color: AppTheme.positive),
           ),
-          if (hasLocked) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.positive.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.lock_outline,
-                      size: 18, color: AppTheme.positive),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Locked: \$${collateral.totalLocked.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Release Collateral',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F8FA),
-                borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-                border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-              ),
-              child: TextField(
-                controller: _releaseController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
                 ),
-                decoration: InputDecoration(
-                  hintText:
-                      'Amount (max ${collateral.totalLocked.toStringAsFixed(2)})',
-                  hintStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.textHint,
+                const SizedBox(height: 2),
+                Text(
+                  hasLocked
+                      ? 'Locked: \$${collateral.totalLocked.toStringAsFixed(2)}'
+                      : 'No locked collateral',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textTertiaryColor(context),
                   ),
-                  prefixText: '\$ ',
-                  prefixStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 40,
+            child: ElevatedButton(
+              onPressed: hasLocked && !_isReleasing
+                  ? () => _showReleaseModal(context, collateral)
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.positive,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: const Text(
+                'Release',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Tokens will be sent back to your wallet by the system.',
-              style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: (_isReleasing || collateral.isLoading)
-                    ? null
-                    : _releaseCollateral,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.positive,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                  elevation: 0,
-                ),
-                child: _isReleasing
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock_open_outlined, size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Release Collateral',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCollateralList(CollateralProvider collateral) {
+  // ─── Release Modal ──────────────────────────────────────────────────
+
+  void _showReleaseModal(
+      BuildContext context, CollateralProvider collateral) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    _releaseController.clear();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final locked = collateral.totalLocked;
+            final releaseAmt =
+                double.tryParse(_releaseController.text.trim()) ?? 0;
+            final isValid = releaseAmt > 0 && releaseAmt <= locked;
+            final afterBalance = locked - releaseAmt;
+
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkCard : Colors.white,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Handle bar
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.textHintColor(modalCtx)
+                              .withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Title row
+                      Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.positive.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.lock_open_outlined,
+                                size: 20, color: AppTheme.positive),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Release Collateral',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color:
+                                        AppTheme.textPrimaryColor(modalCtx),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Unlock tokens back to your wallet',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textTertiaryColor(
+                                        modalCtx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(modalCtx),
+                            child: Icon(Icons.close_rounded,
+                                size: 22,
+                                color:
+                                    AppTheme.textTertiaryColor(modalCtx)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Locked balance banner
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.positive.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Currently Locked',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.textSecondaryColor(
+                                    modalCtx),
+                              ),
+                            ),
+                            Text(
+                              '\$${locked.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.positive,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Amount input
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppTheme.darkSurface
+                              : AppTheme.backgroundLight,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: AppTheme.textHintColor(modalCtx)
+                                .withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 12, 16, 0),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Release Amount',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppTheme.textTertiaryColor(
+                                          modalCtx),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      _releaseController.text =
+                                          locked.toStringAsFixed(2);
+                                      setModalState(() {});
+                                    },
+                                    child: const Text(
+                                      'MAX',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.positive,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 4, 16, 12),
+                              child: TextField(
+                                controller: _releaseController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                autofocus: true,
+                                onChanged: (_) => setModalState(() {}),
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.textPrimaryColor(
+                                      modalCtx),
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: '0.00',
+                                  hintStyle: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.textHintColor(
+                                        modalCtx),
+                                  ),
+                                  prefixText: '\$ ',
+                                  prefixStyle: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.textPrimaryColor(
+                                        modalCtx),
+                                  ),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Summary rows
+                      _buildModalDetailRow(
+                        modalCtx,
+                        'After Release',
+                        '\$${afterBalance.clamp(0, double.infinity).toStringAsFixed(2)}',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildModalDetailRow(
+                        modalCtx,
+                        'Destination',
+                        'Your connected wallet',
+                      ),
+                      const SizedBox(height: 8),
+                      _buildModalDetailRow(
+                        modalCtx,
+                        'Network Fee',
+                        'Included',
+                      ),
+
+                      if (releaseAmt > locked) ...[
+                        const SizedBox(height: 12),
+                        const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded,
+                                size: 14, color: AppTheme.negative),
+                            SizedBox(width: 6),
+                            Text(
+                              'Amount exceeds locked balance',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.negative,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+
+                      // Confirm button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: isValid && !_isReleasing
+                              ? () {
+                                  Navigator.pop(modalCtx);
+                                  _releaseCollateral();
+                                }
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.positive,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: _isReleasing
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.check_circle_outline_rounded,
+                                        size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Confirm Release',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildModalDetailRow(
+      BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.textTertiaryColor(context),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimaryColor(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollateralList(BuildContext context, CollateralProvider collateral) {
     if (collateral.collaterals.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: AppTheme.cardWhite,
+          color: AppTheme.cardColor(context),
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-          boxShadow: AppTheme.subtleShadow,
+          boxShadow: AppTheme.subtleShadowFor(context),
         ),
         child: Column(
           children: [
             Icon(Icons.shield_outlined,
-                size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                size: 48, color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.5)),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No collateral locked yet',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textTertiaryColor(context),
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Lock USDC or USDT as collateral to unlock higher pool tiers and lower fees.',
+            Text(
+              'Lock USDC or USDT as collateral to unlock higher equb tiers and lower fees.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textTertiaryColor(context),
               ),
             ),
           ],
@@ -1101,21 +1369,21 @@ class _CollateralScreenState extends State<CollateralScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
+        color: AppTheme.cardColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.subtleShadow,
+        boxShadow: AppTheme.subtleShadowFor(context),
       ),
       child: Column(
         children: List.generate(collateral.collaterals.length, (i) {
           final entry = collateral.collaterals[i];
           final isLast = i == collateral.collaterals.length - 1;
-          return _buildCollateralTile(entry, isLast);
+          return _buildCollateralTile(context, entry, isLast);
         }),
       ),
     );
   }
 
-  Widget _buildCollateralTile(Map<String, dynamic> entry, bool isLast) {
+  Widget _buildCollateralTile(BuildContext context, Map<String, dynamic> entry, bool isLast) {
     final locked =
         double.tryParse(entry['lockedAmount']?.toString() ?? '0') ?? 0;
     final slashed =
@@ -1126,15 +1394,15 @@ class _CollateralScreenState extends State<CollateralScreen> {
     final poolId = entry['poolId']?.toString();
 
     final isCtc = source == 'on-chain-ctc';
-    final tokenLabel = isCtc ? 'CTC' : 'USDC/USDT';
+    final tokenLabel = isCtc ? context.read<NetworkProvider>().nativeSymbol : 'USDC/USDT';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : const Border(
-                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+            : Border(
+                bottom: BorderSide(color: AppTheme.textHintColor(context).withValues(alpha: 0.3), width: 1),
               ),
       ),
       child: Row(
@@ -1145,13 +1413,13 @@ class _CollateralScreenState extends State<CollateralScreen> {
             decoration: BoxDecoration(
               color: isCtc
                   ? AppTheme.primaryColor.withValues(alpha: 0.12)
-                  : const Color(0xFF2775CA).withValues(alpha: 0.12),
+                  : AppTheme.secondaryColor.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.lock_outline,
               size: 22,
-              color: isCtc ? AppTheme.primaryColor : const Color(0xFF2775CA),
+              color: isCtc ? AppTheme.primaryColor : AppTheme.secondaryColor,
             ),
           ),
           const SizedBox(width: 14),
@@ -1161,21 +1429,21 @@ class _CollateralScreenState extends State<CollateralScreen> {
               children: [
                 Text(
                   poolId != null
-                      ? 'Pool ${poolId.length > 8 ? poolId.substring(0, 8) : poolId}...'
+                      ? 'Equb ${poolId.length > 8 ? poolId.substring(0, 8) : poolId}...'
                       : '$tokenLabel Collateral',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Locked: \$${locked.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 if (slashed > 0)
@@ -1200,11 +1468,11 @@ class _CollateralScreenState extends State<CollateralScreen> {
                   color: AppTheme.positive,
                 ),
               ),
-              const Text(
+              Text(
                 'available',
                 style: TextStyle(
                   fontSize: 11,
-                  color: AppTheme.textTertiary,
+                  color: AppTheme.textTertiaryColor(context),
                 ),
               ),
             ],

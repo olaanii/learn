@@ -36,7 +36,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
     if (widget.standalone) {
       return Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -59,12 +59,12 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'Withdraw',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
               const Spacer(),
@@ -144,26 +144,28 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
+              color: AppTheme.cardColor(context),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.cardShadow,
+              boxShadow: AppTheme.cardShadowFor(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Account address
-                _buildSectionLabel('Account address'),
+                _buildSectionLabel(context, 'Account address'),
                 const SizedBox(height: 10),
                 _buildTextField(
+                  context,
                   controller: _accountController,
                   hint: 'Enter wallet address (0x...)',
                 ),
                 const SizedBox(height: 28),
 
                 // Currency (token)
-                _buildSectionLabel('Currency'),
+                _buildSectionLabel(context, 'Currency'),
                 const SizedBox(height: 10),
                 _buildDropdownField(
+                  context,
                   value: _currency,
                   onTap: () {
                     setState(() {
@@ -174,22 +176,22 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 const SizedBox(height: 28),
 
                 // Network
-                _buildSectionLabel('Network'),
+                _buildSectionLabel(context, 'Network'),
                 const SizedBox(height: 10),
-                _buildNetworkField(),
+                _buildNetworkField(context),
                 const SizedBox(height: 28),
 
                 // Amount
-                _buildSectionLabel('Amount'),
+                _buildSectionLabel(context, 'Amount'),
                 const SizedBox(height: 10),
-                _buildAmountField(),
+                _buildAmountField(context),
                 const SizedBox(height: 8),
                 Text(
                   'Available: \$${wallet.balance}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
-                    color: AppTheme.textTertiary,
+                    color: AppTheme.textTertiaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 36),
@@ -201,19 +203,19 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   child: ElevatedButton(
                     onPressed: _isSubmitting ? null : _submitWithdraw,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.darkButton,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppTheme.buttonColor(context),
+                      foregroundColor: AppTheme.buttonTextColor(context),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28),
                       ),
                       elevation: 0,
                     ),
                     child: _isSubmitting
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color: AppTheme.buttonTextColor(context),
                               strokeWidth: 2,
                             ),
                           )
@@ -232,15 +234,15 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
+                      color: const Color(0xFFE9F5EC),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF86EFAC)),
+                      border: Border.all(color: const Color(0xFF52B788)),
                     ),
                     child: Text(
                       _txResult!,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF166534),
+                        color: Color(0xFF1B4332),
                       ),
                     ),
                   ),
@@ -249,11 +251,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 const SizedBox(height: 28),
 
                 // Info rows
-                _buildInfoRow('Fee', '~0.001 ETH'),
+                _buildInfoRow(context, 'Fee', '~0.001 ETH'),
                 const SizedBox(height: 14),
-                _buildInfoRow('Transaction time', '~15 sec'),
+                _buildInfoRow(context, 'Transaction time', '~15 sec'),
                 const SizedBox(height: 14),
-                _buildInfoRow('Network fee', 'Variable'),
+                _buildInfoRow(context, 'Network fee', 'Variable'),
               ],
             ),
           ),
@@ -262,41 +264,42 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  Widget _buildSectionLabel(String label) {
+  Widget _buildSectionLabel(BuildContext context, String label) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: AppTheme.textPrimary,
+        color: AppTheme.textPrimaryColor(context),
       ),
     );
   }
 
-  Widget _buildTextField({
+  Widget _buildTextField(
+    BuildContext context, {
     required TextEditingController controller,
     required String hint,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: const Color(0xFFF1FAEE),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
       ),
       child: TextField(
         controller: controller,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,
-          color: AppTheme.textPrimary,
+          color: AppTheme.textPrimaryColor(context),
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w400,
-            color: AppTheme.textTertiary,
+            color: AppTheme.textTertiaryColor(context),
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -306,7 +309,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  Widget _buildDropdownField({
+  Widget _buildDropdownField(
+    BuildContext context, {
     required String value,
     required VoidCallback onTap,
   }) {
@@ -315,27 +319,27 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F8FA),
+          color: const Color(0xFFF1FAEE),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
         ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 20,
-              color: AppTheme.textSecondary,
+              color: AppTheme.textSecondaryColor(context),
             ),
           ],
         ),
@@ -343,7 +347,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  Widget _buildNetworkField() {
+  Widget _buildNetworkField(BuildContext context) {
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -353,9 +357,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F8FA),
+          color: const Color(0xFFF1FAEE),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
         ),
         child: Row(
           children: [
@@ -379,17 +383,17 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             Expanded(
               child: Text(
                 _network,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
             ),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 20,
-              color: AppTheme.textSecondary,
+              color: AppTheme.textSecondaryColor(context),
             ),
           ],
         ),
@@ -397,28 +401,28 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  Widget _buildAmountField() {
+  Widget _buildAmountField(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: const Color(0xFFF1FAEE),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
       ),
       child: TextField(
         controller: _amountController,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textPrimary,
+          color: AppTheme.textPrimaryColor(context),
         ),
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           prefixText: '\$ ',
           prefixStyle: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textPrimaryColor(context),
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -428,17 +432,17 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Flexible(
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w400,
-              color: AppTheme.textTertiary,
+              color: AppTheme.textTertiaryColor(context),
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -446,10 +450,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         const SizedBox(width: 8),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: AppTheme.textSecondary,
+            color: AppTheme.textSecondaryColor(context),
           ),
         ),
       ],

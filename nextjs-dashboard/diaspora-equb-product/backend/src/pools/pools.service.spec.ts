@@ -16,6 +16,7 @@ import { Round } from '../entities/round.entity';
 import { IdempotencyKey } from '../entities/idempotency-key.entity';
 import { Web3Service } from '../web3/web3.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RulesService } from '../rules/rules.service';
 import { DataSource } from 'typeorm';
 import { createHash } from 'crypto';
 
@@ -76,6 +77,11 @@ describe('PoolsService', () => {
     create: jest.fn(),
   };
 
+  const mockRulesService = {
+    fetchRulesFromChain: jest.fn().mockResolvedValue(null),
+    upsertRulesFromChain: jest.fn().mockResolvedValue({}),
+  };
+
   const mockDataSource = {
     transaction: jest.fn(),
   };
@@ -93,6 +99,7 @@ describe('PoolsService', () => {
         { provide: getRepositoryToken(IdempotencyKey), useValue: mockIdempotencyRepo },
         { provide: Web3Service, useValue: mockWeb3Service },
         { provide: NotificationsService, useValue: mockNotifications },
+        { provide: RulesService, useValue: mockRulesService },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();

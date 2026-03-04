@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/credit_provider.dart';
+import '../providers/network_provider.dart';
 import '../config/theme.dart';
 
 class CreditTierScreen extends StatefulWidget {
@@ -28,7 +29,7 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
     final credit = context.watch<CreditProvider>();
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -48,7 +49,7 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
                         Text(
                           'Your Credit Score',
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: AppTheme.textSecondaryColor(context),
                             fontSize: 14,
                           ),
                         ),
@@ -106,14 +107,19 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                _buildTierCard(context, 0, 'Starter', '1 CTC', 'None',
-                    'Score >= 0', credit.eligibleTier >= 0),
-                _buildTierCard(context, 1, 'Growing', '10 CTC', '10%',
-                    'Score >= 5', credit.eligibleTier >= 1),
-                _buildTierCard(context, 2, 'Proven', '50 CTC', '5%',
-                    'Score >= 20', credit.eligibleTier >= 2),
-                _buildTierCard(context, 3, 'Elite', '200 CTC', '2%',
-                    'Score >= 50', credit.eligibleTier >= 3),
+                Builder(builder: (context) {
+                  final sym = context.read<NetworkProvider>().nativeSymbol;
+                  return Column(children: [
+                    _buildTierCard(context, 0, 'Starter', '1 $sym', 'None',
+                        'Score >= 0', credit.eligibleTier >= 0),
+                    _buildTierCard(context, 1, 'Growing', '10 $sym', '10%',
+                        'Score >= 5', credit.eligibleTier >= 1),
+                    _buildTierCard(context, 2, 'Proven', '50 $sym', '5%',
+                        'Score >= 20', credit.eligibleTier >= 2),
+                    _buildTierCard(context, 3, 'Elite', '200 $sym', '2%',
+                        'Score >= 50', credit.eligibleTier >= 3),
+                  ]);
+                }),
 
                 const SizedBox(height: 24),
 
@@ -145,7 +151,7 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
                         _buildScoringRow(
                             'Frozen', 'Payout stream frozen on default'),
                         _buildScoringRow(
-                            'Slashed', 'Collateral slashed to compensate pool'),
+                            'Slashed', 'Collateral slashed to compensate equb'),
                       ],
                     ),
                   ),
@@ -185,12 +191,12 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Max Pool Size: ${credit.maxPoolSize} wei',
-              style: TextStyle(color: Colors.grey[600]),
+              'Max Equb Size: ${credit.maxPoolSize} wei',
+              style: TextStyle(color: AppTheme.textSecondaryColor(context)),
             ),
             Text(
               'Collateral Rate: ${credit.collateralRate ~/ 100}%',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: AppTheme.textSecondaryColor(context)),
             ),
             if (credit.nextTier != null) ...[
               const SizedBox(height: 16),
@@ -202,7 +208,7 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
                       ? (credit.score / credit.scoreForNextTier!)
                           .clamp(0.0, 1.0)
                       : 0,
-                  backgroundColor: Colors.grey[200],
+                  backgroundColor: AppTheme.textHintColor(context),
                   color: AppTheme.primaryColor,
                   minHeight: 8,
                 ),
@@ -226,11 +232,11 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: unlocked ? AppTheme.successColor : Colors.grey[300],
+          backgroundColor: unlocked ? AppTheme.successColor : AppTheme.textTertiaryColor(context),
           child: Text(
             '$tier',
             style: TextStyle(
-              color: unlocked ? Colors.white : Colors.grey[600],
+              color: unlocked ? Colors.white : AppTheme.textSecondaryColor(context),
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -239,13 +245,13 @@ class _CreditTierScreenState extends State<CreditTierScreen> {
           'Tier $tier - $name',
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: unlocked ? null : Colors.grey[500],
+            color: unlocked ? null : AppTheme.textTertiaryColor(context),
           ),
         ),
         subtitle: Text('Max: $maxPool | Collateral: $collateral'),
         trailing: unlocked
             ? const Icon(Icons.check_circle, color: AppTheme.successColor)
-            : Icon(Icons.lock, color: Colors.grey[400]),
+            : Icon(Icons.lock, color: AppTheme.textTertiaryColor(context)),
       ),
     );
   }

@@ -4,8 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { Web3Service } from '../web3/web3.service';
+import { RulesService } from '../rules/rules.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../entities/notification.entity';
+import { EventsGateway } from '../websocket/events.gateway';
 import { Pool } from '../entities/pool.entity';
 import { PoolMember } from '../entities/pool-member.entity';
 import { Contribution } from '../entities/contribution.entity';
@@ -15,6 +17,7 @@ import { Collateral } from '../entities/collateral.entity';
 import { Identity } from '../entities/identity.entity';
 import { IndexedBlock } from '../entities/indexed-block.entity';
 import { TokenTransfer } from '../entities/token-transfer.entity';
+import { Proposal } from '../entities/proposal.entity';
 
 const ERC20_TRANSFER_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
@@ -53,7 +56,9 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly web3Service: Web3Service,
     private readonly notifications: NotificationsService,
+    private readonly rulesService: RulesService,
     private readonly configService: ConfigService,
+    private readonly eventsGateway: EventsGateway,
     @InjectRepository(Pool)
     private readonly poolRepo: Repository<Pool>,
     @InjectRepository(PoolMember)
@@ -72,6 +77,8 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     private readonly indexedBlockRepo: Repository<IndexedBlock>,
     @InjectRepository(TokenTransfer)
     private readonly tokenTransferRepo: Repository<TokenTransfer>,
+    @InjectRepository(Proposal)
+    private readonly proposalRepo: Repository<Proposal>,
   ) {
     this.tokenAddresses = {
       USDC: this.configService.get<string>('TEST_USDC_ADDRESS', ''),
@@ -139,11 +146,13 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       const creditRegistry = this.web3Service.getCreditRegistry();
       const collateralVault = this.web3Service.getCollateralVault();
       const identityRegistry = this.web3Service.getIdentityRegistry();
+      const equbGovernor = this.web3Service.getEqubGovernor();
       equbPool.removeAllListeners();
       payoutStream.removeAllListeners();
       creditRegistry.removeAllListeners();
       collateralVault.removeAllListeners();
       identityRegistry.removeAllListeners();
+      equbGovernor.removeAllListeners();
 
       const tokens = this.getTokenContracts();
       for (const { contract } of tokens) {
@@ -166,6 +175,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       this.catchUpContract('CreditRegistry', this.web3Service.getCreditRegistry(), currentBlock),
       this.catchUpContract('CollateralVault', this.web3Service.getCollateralVault(), currentBlock),
       this.catchUpContract('IdentityRegistry', this.web3Service.getIdentityRegistry(), currentBlock),
+      this.catchUpContract('EqubGovernor', this.web3Service.getEqubGovernor(), currentBlock),
       this.catchUpTokenTransfers(currentBlock),
     ]);
   }
@@ -233,7 +243,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
   private getContractEventNames(contractName: string): string[] {
     switch (contractName) {
       case 'EqubPool':
-        return ['PoolCreated', 'JoinedPool', 'ContributionReceived', 'RoundClosed', 'DefaultTriggered'];
+        return ['PoolCreated', 'JoinedPool', 'ContributionReceived', 'RoundClosed', 'DefaultTriggered', 'RulesUpdated'];
       case 'PayoutStream':
         return ['StreamCreated', 'RoundReleased', 'StreamFrozen'];
       case 'CreditRegistry':
@@ -242,6 +252,8 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
         return ['CollateralDeposited', 'CollateralLocked', 'CollateralSlashed'];
       case 'IdentityRegistry':
         return ['IdentityBound'];
+      case 'EqubGovernor':
+        return ['ProposalCreated', 'VoteCast', 'ProposalExecuted', 'ProposalCancelled'];
       default:
         return [];
     }
@@ -255,6 +267,7 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     this.subscribeCreditRegistry();
     this.subscribeCollateralVault();
     this.subscribeIdentityRegistry();
+    this.subscribeEqubGovernor();
     this.subscribeTokenTransfers();
   }
 
@@ -292,6 +305,13 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     equbPool.on('DefaultTriggered', async (poolId, member, round, event) => {
       this.logger.log(`[EqubPool] DefaultTriggered: poolId=${poolId}, member=${member}, round=${round}`);
       await this.handleDefaultTriggered(poolId, member, round);
+      this.indexedEventCount++;
+      await this.updateBlockForEvent('EqubPool', event);
+    });
+
+    equbPool.on('RulesUpdated', async (poolId, event) => {
+      this.logger.log(`[EqubPool] RulesUpdated: poolId=${poolId}`);
+      await this.handleRulesUpdated(poolId);
       this.indexedEventCount++;
       await this.updateBlockForEvent('EqubPool', event);
     });
@@ -406,6 +426,9 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
             await this.handleIdentityBound(wallet, identityHash);
           }
           break;
+        case 'EqubGovernor':
+          await this.handleEqubGovernorEvent(event);
+          break;
       }
     } catch (error) {
       this.logger.error(
@@ -439,6 +462,11 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       case 'DefaultTriggered': {
         const [poolId, member, round] = event.args;
         await this.handleDefaultTriggered(poolId, member, round);
+        break;
+      }
+      case 'RulesUpdated': {
+        const [poolId] = event.args;
+        await this.handleRulesUpdated(poolId);
         break;
       }
     }
@@ -507,20 +535,64 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Convert wei to ether (18 decimals) for DB storage — column is decimal(36,18)
+    const contributionEther = ethers.formatUnits(contributionAmount.toString(), 18);
+
     const pool = this.poolRepo.create({
       onChainPoolId: Number(onChainPoolId),
       tier: 0,
-      contributionAmount: contributionAmount.toString(),
+      contributionAmount: contributionEther,
       maxMembers: Number(maxMembers),
       currentRound: 1,
       treasury,
       createdBy,
-      token: token || '0x0000000000000000000000000000000000000000',
+      token: '0x0000000000000000000000000000000000000000',
       status: 'active',
       ...(txHash ? { txHash } : {}),
     });
     await this.poolRepo.save(pool);
-    this.logger.log(`[EqubPool] PoolCreated: created new pool id=${pool.id}, onChainPoolId=${onChainPoolId}`);
+    this.logger.log(`[EqubPool] PoolCreated: created new pool id=${pool.id}, onChainPoolId=${onChainPoolId}, contribution=${contributionEther} CTC`);
+
+    this.eventsGateway.emitGlobal({
+      type: 'equb:created',
+      poolId: pool.id,
+      onChainPoolId: Number(onChainPoolId),
+      data: {
+        contributionAmount: contributionEther,
+        maxMembers: Number(maxMembers),
+        token: token || null,
+        treasury,
+        createdBy,
+      },
+      timestamp: Date.now(),
+    });
+
+    // Fetch and store rules from chain (if contract supports getRules)
+    try {
+      const onChainRules = await this.rulesService.fetchRulesFromChain(Number(onChainPoolId));
+      if (onChainRules) {
+        await this.rulesService.upsertRulesFromChain(pool.id, Number(onChainPoolId), onChainRules);
+      }
+    } catch (e) {
+      this.logger.warn(`Could not fetch rules for new pool ${pool.id}: ${e?.message ?? e}`);
+    }
+  }
+
+  private async handleRulesUpdated(onChainPoolId: bigint) {
+    const pool = await this.poolRepo.findOne({
+      where: { onChainPoolId: Number(onChainPoolId) },
+    });
+    if (!pool) return;
+
+    try {
+      const onChainRules = await this.rulesService.fetchRulesFromChain(Number(onChainPoolId));
+      if (onChainRules) {
+        await this.rulesService.upsertRulesFromChain(pool.id, Number(onChainPoolId), onChainRules);
+        this.logger.log(`[EqubPool] RulesUpdated: synced rules for pool ${pool.id}`);
+      }
+    } catch (e) {
+      this.logger.warn(`Could not sync rules for pool ${pool.id}: ${e?.message ?? e}`);
+    }
   }
 
   private async handleJoinedPool(
@@ -543,6 +615,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       walletAddress: member,
     });
     await this.memberRepo.save(poolMember);
+
+    this.eventsGateway.emitToPool(pool.id, {
+      type: 'member:joined',
+      poolId: pool.id,
+      onChainPoolId: pool.onChainPoolId,
+      data: { member },
+      timestamp: Date.now(),
+    });
 
     const txHash = this.extractTxHash(event);
     this.emitNotification(
@@ -626,6 +706,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     });
     await this.contributionRepo.save(contribution);
 
+    this.eventsGateway.emitToPool(pool.id, {
+      type: 'contribution:received',
+      poolId: pool.id,
+      onChainPoolId: pool.onChainPoolId,
+      data: { member, round: roundNum, txHash },
+      timestamp: Date.now(),
+    });
+
     // If the pool was marked 'round-closed' (e.g. by close event), set it back to active
     if (pool.status === 'round-closed') {
       pool.status = 'active';
@@ -684,6 +772,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
     // Mark pool as round-closed so UI can display transient closed status
     pool.status = 'round-closed';
     await this.poolRepo.save(pool);
+
+    this.eventsGateway.emitToPool(pool.id, {
+      type: 'round:closed',
+      poolId: pool.id,
+      onChainPoolId: pool.onChainPoolId,
+      data: { round: Number(round), nextRound: pool.currentRound },
+      timestamp: Date.now(),
+    });
 
     const members = await this.memberRepo.find({ where: { poolId: pool.id } });
     for (const m of members) {
@@ -880,6 +976,14 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
       await this.contributionRepo.save(contribution);
     }
 
+    this.eventsGateway.emitToPool(pool.id, {
+      type: 'default:triggered',
+      poolId: pool.id,
+      onChainPoolId: pool.onChainPoolId,
+      data: { member, round: roundNum },
+      timestamp: Date.now(),
+    });
+
     this.emitNotification(
       member,
       'default_triggered',
@@ -945,6 +1049,127 @@ export class IndexerService implements OnModuleInit, OnModuleDestroy {
           `Failed to emit notification [${type}] for ${walletAddress}: ${error?.message ?? error}`,
         );
       });
+  }
+
+  private subscribeEqubGovernor() {
+    const governor = this.web3Service.getEqubGovernor();
+
+    governor.on('ProposalCreated', async (proposalId, equbId, proposer, ruleHash, description, deadline, event) => {
+      this.logger.log(`[EqubGovernor] ProposalCreated: proposalId=${proposalId}, equbId=${equbId}`);
+      await this.handleProposalCreated(proposalId, equbId, proposer, ruleHash, description, deadline);
+      this.indexedEventCount++;
+      await this.updateBlockForEvent('EqubGovernor', event);
+    });
+
+    governor.on('VoteCast', async (proposalId, voter, support, event) => {
+      this.logger.log(`[EqubGovernor] VoteCast: proposalId=${proposalId}, voter=${voter}, support=${support}`);
+      await this.handleVoteCast(proposalId, support);
+      this.indexedEventCount++;
+      await this.updateBlockForEvent('EqubGovernor', event);
+    });
+
+    governor.on('ProposalExecuted', async (proposalId, event) => {
+      this.logger.log(`[EqubGovernor] ProposalExecuted: proposalId=${proposalId}`);
+      await this.handleProposalExecuted(proposalId);
+      this.indexedEventCount++;
+      await this.updateBlockForEvent('EqubGovernor', event);
+    });
+
+    governor.on('ProposalCancelled', async (proposalId, event) => {
+      this.logger.log(`[EqubGovernor] ProposalCancelled: proposalId=${proposalId}`);
+      await this.handleProposalCancelled(proposalId);
+      this.indexedEventCount++;
+      await this.updateBlockForEvent('EqubGovernor', event);
+    });
+  }
+
+  private async handleEqubGovernorEvent(event: ethers.EventLog) {
+    switch (event.eventName) {
+      case 'ProposalCreated': {
+        const [proposalId, equbId, proposer, ruleHash, description, deadline] = event.args;
+        await this.handleProposalCreated(proposalId, equbId, proposer, ruleHash, description, deadline);
+        break;
+      }
+      case 'VoteCast': {
+        const [proposalId, _voter, support] = event.args;
+        await this.handleVoteCast(proposalId, support);
+        break;
+      }
+      case 'ProposalExecuted': {
+        const [proposalId] = event.args;
+        await this.handleProposalExecuted(proposalId);
+        break;
+      }
+      case 'ProposalCancelled': {
+        const [proposalId] = event.args;
+        await this.handleProposalCancelled(proposalId);
+        break;
+      }
+    }
+  }
+
+  private async handleProposalCreated(
+    onChainProposalId: bigint,
+    equbId: bigint,
+    proposer: string,
+    ruleHash: string,
+    description: string,
+    deadline: bigint,
+  ) {
+    const existing = await this.proposalRepo.findOne({
+      where: { onChainProposalId: Number(onChainProposalId) },
+    });
+    if (existing) return;
+
+    const pool = await this.poolRepo.findOne({
+      where: { onChainPoolId: Number(equbId) },
+    });
+
+    const proposal = this.proposalRepo.create({
+      onChainProposalId: Number(onChainProposalId),
+      poolId: pool?.id ?? '00000000-0000-0000-0000-000000000000',
+      onChainEqubId: Number(equbId),
+      proposer,
+      ruleHash,
+      description,
+      deadline: new Date(Number(deadline) * 1000),
+      status: 'active',
+    });
+    await this.proposalRepo.save(proposal);
+  }
+
+  private async handleVoteCast(onChainProposalId: bigint, support: boolean) {
+    const proposal = await this.proposalRepo.findOne({
+      where: { onChainProposalId: Number(onChainProposalId) },
+    });
+    if (!proposal) return;
+
+    if (support) {
+      proposal.yesVotes += 1;
+    } else {
+      proposal.noVotes += 1;
+    }
+    await this.proposalRepo.save(proposal);
+  }
+
+  private async handleProposalExecuted(onChainProposalId: bigint) {
+    const proposal = await this.proposalRepo.findOne({
+      where: { onChainProposalId: Number(onChainProposalId) },
+    });
+    if (!proposal) return;
+
+    proposal.status = 'executed';
+    await this.proposalRepo.save(proposal);
+  }
+
+  private async handleProposalCancelled(onChainProposalId: bigint) {
+    const proposal = await this.proposalRepo.findOne({
+      where: { onChainProposalId: Number(onChainProposalId) },
+    });
+    if (!proposal) return;
+
+    proposal.status = 'cancelled';
+    await this.proposalRepo.save(proposal);
   }
 
   private async handleIdentityBound(wallet: string, identityHash: string) {

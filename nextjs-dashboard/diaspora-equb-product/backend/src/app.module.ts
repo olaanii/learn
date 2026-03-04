@@ -21,6 +21,15 @@ import { HealthModule } from './health/health.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { RulesModule } from './rules/rules.module';
+import { SecurityModule } from './security/security.module';
+import { SwapModule } from './swap/swap.module';
+import { ReferralModule } from './referral/referral.module';
+import { GovernanceModule } from './governance/governance.module';
+import { BadgesModule } from './badges/badges.module';
+import { CacheModule } from './cache/cache.module';
+import { JobsModule } from './jobs/jobs.module';
+import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -45,6 +54,11 @@ import { AnalyticsModule } from './analytics/analytics.module';
       },
     ]),
 
+    // Global infrastructure
+    CacheModule,
+    JobsModule,
+    WebsocketModule,
+
     // Feature modules
     AuthModule,
     CollateralModule,
@@ -58,6 +72,12 @@ import { AnalyticsModule } from './analytics/analytics.module';
     IndexerModule,
     NotificationsModule,
     AnalyticsModule,
+    RulesModule,
+    SecurityModule,
+    GovernanceModule,
+    ReferralModule,
+    SwapModule,
+    BadgesModule,
   ],
   providers: [
     // Global JWT authentication guard

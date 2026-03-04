@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/app_config.dart';
 
@@ -13,8 +14,8 @@ class ApiClient {
   ApiClient() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -22,10 +23,22 @@ class ApiClient {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        // Ensure baseUrl always ends with a slash so Dio appends paths properly
+        if (!options.baseUrl.endsWith('/')) {
+           options.baseUrl = '${options.baseUrl}/';
+        }
+        
+        // Remove leading slash from path to prevent Dio from treating it as absolute
+        if (options.path.startsWith('/')) {
+          options.path = options.path.substring(1);
+        }
+        
         final token = await _storage.read(key: _tokenKey);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
+        // Prevent browser 304 caching on Flutter web
+        options.headers['Cache-Control'] = 'no-cache';
         return handler.next(options);
       },
       onError: (error, handler) {
@@ -52,16 +65,30 @@ class ApiClient {
 
   // ── Auth ──────────────────────────────────────
   Future<Map<String, dynamic>> verifyFayda(String token) async {
-    final response =
-        await _dio.post('/auth/fayda/verify', data: {'token': token});
-    return response.data;
+    try {
+      final response =
+          await _dio.post('auth/fayda/verify', data: {'token': token});
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        debugPrint('DIO EXCEPTION in verifyFayda: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> walletChallenge(String walletAddress) async {
-    final response = await _dio.post('/auth/wallet/challenge', data: {
-      'walletAddress': walletAddress,
-    });
-    return response.data;
+    try {
+      final response = await _dio.post('auth/wallet/challenge', data: {
+        'walletAddress': walletAddress,
+      });
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        debugPrint('DIO EXCEPTION in walletChallenge: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> walletVerify({
@@ -69,25 +96,39 @@ class ApiClient {
     required String signature,
     required String message,
   }) async {
-    final response = await _dio.post('/auth/wallet/verify', data: {
-      'walletAddress': walletAddress,
-      'signature': signature,
-      'message': message,
-    });
-    return response.data;
+    try {
+      final response = await _dio.post('auth/wallet/verify', data: {
+        'walletAddress': walletAddress,
+        'signature': signature,
+        'message': message,
+      });
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        debugPrint('DIO EXCEPTION in walletVerify: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> devLogin({String? walletAddress}) async {
-    final response = await _dio.post('/auth/dev-login', data: {
-      if (walletAddress != null) 'walletAddress': walletAddress,
-    });
-    return response.data;
+    try {
+      final response = await _dio.post('auth/dev-login', data: {
+        if (walletAddress != null) 'walletAddress': walletAddress,
+      });
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        debugPrint('DIO EXCEPTION in devLogin: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+      }
+      rethrow;
+    }
   }
 
   // ── Identity ──────────────────────────────────
   Future<Map<String, dynamic>> bindWallet(
       String identityHash, String walletAddress) async {
-    final response = await _dio.post('/wallet/bind', data: {
+    final response = await _dio.post('wallet/bind', data: {
       'identityHash': identityHash,
       'walletAddress': walletAddress,
     });
@@ -96,33 +137,34 @@ class ApiClient {
 
   // ── Tiers ─────────────────────────────────────
   Future<Map<String, dynamic>> getTierEligibility(String walletAddress) async {
-    final response = await _dio.get('/tiers/eligibility', queryParameters: {
+    final response = await _dio.get('tiers/eligibility', queryParameters: {
       'walletAddress': walletAddress,
     });
     return response.data;
   }
 
   Future<List<dynamic>> getAllTiers() async {
-    final response = await _dio.get('/tiers');
+    final response = await _dio.get('tiers');
     return response.data;
   }
 
   // ── Pools ─────────────────────────────────────
   Future<List<dynamic>> listPools({int? tier}) async {
-    final response = await _dio.get('/pools', queryParameters: {
+    final response = await _dio.get('pools', queryParameters: {
       if (tier != null) 'tier': tier,
+      '_t': DateTime.now().millisecondsSinceEpoch,
     });
     return response.data;
   }
 
   Future<Map<String, dynamic>> getPool(String poolId) async {
-    final response = await _dio.get('/pools/$poolId');
+    final response = await _dio.get('pools/$poolId');
     return response.data;
   }
 
   /// Get token info for a pool (ERC-20 vs native CTC).
   Future<Map<String, dynamic>> getPoolToken(String poolId) async {
-    final response = await _dio.get('/pools/$poolId/token');
+    final response = await _dio.get('pools/$poolId/token');
     return response.data;
   }
 
@@ -133,7 +175,7 @@ class ApiClient {
     required String treasury,
     String? token,
   }) async {
-    final response = await _dio.post('/pools/create', data: {
+    final response = await _dio.post('pools/create', data: {
       'tier': tier,
       'contributionAmount': contributionAmount,
       'maxMembers': maxMembers,
@@ -145,7 +187,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> joinPool(
       String poolId, String walletAddress) async {
-    final response = await _dio.post('/pools/join', data: {
+    final response = await _dio.post('pools/join', data: {
       'poolId': poolId,
       'walletAddress': walletAddress,
     });
@@ -154,7 +196,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> recordContribution(
       String poolId, String walletAddress, int round) async {
-    final response = await _dio.post('/pools/contributions', data: {
+    final response = await _dio.post('pools/contributions', data: {
       'poolId': poolId,
       'walletAddress': walletAddress,
       'round': round,
@@ -170,7 +212,7 @@ class ApiClient {
     required String treasury,
     String? token,
   }) async {
-    final response = await _dio.post('/pools/build/create', data: {
+    final response = await _dio.post('pools/build/create', data: {
       'tier': tier,
       'contributionAmount': contributionAmount,
       'maxMembers': maxMembers,
@@ -183,7 +225,7 @@ class ApiClient {
   /// Create pool from mined createPool tx. Backend waits for receipt and creates pool with onChainPoolId (active).
   Future<Map<String, dynamic>> createPoolFromCreationTx(String txHash) async {
     final response = await _dio.post(
-      '/pools/from-creation-tx',
+      'pools/from-creation-tx',
       data: {'txHash': txHash.trim()},
       options: Options(receiveTimeout: const Duration(seconds: 150)),
     );
@@ -194,7 +236,7 @@ class ApiClient {
     int onChainPoolId, {
     String? caller,
   }) async {
-    final response = await _dio.post('/pools/build/join', data: {
+    final response = await _dio.post('pools/build/join', data: {
       'onChainPoolId': onChainPoolId,
       if (caller != null) 'caller': caller,
     });
@@ -206,7 +248,7 @@ class ApiClient {
     required String contributionAmount,
     String? tokenAddress,
   }) async {
-    final response = await _dio.post('/pools/build/contribute', data: {
+    final response = await _dio.post('pools/build/contribute', data: {
       'onChainPoolId': onChainPoolId,
       'contributionAmount': contributionAmount,
       if (tokenAddress != null) 'tokenAddress': tokenAddress,
@@ -215,7 +257,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> buildCloseRound(int onChainPoolId) async {
-    final response = await _dio.post('/pools/build/close-round', data: {
+    final response = await _dio.post('pools/build/close-round', data: {
       'onChainPoolId': onChainPoolId,
     });
     return response.data;
@@ -227,7 +269,7 @@ class ApiClient {
     required String tokenAddress,
     required String amount,
   }) async {
-    final response = await _dio.post('/pools/build/approve-token', data: {
+    final response = await _dio.post('pools/build/approve-token', data: {
       'tokenAddress': tokenAddress,
       'amount': amount,
     });
@@ -241,7 +283,7 @@ class ApiClient {
     required int upfrontPercent,
     required int totalRounds,
   }) async {
-    final response = await _dio.post('/pools/build/schedule-stream', data: {
+    final response = await _dio.post('pools/build/schedule-stream', data: {
       'onChainPoolId': onChainPoolId,
       'beneficiary': beneficiary,
       'total': total,
@@ -261,7 +303,7 @@ class ApiClient {
     required String caller,
     String phase = 'auto',
   }) async {
-    final response = await _dio.post('/pools/$poolId/select-winner', data: {
+    final response = await _dio.post('pools/$poolId/select-winner', data: {
       'phase': phase,
       'total': total,
       'upfrontPercent': upfrontPercent,
@@ -271,8 +313,13 @@ class ApiClient {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> getEligibleWinners(String poolId) async {
+    final response = await _dio.get('pools/$poolId/rounds/active/eligible-winners');
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> closeActiveRound(String poolId) async {
-    final response = await _dio.post('/pools/$poolId/rounds/active/close');
+    final response = await _dio.post('pools/$poolId/rounds/active/close');
     return response.data;
   }
 
@@ -282,7 +329,7 @@ class ApiClient {
     String mode = 'auto',
   }) async {
     final response = await _dio.post(
-      '/pools/$poolId/rounds/active/pick-winner',
+      'pools/$poolId/rounds/active/pick-winner',
       data: {
         'mode': mode,
       },
@@ -303,7 +350,7 @@ class ApiClient {
     int? payoutSplitPct,
     String? cadence,
   }) async {
-    final response = await _dio.post('/pools/$poolId/seasons', data: {
+    final response = await _dio.post('pools/$poolId/seasons', data: {
       'caller': caller,
       if (contributionAmount != null && contributionAmount.isNotEmpty)
         'contributionAmount': contributionAmount,
@@ -318,7 +365,7 @@ class ApiClient {
 
   /// Build unsigned CTC collateral deposit TX (native).
   Future<Map<String, dynamic>> buildDepositCollateral(String amount) async {
-    final response = await _dio.post('/collateral/build/deposit', data: {
+    final response = await _dio.post('collateral/build/deposit', data: {
       'amount': amount,
     });
     return response.data;
@@ -329,7 +376,7 @@ class ApiClient {
     required String userAddress,
     required String amount,
   }) async {
-    final response = await _dio.post('/collateral/build/release', data: {
+    final response = await _dio.post('collateral/build/release', data: {
       'userAddress': userAddress,
       'amount': amount,
     });
@@ -341,7 +388,7 @@ class ApiClient {
     required String amount,
     String tokenSymbol = 'USDC',
   }) async {
-    final response = await _dio.post('/collateral/build/deposit-token', data: {
+    final response = await _dio.post('collateral/build/deposit-token', data: {
       'amount': amount,
       'tokenSymbol': tokenSymbol,
     });
@@ -356,7 +403,7 @@ class ApiClient {
     required String txHash,
   }) async {
     final response =
-        await _dio.post('/collateral/deposit-token/confirm', data: {
+        await _dio.post('collateral/deposit-token/confirm', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       'tokenSymbol': tokenSymbol,
@@ -371,7 +418,7 @@ class ApiClient {
     required String amount,
     String tokenSymbol = 'USDC',
   }) async {
-    final response = await _dio.post('/collateral/release-token', data: {
+    final response = await _dio.post('collateral/release-token', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       'tokenSymbol': tokenSymbol,
@@ -384,7 +431,7 @@ class ApiClient {
     required String identityHash,
     required String walletAddress,
   }) async {
-    final response = await _dio.post('/wallet/build/store-onchain', data: {
+    final response = await _dio.post('wallet/build/store-onchain', data: {
       'identityHash': identityHash,
       'walletAddress': walletAddress,
     });
@@ -393,7 +440,7 @@ class ApiClient {
 
   // ── Credit ────────────────────────────────────
   Future<Map<String, dynamic>> getCreditScore(String walletAddress) async {
-    final response = await _dio.get('/credit', queryParameters: {
+    final response = await _dio.get('credit', queryParameters: {
       'walletAddress': walletAddress,
     });
     return response.data;
@@ -401,7 +448,7 @@ class ApiClient {
 
   // ── Collateral ────────────────────────────────
   Future<List<dynamic>> getCollateral(String walletAddress) async {
-    final response = await _dio.get('/collateral', queryParameters: {
+    final response = await _dio.get('collateral', queryParameters: {
       'walletAddress': walletAddress,
     });
     return response.data;
@@ -412,7 +459,7 @@ class ApiClient {
     required String amount,
     String? poolId,
   }) async {
-    final response = await _dio.post('/collateral/lock', data: {
+    final response = await _dio.post('collateral/lock', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       if (poolId != null) 'poolId': poolId,
@@ -426,7 +473,7 @@ class ApiClient {
     double amount = 1000,
     String token = 'USDC',
   }) async {
-    final response = await _dio.post('/token/faucet', data: {
+    final response = await _dio.post('token/faucet', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       'token': token,
@@ -435,10 +482,11 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getTokenBalance(String walletAddress,
-      {String token = 'USDC'}) async {
-    final response = await _dio.get('/token/balance', queryParameters: {
+      {String token = 'USDC', String? tokenAddress}) async {
+    final response = await _dio.get('token/balance', queryParameters: {
       'walletAddress': walletAddress,
       'token': token,
+      if (tokenAddress != null) 'tokenAddress': tokenAddress,
     });
     return response.data;
   }
@@ -453,7 +501,7 @@ class ApiClient {
     String? status,
     String? cursor,
   }) async {
-    final response = await _dio.get('/token/transactions', queryParameters: {
+    final response = await _dio.get('token/transactions', queryParameters: {
       'walletAddress': walletAddress,
       'token': token,
       'limit': limit,
@@ -475,7 +523,7 @@ class ApiClient {
     required String amount,
     String token = 'USDC',
   }) async {
-    final response = await _dio.post('/token/transfer', data: {
+    final response = await _dio.post('token/transfer', data: {
       'from': from,
       'to': to,
       'amount': amount,
@@ -491,7 +539,7 @@ class ApiClient {
     String token = 'USDC',
     String network = 'ERC-20',
   }) async {
-    final response = await _dio.post('/token/withdraw', data: {
+    final response = await _dio.post('token/withdraw', data: {
       'from': from,
       'to': to,
       'amount': amount,
@@ -502,13 +550,27 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getExchangeRates() async {
-    final response = await _dio.get('/token/rates');
+    final response = await _dio.get('token/rates');
     return response.data;
   }
 
   Future<List<dynamic>> getSupportedTokens() async {
-    final response = await _dio.get('/token/supported');
+    final response = await _dio.get('token/supported');
     return response.data;
+  }
+
+  // ── Equb Rules ──────────────────────────────
+  Future<Map<String, dynamic>> getEqubRules(String poolId) async {
+    final response = await _dio.get('pools/$poolId/rules');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateEqubRules({
+    required String poolId,
+    required Map<String, dynamic> rules,
+  }) async {
+    final response = await _dio.patch('pools/$poolId/rules', data: rules);
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   // ── Equb Insights ────────────────────────────
@@ -523,7 +585,7 @@ class ApiClient {
     String bucket = 'day',
   }) async {
     final response = await _dio.get(
-      '/analytics/equbs/popular-series',
+      'analytics/equbs/popular-series',
       queryParameters: {
         if (from != null) 'from': from,
         if (to != null) 'to': to,
@@ -548,7 +610,7 @@ class ApiClient {
     String bucket = 'day',
   }) async {
     final response = await _dio.get(
-      '/analytics/equbs/joined-progress',
+      'analytics/equbs/joined-progress',
       queryParameters: {
         'wallet': wallet,
         if (from != null) 'from': from,
@@ -570,7 +632,7 @@ class ApiClient {
     String? status,
   }) async {
     final response = await _dio.get(
-      '/analytics/equbs/summary',
+      'analytics/equbs/summary',
       queryParameters: {
         'wallet': wallet,
         if (from != null) 'from': from,
@@ -583,10 +645,43 @@ class ApiClient {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> getEqubGlobalStats({int? type}) async {
+    final response = await _dio.get(
+      'analytics/equbs/global-stats',
+      queryParameters: {
+        if (type != null) 'type': type,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getEqubTrending() async {
+    final response = await _dio.get('analytics/equbs/trending');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<List<dynamic>> getEqubLeaderboard({
+    int? type,
+    String? sort,
+    int? page,
+    int? limit,
+  }) async {
+    final response = await _dio.get(
+      'analytics/equbs/leaderboard',
+      queryParameters: {
+        if (type != null) 'type': type,
+        if (sort != null) 'sort': sort,
+        if (page != null) 'page': page,
+        if (limit != null) 'limit': limit,
+      },
+    );
+    return response.data;
+  }
+
   // ── Notifications ──────────────────────────────
   Future<List<dynamic>> getNotifications(
       {int limit = 50, int offset = 0}) async {
-    final response = await _dio.get('/notifications', queryParameters: {
+    final response = await _dio.get('notifications', queryParameters: {
       'limit': limit,
       'offset': offset,
     });
@@ -594,16 +689,16 @@ class ApiClient {
   }
 
   Future<int> getUnreadNotificationCount() async {
-    final response = await _dio.get('/notifications/unread-count');
+    final response = await _dio.get('notifications/unread-count');
     return response.data['count'] ?? 0;
   }
 
   Future<void> markNotificationRead(String id) async {
-    await _dio.patch('/notifications/$id/read');
+    await _dio.patch('notifications/$id/read');
   }
 
   Future<void> markAllNotificationsRead() async {
-    await _dio.patch('/notifications/read-all');
+    await _dio.patch('notifications/read-all');
   }
 
   Future<Map<String, dynamic>> getNotificationsIncremental({
@@ -612,7 +707,7 @@ class ApiClient {
     int limit = 50,
   }) async {
     final response =
-        await _dio.get('/notifications/incremental', queryParameters: {
+        await _dio.get('notifications/incremental', queryParameters: {
       if (afterCreatedAt != null && afterCreatedAt.isNotEmpty)
         'afterCreatedAt': afterCreatedAt,
       if (afterId != null && afterId.isNotEmpty) 'afterId': afterId,
@@ -623,7 +718,7 @@ class ApiClient {
 
   Future<Stream<String>> openNotificationEventStream() async {
     final response = await _dio.get<ResponseBody>(
-      '/notifications/stream',
+      'notifications/stream',
       options: Options(
         responseType: ResponseType.stream,
         headers: {
@@ -648,9 +743,111 @@ class ApiClient {
         .transform(const LineSplitter());
   }
 
+  // ── Governance ────────────────────────────────
+  Future<List<dynamic>> getProposals(String poolId) async {
+    final response = await _dio.get('pools/$poolId/proposals');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getProposal(String poolId, String proposalId) async {
+    final response = await _dio.get('pools/$poolId/proposals/$proposalId');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> buildProposeTx({
+    required String poolId,
+    required Map<String, dynamic> rules,
+    required String description,
+    required String callerAddress,
+  }) async {
+    final response = await _dio.post('pools/$poolId/proposals', data: {
+      'rules': rules,
+      'description': description,
+      'callerAddress': callerAddress,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> buildVoteTx({
+    required String poolId,
+    required int onChainProposalId,
+    required bool support,
+    required String callerAddress,
+  }) async {
+    final response = await _dio.post(
+      'pools/$poolId/proposals/$onChainProposalId/vote',
+      data: {'support': support, 'callerAddress': callerAddress},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> buildExecuteTx({
+    required String poolId,
+    required int onChainProposalId,
+    required String callerAddress,
+  }) async {
+    final response = await _dio.post(
+      'pools/$poolId/proposals/$onChainProposalId/execute',
+      data: {'callerAddress': callerAddress},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  // ── Referral ──────────────────────────────────
+  Future<Map<String, dynamic>> getReferralCode() async {
+    final response = await _dio.get('referral/code');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getReferralStats() async {
+    final response = await _dio.get('referral/stats');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<List<dynamic>> getReferralCommissions() async {
+    final response = await _dio.get('referral/commissions');
+    final data = response.data;
+    if (data is List) return data;
+    return [];
+  }
+
+  // ── Swap ──────────────────────────────────────
+  Future<Map<String, dynamic>> getSwapQuote({
+    required String fromToken,
+    required String toToken,
+    required String amount,
+  }) async {
+    final response = await _dio.post('swap/quote', data: {
+      'fromToken': fromToken,
+      'toToken': toToken,
+      'amount': amount,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> buildSwapTx({
+    required String fromToken,
+    required String toToken,
+    required String amount,
+  }) async {
+    final response = await _dio.post('swap/build-tx', data: {
+      'fromToken': fromToken,
+      'toToken': toToken,
+      'amount': amount,
+    });
+    return response.data;
+  }
+
+  Future<List<dynamic>> getSwapHistory() async {
+    final response = await _dio.get('swap/history');
+    final data = response.data;
+    if (data is List) return data;
+    return [];
+  }
+
   // ── Health ────────────────────────────────────
   Future<Map<String, dynamic>> healthCheck() async {
-    final response = await _dio.get('/health');
+    final response = await _dio.get('health');
     return response.data;
   }
 }

@@ -18,7 +18,7 @@ export class GetTransactionsQueryDto {
   @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'walletAddress must be a valid EVM address' })
   walletAddress: string;
 
-  @ApiPropertyOptional({ description: 'Token symbol (USDC, USDT, CTC, ALL)', example: 'USDC', default: 'USDC' })
+  @ApiPropertyOptional({ description: 'Token symbol (USDC, USDT, CTC, tCTC, ALL)', example: 'USDC', default: 'USDC' })
   @IsOptional()
   @IsString()
   token?: string;
@@ -129,4 +129,12 @@ export class WithdrawDto {
   @IsOptional()
   @IsString()
   network?: string;
+}
+
+export class PortfolioQueryDto {
+  @ApiProperty({ description: 'EVM wallet address' })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^0x[a-fA-F0-9]{40}$/, { message: 'wallet must be a valid EVM address' })
+  wallet: string;
 }

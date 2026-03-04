@@ -25,8 +25,16 @@ class AppConfig {
       ? 'https://creditcoin.blockscout.com'
       : 'https://creditcoin-testnet.blockscout.com';
 
+  /// Human-readable network label.
+  static String get networkName =>
+      isMainnet ? 'Creditcoin Mainnet' : 'Creditcoin Testnet';
+
   /// Whether we are targeting mainnet (useful for UI badges / warnings).
   static bool get isMainnet => chainId == 102030;
+
+  /// Native token symbol based on compile-time chain ID.
+  /// Prefer NetworkProvider.nativeSymbol at runtime for dynamic switching.
+  static String get nativeSymbol => isMainnet ? 'CTC' : 'tCTC';
 
   /// USDC token address. Override via --dart-define=TEST_USDC_ADDRESS=0x...
   static const String usdcAddress = String.fromEnvironment(

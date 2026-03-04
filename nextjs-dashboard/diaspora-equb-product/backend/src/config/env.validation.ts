@@ -34,10 +34,16 @@ export const envValidationSchema = Joi.object({
   COLLATERAL_VAULT_ADDRESS: evmAddress,
   PAYOUT_STREAM_ADDRESS: evmAddress,
   EQUB_POOL_ADDRESS: evmAddress,
+  EQUB_GOVERNOR_ADDRESS: evmAddress,
+  SWAP_ROUTER_ADDRESS: evmAddress,
+  ACHIEVEMENT_BADGE_ADDRESS: evmAddress,
 
   // Test Token Addresses
   TEST_USDC_ADDRESS: evmAddress,
   TEST_USDT_ADDRESS: evmAddress,
+
+  // Redis (optional — falls back to in-memory cache when not set)
+  REDIS_URL: Joi.string().default('redis://localhost:6379'),
 
   // Server
   PORT: Joi.number().default(3001),

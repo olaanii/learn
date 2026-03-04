@@ -8,7 +8,9 @@ import { PayoutStreamEntity } from '../entities/payout-stream.entity';
 import { Round } from '../entities/round.entity';
 import { Season } from '../entities/season.entity';
 import {
+  GlobalStatsQueryDto,
   JoinedProgressQueryDto,
+  LeaderboardQueryDto,
   PopularSeriesQueryDto,
   SummaryQueryDto,
 } from './dto/equb-insights-query.dto';
@@ -429,6 +431,297 @@ export class AnalyticsService {
     }
   }
 
+  async getGlobalStats(query: GlobalStatsQueryDto) {
+    const qb = this.poolRepo.createQueryBuilder('pool');
+
+    if (query.type !== undefined && query.type !== null) {
+      qb.andWhere('pool.equbType = :equbType', { equbType: query.type });
+    }
+
+    const [totalCount, activeCount, completedCount] = await Promise.all([
+      qb.clone().getCount(),
+      qb.clone().andWhere('LOWER(pool.status) = :s', { s: 'active' }).getCount(),
+      qb.clone().andWhere('LOWER(pool.status) = :s', { s: 'completed' }).getCount(),
+    ]);
+
+    const activePools = await qb
+      .clone()
+      .andWhere('LOWER(pool.status) = :s', { s: 'active' })
+      .getMany();
+
+    const activePoolIds = activePools.map((p) => p.id);
+
+    let tvl = 0;
+    let totalMembers = 0;
+
+    if (activePoolIds.length > 0) {
+      const memberCounts = await this.memberRepo
+        .createQueryBuilder('pm')
+        .select('pm.poolId', 'poolId')
+        .addSelect('COUNT(pm.id)', 'cnt')
+        .where('pm.poolId IN (:...ids)', { ids: activePoolIds })
+        .groupBy('pm.poolId')
+        .getRawMany<{ poolId: string; cnt: string }>();
+
+      const memberCountMap = new Map(
+        memberCounts.map((r) => [r.poolId, Number(r.cnt)]),
+      );
+
+      for (const pool of activePools) {
+        const members = memberCountMap.get(pool.id) ?? 0;
+        tvl += Number(pool.contributionAmount) * members;
+      }
+
+      const distinctMembers = await this.memberRepo
+        .createQueryBuilder('pm')
+        .select('COUNT(DISTINCT pm.walletAddress)', 'cnt')
+        .where('pm.poolId IN (:...ids)', { ids: activePoolIds })
+        .getRawOne<{ cnt: string }>();
+
+      totalMembers = Number(distinctMembers?.cnt ?? 0);
+    }
+
+    const totalContributions = activePoolIds.length
+      ? Number(
+          (
+            await this.contributionRepo
+              .createQueryBuilder('c')
+              .select('COUNT(c.id)', 'cnt')
+              .where('c.poolId IN (:...ids)', { ids: activePoolIds })
+              .getRawOne<{ cnt: string }>()
+          )?.cnt ?? 0,
+        )
+      : 0;
+
+    const defaultCount = activePoolIds.length
+      ? Number(
+          (
+            await this.contributionRepo
+              .createQueryBuilder('c')
+              .select('COUNT(c.id)', 'cnt')
+              .where('c.poolId IN (:...ids)', { ids: activePoolIds })
+              .andWhere("LOWER(c.status) = 'failed'")
+              .getRawOne<{ cnt: string }>()
+          )?.cnt ?? 0,
+        )
+      : 0;
+
+    const completionRate = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+    const defaultRate =
+      totalContributions > 0 ? (defaultCount / totalContributions) * 100 : 0;
+
+    return {
+      tvl: Number(tvl.toFixed(4)),
+      activeEqubs: activeCount,
+      totalMembers,
+      completionRate: Number(completionRate.toFixed(2)),
+      defaultRate: Number(defaultRate.toFixed(2)),
+    };
+  }
+
+  async getLeaderboard(query: LeaderboardQueryDto) {
+    const sort = query.sort ?? 'members';
+    const page = query.page ?? 1;
+    const limit = Math.min(query.limit ?? 20, 100);
+    const offset = (page - 1) * limit;
+
+    const qb = this.poolRepo
+      .createQueryBuilder('pool')
+      .leftJoin('pool.members', 'pm')
+      .leftJoin('pool.contributions', 'c')
+      .select('pool.id', 'poolId')
+      .addSelect('pool.onChainPoolId', 'onChainPoolId')
+      .addSelect('pool.equbType', 'equbType')
+      .addSelect('pool.frequency', 'frequency')
+      .addSelect('pool.currentRound', 'currentRound')
+      .addSelect('pool.maxMembers', 'maxMembers')
+      .addSelect('pool.createdAt', 'createdAt')
+      .addSelect('COUNT(DISTINCT pm.id)', 'memberCount')
+      .addSelect('COUNT(DISTINCT c.id)', 'contributionCount')
+      .groupBy('pool.id');
+
+    if (query.type !== undefined && query.type !== null) {
+      qb.andWhere('pool.equbType = :equbType', { equbType: query.type });
+    }
+
+    switch (sort) {
+      case 'contributions':
+        qb.orderBy('COUNT(DISTINCT c.id)', 'DESC');
+        break;
+      case 'completion':
+        qb.orderBy(
+          'CASE WHEN pool.maxMembers > 0 THEN CAST(pool.currentRound AS float) / pool.maxMembers ELSE 0 END',
+          'DESC',
+        );
+        break;
+      case 'newest':
+        qb.orderBy('pool.createdAt', 'DESC');
+        break;
+      default:
+        qb.orderBy('COUNT(DISTINCT pm.id)', 'DESC');
+        break;
+    }
+
+    qb.offset(offset).limit(limit);
+
+    const rows = await qb.getRawMany<{
+      poolId: string;
+      onChainPoolId: number | null;
+      equbType: number | null;
+      frequency: number | null;
+      currentRound: number;
+      maxMembers: number;
+      createdAt: string;
+      memberCount: string;
+      contributionCount: string;
+    }>();
+
+    return rows.map((r) => ({
+      poolId: r.poolId,
+      onChainPoolId: r.onChainPoolId,
+      equbType: r.equbType,
+      frequency: r.frequency,
+      memberCount: Number(r.memberCount),
+      contributionCount: Number(r.contributionCount),
+      completionPct:
+        Number(r.maxMembers) > 0
+          ? Number(
+              ((Number(r.currentRound) / Number(r.maxMembers)) * 100).toFixed(2),
+            )
+          : 0,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async getTrending() {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const fastestGrowingQb = this.poolRepo
+      .createQueryBuilder('pool')
+      .leftJoin('pool.members', 'pm', 'pm.joinedAt >= :since', {
+        since: sevenDaysAgo,
+      })
+      .select('pool.id', 'poolId')
+      .addSelect('pool.onChainPoolId', 'onChainPoolId')
+      .addSelect('pool.equbType', 'equbType')
+      .addSelect('pool.frequency', 'frequency')
+      .addSelect('pool.currentRound', 'currentRound')
+      .addSelect('pool.maxMembers', 'maxMembers')
+      .addSelect('pool.createdAt', 'createdAt')
+      .addSelect('COUNT(pm.id)', 'recentJoins')
+      .where("LOWER(pool.status) = 'active'")
+      .groupBy('pool.id')
+      .orderBy('COUNT(pm.id)', 'DESC')
+      .limit(5);
+
+    const completingSoonQb = this.poolRepo
+      .createQueryBuilder('pool')
+      .select('pool.id', 'poolId')
+      .addSelect('pool.onChainPoolId', 'onChainPoolId')
+      .addSelect('pool.equbType', 'equbType')
+      .addSelect('pool.frequency', 'frequency')
+      .addSelect('pool.currentRound', 'currentRound')
+      .addSelect('pool.maxMembers', 'maxMembers')
+      .addSelect('pool.createdAt', 'createdAt')
+      .where("LOWER(pool.status) = 'active'")
+      .andWhere('pool.maxMembers > 0')
+      .andWhere(
+        'CAST(pool.currentRound AS float) / pool.maxMembers >= 0.75',
+      )
+      .orderBy(
+        'CAST(pool.currentRound AS float) / pool.maxMembers',
+        'DESC',
+      )
+      .limit(5);
+
+    const newestQb = this.poolRepo
+      .createQueryBuilder('pool')
+      .select('pool.id', 'poolId')
+      .addSelect('pool.onChainPoolId', 'onChainPoolId')
+      .addSelect('pool.equbType', 'equbType')
+      .addSelect('pool.frequency', 'frequency')
+      .addSelect('pool.currentRound', 'currentRound')
+      .addSelect('pool.maxMembers', 'maxMembers')
+      .addSelect('pool.createdAt', 'createdAt')
+      .where("LOWER(pool.status) = 'active'")
+      .orderBy('pool.createdAt', 'DESC')
+      .limit(5);
+
+    const [fastestGrowing, completingSoon, newest] = await Promise.all([
+      fastestGrowingQb.getRawMany(),
+      completingSoonQb.getRawMany(),
+      newestQb.getRawMany(),
+    ]);
+
+    const mapRow = (r: any) => ({
+      poolId: r.poolId,
+      onChainPoolId: r.onChainPoolId,
+      equbType: r.equbType,
+      frequency: r.frequency,
+      currentRound: Number(r.currentRound),
+      maxMembers: Number(r.maxMembers),
+      completionPct:
+        Number(r.maxMembers) > 0
+          ? Number(
+              ((Number(r.currentRound) / Number(r.maxMembers)) * 100).toFixed(2),
+            )
+          : 0,
+      createdAt: r.createdAt,
+      ...(r.recentJoins !== undefined
+        ? { recentJoins: Number(r.recentJoins) }
+        : {}),
+    });
+
+    return {
+      fastestGrowing: fastestGrowing.map(mapRow),
+      completingSoon: completingSoon.map(mapRow),
+      newest: newest.map(mapRow),
+    };
+  }
+
+  async getCreatorReputation(address: string) {
+    const normalizedAddress = address.toLowerCase();
+
+    const pools = await this.poolRepo
+      .createQueryBuilder('pool')
+      .where('LOWER(pool.createdBy) = :addr', { addr: normalizedAddress })
+      .getMany();
+
+    const totalCreated = pools.length;
+    const activePools = pools.filter((p) => p.status === 'active');
+    const activeCount = activePools.length;
+
+    const poolIds = pools.map((p) => p.id);
+
+    let totalMembers = 0;
+    if (poolIds.length > 0) {
+      const result = await this.memberRepo
+        .createQueryBuilder('pm')
+        .select('COUNT(pm.id)', 'cnt')
+        .where('pm.poolId IN (:...ids)', { ids: poolIds })
+        .getRawOne<{ cnt: string }>();
+      totalMembers = Number(result?.cnt ?? 0);
+    }
+
+    let avgCompletionPct = 0;
+    if (pools.length > 0) {
+      const sum = pools.reduce((acc, p) => {
+        if (p.maxMembers > 0) {
+          return acc + (p.currentRound / p.maxMembers) * 100;
+        }
+        return acc;
+      }, 0);
+      avgCompletionPct = Number((sum / pools.length).toFixed(2));
+    }
+
+    return {
+      totalCreated,
+      activeCount,
+      totalMembers,
+      avgCompletionPct,
+    };
+  }
+
   private applyPoolFilters(
     query: SelectQueryBuilder<Pool>,
     token?: string,
@@ -465,11 +758,11 @@ export class AnalyticsService {
 
     const maxRangeMs = bucket === 'hour'
       ? 14 * 24 * 60 * 60 * 1000
-      : 90 * 24 * 60 * 60 * 1000;
+      : 400 * 24 * 60 * 60 * 1000;
 
     if (toMs - fromMs > maxRangeMs) {
       throw new BadRequestException(
-        `Range too large for bucket=${bucket}. Max supported is ${bucket === 'hour' ? 14 : 90} days`,
+        `Range too large for bucket=${bucket}. Max supported is ${bucket === 'hour' ? 14 : 400} days`,
       );
     }
 

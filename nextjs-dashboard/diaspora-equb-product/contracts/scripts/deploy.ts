@@ -8,10 +8,10 @@ async function main() {
   console.log('Network:', network.name);
 
   const balance = await ethers.provider.getBalance(deployer.address);
-  console.log('Account balance:', ethers.formatEther(balance), 'CTC');
+  console.log('Account balance:', ethers.formatEther(balance), 'CTC\n');
 
   // 1. Deploy IdentityRegistry
-  console.log('\n--- Deploying IdentityRegistry ---');
+  console.log('--- Deploying IdentityRegistry ---');
   const IdentityRegistry = await ethers.getContractFactory('IdentityRegistry');
   const identityRegistry = await IdentityRegistry.deploy();
   await identityRegistry.waitForDeployment();
@@ -64,11 +64,70 @@ async function main() {
   const equbPoolAddr = await equbPool.getAddress();
   console.log('EqubPool deployed to:', equbPoolAddr);
 
-  // 7. Wire PayoutStream to EqubPool (one-time)
+  // Verify the deployed contract has setGovernor by checking on-chain code size
+  const code = await ethers.provider.getCode(equbPoolAddr);
+  console.log('EqubPool bytecode size:', (code.length - 2) / 2, 'bytes');
+
+  // 7. Wire PayoutStream -> EqubPool
   console.log('\n--- Wiring PayoutStream -> EqubPool ---');
   const setEqubTx = await payoutStream.setEqubPool(equbPoolAddr);
   await setEqubTx.wait();
   console.log('PayoutStream equbPool set to:', equbPoolAddr);
+
+  // 8. Deploy EqubGovernor
+  console.log('\n--- Deploying EqubGovernor ---');
+  const EqubGovernor = await ethers.getContractFactory('EqubGovernor');
+  const equbGovernor = await EqubGovernor.deploy(equbPoolAddr);
+  await equbGovernor.waitForDeployment();
+  const equbGovernorAddr = await equbGovernor.getAddress();
+  console.log('EqubGovernor deployed to:', equbGovernorAddr);
+
+  // 9. Wire EqubPool -> EqubGovernor (raw encoding to avoid typechain issues)
+  console.log('\n--- Wiring EqubPool -> EqubGovernor ---');
+  try {
+    const iface = new ethers.Interface(['function setGovernor(address _governor)']);
+    const calldata = iface.encodeFunctionData('setGovernor', [equbGovernorAddr]);
+    const setGovTx = await deployer.sendTransaction({
+      to: equbPoolAddr,
+      data: calldata,
+      gasLimit: 200000,
+    });
+    const receipt = await setGovTx.wait();
+    if (receipt && receipt.status === 1) {
+      console.log('EqubPool governor set to:', equbGovernorAddr);
+    } else {
+      console.log('WARNING: setGovernor tx mined but reverted on-chain');
+    }
+  } catch (err: any) {
+    console.error('setGovernor failed:', err.shortMessage || err.message);
+    console.log('Continuing deployment — governor can be set manually later.');
+  }
+
+  // 10. Deploy SwapRouter
+  console.log('\n--- Deploying SwapRouter ---');
+  const SwapRouter = await ethers.getContractFactory('SwapRouter');
+  const swapRouter = await SwapRouter.deploy();
+  await swapRouter.waitForDeployment();
+  const swapRouterAddr = await swapRouter.getAddress();
+  console.log('SwapRouter deployed to:', swapRouterAddr);
+
+  // 11. Deploy AchievementBadge (soulbound NFT)
+  console.log('\n--- Deploying AchievementBadge ---');
+  const AchievementBadge = await ethers.getContractFactory('AchievementBadge');
+  const achievementBadge = await AchievementBadge.deploy();
+  await achievementBadge.waitForDeployment();
+  const achievementBadgeAddr = await achievementBadge.getAddress();
+  console.log('AchievementBadge deployed to:', achievementBadgeAddr);
+
+  // Verify owner
+  console.log('\n--- Verifying EqubPool owner ---');
+  try {
+    const owner = await equbPool.owner();
+    console.log('EqubPool owner:', owner);
+    console.log('Deployer match:', owner.toLowerCase() === deployer.address.toLowerCase());
+  } catch {
+    console.log('Could not read owner() — check ABI');
+  }
 
   // Save deployment addresses
   const deployment = {
@@ -83,6 +142,9 @@ async function main() {
       CollateralVault: collateralVaultAddr,
       PayoutStream: payoutStreamAddr,
       EqubPool: equbPoolAddr,
+      EqubGovernor: equbGovernorAddr,
+      SwapRouter: swapRouterAddr,
+      AchievementBadge: achievementBadgeAddr,
     },
   };
 

@@ -31,7 +31,7 @@ jobs:
       - name: Compile contracts
         run: npx hardhat compile
 
-      - name: Run tests
+      - name: Run all tests (EqubPool, Rules, Governor, Swap, Badges, etc.)
         run: npx hardhat test
 
       - name: Gas report
@@ -92,6 +92,11 @@ jobs:
           RPC_URL: https://rpc.cc3-testnet.creditcoin.network
           CHAIN_ID: 102031
           NODE_ENV: test
+          CORS_ORIGINS: ''
+          SENTRY_DSN: ''
+          EQUB_GOVERNOR_ADDRESS: '0x0000000000000000000000000000000000000000'
+          SWAP_ROUTER_ADDRESS: '0x0000000000000000000000000000000000000000'
+          ACHIEVEMENT_BADGE_ADDRESS: '0x0000000000000000000000000000000000000000'
 
   # ── Frontend ─────────────────────────────────────────
   frontend:
@@ -107,17 +112,37 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.29.0'
           channel: stable
 
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Run build_runner codegen (freezed + json_serializable)
+        run: |
+          if grep -q 'build_runner' pubspec.yaml; then
+            dart run build_runner build --delete-conflicting-outputs
+          else
+            echo "build_runner not in pubspec.yaml, skipping codegen"
+          fi
+
       - name: Analyze
         run: flutter analyze
 
       - name: Build APK (debug)
-        run: flutter build apk --debug
+        run: >
+          flutter build apk --debug
+          --dart-define=API_BASE_URL=https://rpc.cc3-testnet.creditcoin.network
+          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          --dart-define=CHAIN_ID=102031
+
+      - name: Build Web (release – verifies Vercel build)
+        run: >
+          flutter build web --release --web-renderer canvaskit
+          --dart-define=API_BASE_URL=https://rpc.cc3-testnet.creditcoin.network
+          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          --dart-define=CHAIN_ID=102031
+        continue-on-error: false
 
   # ── Docker Build ─────────────────────────────────────
   docker:

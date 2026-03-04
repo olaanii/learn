@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/network_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../services/app_snackbar_service.dart';
 
@@ -58,7 +59,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -77,9 +78,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildFaucetTab(),
-                  _buildExternalWalletTab(),
-                  _buildCardPaymentTab(),
+                  _buildFaucetTab(context),
+                  _buildExternalWalletTab(context),
+                  _buildCardPaymentTab(context),
                 ],
               ),
             ),
@@ -91,45 +92,49 @@ class _FundWalletScreenState extends State<FundWalletScreen>
 
   // ── Tab bar ─────────────────────────────────────────────────────────
   Widget _buildTabBar() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppTheme.subtleShadow,
-      ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Colors.white,
-        unselectedLabelColor: AppTheme.textSecondary,
-        labelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-        indicator: BoxDecoration(
-          color: AppTheme.darkButton,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        padding: const EdgeInsets.all(4),
-        tabs: const [
-          Tab(text: 'Test Faucet'),
-          Tab(text: 'Wallet'),
-          Tab(text: 'Card'),
-        ],
-      ),
+    return Builder(
+      builder: (context) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: AppTheme.subtleShadowFor(context),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            labelColor: AppTheme.buttonTextColor(context),
+            unselectedLabelColor: AppTheme.textSecondaryColor(context),
+            labelStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+            indicator: BoxDecoration(
+              color: AppTheme.buttonColor(context),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+            padding: const EdgeInsets.all(4),
+            tabs: const [
+              Tab(text: 'Test Faucet'),
+              Tab(text: 'Wallet'),
+              Tab(text: 'Card'),
+            ],
+          ),
+        );
+      },
     );
   }
 
   // ══════════════════════════════════════════════════════════════════════
   //  TAB 1: TESTNET FAUCET
   // ══════════════════════════════════════════════════════════════════════
-  Widget _buildFaucetTab() {
+  Widget _buildFaucetTab(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
@@ -142,7 +147,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
             title: 'Testnet Faucet',
             subtitle:
                 'Mint free test tokens to your wallet. These are testnet tokens for development only — no real value.',
-            color: const Color(0xFF8B5CF6),
+            color: AppTheme.secondaryColor,
           ),
           const SizedBox(height: 24),
 
@@ -150,41 +155,41 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
+              color: AppTheme.cardColor(context),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.cardShadow,
+              boxShadow: AppTheme.cardShadowFor(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Select Token',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 12),
                 // Token chips
                 Row(
                   children: [
-                    _buildTokenChip('USDC', _selectedFaucetToken == 'USDC', () {
+                    _buildTokenChip(context, 'USDC', _selectedFaucetToken == 'USDC', () {
                       setState(() => _selectedFaucetToken = 'USDC');
                     }),
                     const SizedBox(width: 10),
-                    _buildTokenChip('USDT', _selectedFaucetToken == 'USDT', () {
+                    _buildTokenChip(context, 'USDT', _selectedFaucetToken == 'USDT', () {
                       setState(() => _selectedFaucetToken = 'USDT');
                     }),
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Amount',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -205,13 +210,13 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppTheme.darkButton
-                                : const Color(0xFFF7F8FA),
+                                ? AppTheme.buttonColor(context)
+                                : AppTheme.backgroundLight,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: isSelected
-                                  ? AppTheme.darkButton
-                                  : const Color(0xFFE5E7EB),
+                                  ? AppTheme.buttonColor(context)
+                                  : AppTheme.textHint,
                               width: 1,
                             ),
                           ),
@@ -222,8 +227,8 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: isSelected
-                                    ? Colors.white
-                                    : AppTheme.textPrimary,
+                                    ? AppTheme.buttonTextColor(context)
+                                    : AppTheme.textPrimaryColor(context),
                               ),
                             ),
                           ),
@@ -235,15 +240,16 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 const SizedBox(height: 12),
                 // Custom amount input
                 _buildAmountInput(
+                  context: context,
                   controller: _faucetAmountController,
                   hint: 'Custom amount (max 10,000)',
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Max: 10,000 $_selectedFaucetToken per request',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.textTertiary,
+                    color: AppTheme.textTertiaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -273,7 +279,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
+                      backgroundColor: AppTheme.secondaryColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(26),
@@ -289,7 +295,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           // Result message
           if (_faucetResult != null) ...[
             const SizedBox(height: 16),
-            _buildResultMessage(_faucetResult!),
+            _buildResultMessage(context, _faucetResult!),
           ],
 
           const SizedBox(height: 24),
@@ -361,13 +367,15 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   }
 
   Widget _buildPrerequisiteCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.subtleShadow,
-      ),
+    return Builder(
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+            boxShadow: AppTheme.subtleShadowFor(context),
+          ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -384,40 +392,51 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                     size: 16, color: AppTheme.warningColor),
               ),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 'Prerequisites',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          _buildPrerequisiteItem(
-            '1',
-            'CTC Gas Token',
-            'Get free CTC from Creditcoin Discord #token-faucet',
-          ),
+          Builder(builder: (context) {
+            final network = context.read<NetworkProvider>();
+            final sym = network.nativeSymbol;
+            return Column(children: [
+              _buildPrerequisiteItem(
+                context,
+                '1',
+                '$sym Gas Token',
+                'Get free $sym from Creditcoin Discord #token-faucet',
+              ),
+              const SizedBox(height: 10),
+              _buildPrerequisiteItem(
+                context,
+                '2',
+                network.networkName,
+                'Add network to MetaMask: RPC ${network.rpcUrl}, Chain ID ${network.chainId}',
+              ),
+            ]);
+          }),
           const SizedBox(height: 10),
           _buildPrerequisiteItem(
-            '2',
-            'Creditcoin Testnet',
-            'Add network to MetaMask: RPC https://rpc.cc3-testnet.creditcoin.network, Chain ID 102031',
-          ),
-          const SizedBox(height: 10),
-          _buildPrerequisiteItem(
+            context,
             '3',
             'Sign Transaction',
             'Your wallet will prompt you to sign the faucet transaction',
           ),
         ],
       ),
+        );
+      },
     );
   }
 
-  Widget _buildPrerequisiteItem(String num, String title, String desc) {
+  Widget _buildPrerequisiteItem(BuildContext context, String num, String title, String desc) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -425,16 +444,16 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: AppTheme.darkButton,
+            color: AppTheme.buttonColor(context),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
             child: Text(
               num,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: AppTheme.buttonTextColor(context),
               ),
             ),
           ),
@@ -446,18 +465,18 @@ class _FundWalletScreenState extends State<FundWalletScreen>
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 desc,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textTertiary,
+                  color: AppTheme.textTertiaryColor(context),
                 ),
               ),
             ],
@@ -470,7 +489,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   // ══════════════════════════════════════════════════════════════════════
   //  TAB 2: EXTERNAL WALLET
   // ══════════════════════════════════════════════════════════════════════
-  Widget _buildExternalWalletTab() {
+  Widget _buildExternalWalletTab(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final walletAddr = auth.walletAddress ?? '0x...';
     final shortAddr = walletAddr.length > 14
@@ -496,27 +515,27 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
+              color: AppTheme.cardColor(context),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.cardShadow,
+              boxShadow: AppTheme.cardShadowFor(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Your Equb Wallet Address',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Send TestUSDC or TestUSDT on Creditcoin Testnet to:',
+                Text(
+                  'Send TestUSDC or TestUSDT on ${context.read<NetworkProvider>().networkName} to:',
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.textTertiary,
+                    color: AppTheme.textTertiaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -534,11 +553,11 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F8FA),
+                      color: AppTheme.backgroundLight,
                       borderRadius:
                           BorderRadius.circular(AppTheme.cardRadiusSmall),
                       border:
-                          Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                          Border.all(color: AppTheme.textHint, width: 1),
                     ),
                     child: Row(
                       children: [
@@ -560,19 +579,19 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                             children: [
                               Text(
                                 shortAddr,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
+                                  color: AppTheme.textPrimaryColor(context),
                                   fontFamily: 'monospace',
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              const Text(
+                              Text(
                                 'Tap to copy full address',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: AppTheme.textTertiary,
+                                  color: AppTheme.textTertiaryColor(context),
                                 ),
                               ),
                             ],
@@ -617,9 +636,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Creditcoin Testnet (Chain 102031)',
-                        style: TextStyle(
+                      Text(
+                        '${context.read<NetworkProvider>().networkName} (Chain ${context.read<NetworkProvider>().chainId})',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppTheme.positive,
@@ -637,39 +656,39 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
+              color: AppTheme.cardColor(context),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.cardShadow,
+              boxShadow: AppTheme.cardShadowFor(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Transfer from External Wallet',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Enter the sender address and amount to generate a transfer request.',
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.textTertiary,
+                    color: AppTheme.textTertiaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 16),
                 // Token selector
                 Row(
                   children: [
-                    _buildTokenChip('USDC', _selectedExternalToken == 'USDC',
+                    _buildTokenChip(context, 'USDC', _selectedExternalToken == 'USDC',
                         () {
                       setState(() => _selectedExternalToken = 'USDC');
                     }),
                     const SizedBox(width: 10),
-                    _buildTokenChip('USDT', _selectedExternalToken == 'USDT',
+                    _buildTokenChip(context, 'USDT', _selectedExternalToken == 'USDT',
                         () {
                       setState(() => _selectedExternalToken = 'USDT');
                     }),
@@ -678,6 +697,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 const SizedBox(height: 16),
                 // Sender address input
                 _buildTextInput(
+                  context: context,
                   controller: _externalAddressController,
                   hint: '0x... sender wallet address',
                   icon: Icons.account_balance_wallet_outlined,
@@ -685,6 +705,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 const SizedBox(height: 12),
                 // Amount input
                 _buildAmountInput(
+                  context: context,
                   controller: _externalAmountController,
                   hint: 'Amount to transfer',
                 ),
@@ -763,7 +784,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   // ══════════════════════════════════════════════════════════════════════
   //  TAB 3: CARD PAYMENT (SIMULATED ON-RAMP)
   // ══════════════════════════════════════════════════════════════════════
-  Widget _buildCardPaymentTab() {
+  Widget _buildCardPaymentTab(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
@@ -775,7 +796,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
             title: 'Buy with Card',
             subtitle:
                 'Purchase stablecoins with Visa or Mastercard. Powered by our on-ramp partner.',
-            color: const Color(0xFF0891B2),
+            color: AppTheme.secondaryColor,
           ),
           const SizedBox(height: 8),
           // Test mode badge
@@ -813,9 +834,9 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
+              color: AppTheme.cardColor(context),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.cardShadow,
+              boxShadow: AppTheme.cardShadowFor(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -823,12 +844,12 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 // Payment method logos
                 Row(
                   children: [
-                    _buildPaymentMethodBadge('Visa', const Color(0xFF1A1F71)),
+                    _buildPaymentMethodBadge('Visa', AppTheme.primaryColor),
                     const SizedBox(width: 8),
                     _buildPaymentMethodBadge(
-                        'Mastercard', const Color(0xFFEB001B)),
+                        'Mastercard', AppTheme.dangerColor),
                     const SizedBox(width: 8),
-                    _buildPaymentMethodBadge('Apple Pay', AppTheme.textPrimary),
+                    _buildPaymentMethodBadge('Apple Pay', AppTheme.textPrimaryColor(context)),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -859,22 +880,22 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 const SizedBox(height: 20),
 
                 // Token selector
-                const Text(
+                Text(
                   'Buy Token',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildTokenChip('USDC', _selectedCardToken == 'USDC', () {
+                    _buildTokenChip(context, 'USDC', _selectedCardToken == 'USDC', () {
                       setState(() => _selectedCardToken = 'USDC');
                     }),
                     const SizedBox(width: 10),
-                    _buildTokenChip('USDT', _selectedCardToken == 'USDT', () {
+                    _buildTokenChip(context, 'USDT', _selectedCardToken == 'USDT', () {
                       setState(() => _selectedCardToken = 'USDT');
                     }),
                   ],
@@ -882,37 +903,39 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                 const SizedBox(height: 20),
 
                 // Amount
-                const Text(
+                Text(
                   'Amount (USD)',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 8),
                 _buildAmountInput(
+                  context: context,
                   controller: _cardAmountController,
                   hint: 'Enter amount in USD',
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '1 USD = 1 USDC (1:1 stablecoin)',
-                  style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
+                  style: TextStyle(fontSize: 11, color: AppTheme.textTertiaryColor(context)),
                 ),
                 const SizedBox(height: 20),
 
                 // Card number
-                const Text(
+                Text(
                   'Card Number',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 8),
                 _buildTextInput(
+                  context: context,
                   controller: _cardNumberController,
                   hint: '4242 4242 4242 4242',
                   icon: Icons.credit_card_rounded,
@@ -932,16 +955,17 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Expiry',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
+                              color: AppTheme.textPrimaryColor(context),
                             ),
                           ),
                           const SizedBox(height: 8),
                           _buildTextInput(
+                            context: context,
                             controller: _cardExpiryController,
                             hint: 'MM/YY',
                             icon: Icons.calendar_today_rounded,
@@ -960,16 +984,17 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'CVV',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
+                              color: AppTheme.textPrimaryColor(context),
                             ),
                           ),
                           const SizedBox(height: 8),
                           _buildTextInput(
+                            context: context,
                             controller: _cardCvvController,
                             hint: '123',
                             icon: Icons.security_rounded,
@@ -989,7 +1014,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
 
                 // Purchase summary
                 if (_cardAmountController.text.isNotEmpty)
-                  _buildPurchaseSummary(),
+                  _buildPurchaseSummary(context),
 
                 // Buy button
                 SizedBox(
@@ -1018,7 +1043,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0891B2),
+                      backgroundColor: AppTheme.secondaryColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(26),
@@ -1033,13 +1058,13 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           const SizedBox(height: 20),
 
           // Partner info
-          _buildPartnerInfo(),
+          _buildPartnerInfo(context),
         ],
       ),
     );
   }
 
-  Widget _buildPurchaseSummary() {
+  Widget _buildPurchaseSummary(BuildContext context) {
     final amountStr = _cardAmountController.text.trim();
     final amount = double.tryParse(amountStr) ?? 0;
     final fee = (amount * 0.015).clamp(0.5, 50.0); // 1.5% fee, min $0.50
@@ -1050,24 +1075,24 @@ class _FundWalletScreenState extends State<FundWalletScreen>
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: AppTheme.textHint, width: 1),
       ),
       child: Column(
         children: [
-          _buildSummaryRow('You pay', '\$${amount.toStringAsFixed(2)}'),
+          _buildSummaryRow(context, 'You pay', '\$${amount.toStringAsFixed(2)}'),
           const SizedBox(height: 8),
-          _buildSummaryRow(
-              'Processing fee (1.5%)', '\$${fee.toStringAsFixed(2)}'),
+          _buildSummaryRow(context, 'Processing fee (1.5%)', '\$${fee.toStringAsFixed(2)}'),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
-            child: Divider(height: 1, color: Color(0xFFE5E7EB)),
+            child: Divider(height: 1, color: AppTheme.textHint),
           ),
-          _buildSummaryRow('Total charge', '\$${total.toStringAsFixed(2)}',
+          _buildSummaryRow(context, 'Total charge', '\$${total.toStringAsFixed(2)}',
               bold: true),
           const SizedBox(height: 8),
           _buildSummaryRow(
+            context,
             'You receive',
             '${receive.toStringAsFixed(2)} $_selectedCardToken',
             bold: true,
@@ -1078,7 +1103,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     );
   }
 
-  Widget _buildSummaryRow(String label, String value,
+  Widget _buildSummaryRow(BuildContext context, String label, String value,
       {bool bold = false, Color? valueColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1088,7 +1113,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           style: TextStyle(
             fontSize: 13,
             fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
-            color: bold ? AppTheme.textPrimary : AppTheme.textTertiary,
+            color: bold ? AppTheme.textPrimaryColor(context) : AppTheme.textTertiaryColor(context),
           ),
         ),
         Text(
@@ -1096,7 +1121,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
           style: TextStyle(
             fontSize: 13,
             fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-            color: valueColor ?? AppTheme.textPrimary,
+            color: valueColor ?? AppTheme.textPrimaryColor(context),
           ),
         ),
       ],
@@ -1173,24 +1198,24 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     );
   }
 
-  Widget _buildPartnerInfo() {
+  Widget _buildPartnerInfo(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite.withValues(alpha: 0.7),
+        color: AppTheme.cardColor(context).withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
       ),
       child: Row(
         children: [
           Icon(Icons.verified_user_outlined,
-              size: 20, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
+              size: 20, color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.6)),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
               'Card payments are processed securely. In production, this integrates with licensed on-ramp providers like MoonPay, Transak, or Ramp Network.',
               style: TextStyle(
                 fontSize: 11,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textTertiaryColor(context),
                 height: 1.4,
               ),
             ),
@@ -1259,17 +1284,17 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     );
   }
 
-  Widget _buildTokenChip(String label, bool selected, VoidCallback onTap) {
+  Widget _buildTokenChip(BuildContext context, String label, bool selected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.darkButton : const Color(0xFFF7F8FA),
+          color: selected ? AppTheme.buttonColor(context) : AppTheme.backgroundLight,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: selected ? AppTheme.darkButton : const Color(0xFFE5E7EB),
+            color: selected ? AppTheme.buttonColor(context) : AppTheme.textHint,
             width: 1.5,
           ),
         ),
@@ -1281,7 +1306,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
               height: 22,
               decoration: BoxDecoration(
                 color: selected
-                    ? Colors.white.withValues(alpha: 0.2)
+                    ? AppTheme.buttonTextColor(context).withValues(alpha: 0.2)
                     : AppTheme.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
@@ -1291,7 +1316,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: selected ? Colors.white : AppTheme.primaryColor,
+                    color: selected ? AppTheme.buttonTextColor(context) : AppTheme.primaryColor,
                   ),
                 ),
               ),
@@ -1302,7 +1327,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppTheme.textPrimary,
+                color: selected ? AppTheme.buttonTextColor(context) : AppTheme.textPrimaryColor(context),
               ),
             ),
           ],
@@ -1312,37 +1337,38 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   }
 
   Widget _buildAmountInput({
+    required BuildContext context,
     required TextEditingController controller,
     required String hint,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: AppTheme.textHint, width: 1),
       ),
       child: TextField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: (_) => setState(() {}),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textPrimary,
+          color: AppTheme.textPrimaryColor(context),
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w400,
-            color: AppTheme.textHint,
+            color: AppTheme.textHintColor(context),
           ),
           prefixText: '\$ ',
-          prefixStyle: const TextStyle(
+          prefixStyle: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
+            color: AppTheme.textPrimaryColor(context),
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -1353,6 +1379,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
   }
 
   Widget _buildTextInput({
+    required BuildContext context,
     required TextEditingController controller,
     required String hint,
     required IconData icon,
@@ -1363,28 +1390,28 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: AppTheme.textHint, width: 1),
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscure,
         inputFormatters: inputFormatters,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,
-          color: AppTheme.textPrimary,
+          color: AppTheme.textPrimaryColor(context),
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w400,
-            color: AppTheme.textHint,
+            color: AppTheme.textHintColor(context),
           ),
-          icon: Icon(icon, size: 20, color: AppTheme.textTertiary),
+          icon: Icon(icon, size: 20, color: AppTheme.textTertiaryColor(context)),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -1393,7 +1420,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
     );
   }
 
-  Widget _buildResultMessage(String message) {
+  Widget _buildResultMessage(BuildContext context, String message) {
     final isError = message.startsWith('error:');
     final text = message.replaceFirst(RegExp(r'^(error|success):'), '');
     final color = isError ? AppTheme.negative : AppTheme.positive;

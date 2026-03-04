@@ -33,6 +33,14 @@ export class Pool {
   @Column({ type: 'int', default: 1 })
   currentRound: number;
 
+  /** EqubType enum for filtering: 0=Finance, 1=House, 2=Car, 3=Travel, 4=Special, etc. */
+  @Column({ type: 'smallint', nullable: true })
+  equbType: number | null;
+
+  /** Frequency enum for filtering: 0=Daily, 1=Weekly, 2=BiWeekly, 3=Monthly */
+  @Column({ type: 'smallint', nullable: true })
+  frequency: number | null;
+
   @Column({ type: 'varchar', length: 42 })
   treasury: string;
 

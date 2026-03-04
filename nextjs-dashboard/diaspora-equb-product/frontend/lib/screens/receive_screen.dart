@@ -36,7 +36,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final walletAddr = auth.walletAddress;
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -51,7 +51,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               height: 36,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFE5E7EB),
+                color: Color(0xFFB5CCBE),
               ),
               clipBehavior: Clip.antiAlias,
               child: Image.network(
@@ -85,11 +85,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: AppTheme.cardWhite,
+                  color: AppTheme.cardColor(context),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(28),
                   ),
-                  boxShadow: AppTheme.cardShadow,
+                  boxShadow: AppTheme.cardShadowFor(context),
                 ),
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
@@ -107,10 +107,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       return Column(
                         children: [
                           // Your wallet address card
-                          _buildWalletAddressCard(walletAddr),
+                          _buildWalletAddressCard(context, walletAddr),
                           const SizedBox(height: 16),
                           // Client pays card
                           _buildAmountCard(
+                            context,
                             label: 'Client pays',
                             amount: usdAmount > 0
                                 ? '\$${usdAmount.toStringAsFixed(2)}'
@@ -123,18 +124,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             width: 36,
                             height: 36,
                             decoration: const BoxDecoration(
-                              color: Color(0xFFF3F4F6),
+                              color: Color(0xFFE4F0E0),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.keyboard_arrow_down_rounded,
                               size: 22,
-                              color: AppTheme.textPrimary,
+                              color: AppTheme.textPrimaryColor(context),
                             ),
                           ),
                           const SizedBox(height: 12),
                           // You receive card
                           _buildAmountCard(
+                            context,
                             label: 'You receive',
                             amount: usdAmount > 0
                                 ? '€${eurAmount.toStringAsFixed(2)}'
@@ -153,23 +155,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                       '0.79';
                               return Text(
                                 '1 USD = EUR $eur • GBP $gbp',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w400,
-                                  color: AppTheme.textTertiary,
+                                  color: AppTheme.textTertiaryColor(context),
                                 ),
                               );
                             },
                           ),
                           const SizedBox(height: 28),
                           // Action buttons
-                          _buildActionButtons(walletAddr),
+                          _buildActionButtons(context, walletAddr),
                           const SizedBox(height: 32),
                           // Amount input
-                          _buildAmountInput(),
+                          _buildAmountInput(context),
                           const SizedBox(height: 20),
                           // Reference ID input
-                          _buildReferenceInput(),
+                          _buildReferenceInput(context),
                         ],
                       );
                     },
@@ -183,7 +185,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildWalletAddressCard(String? walletAddr) {
+  Widget _buildWalletAddressCard(BuildContext context, String? walletAddr) {
     return GestureDetector(
       onTap: () {
         if (walletAddr != null) {
@@ -199,9 +201,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F8FA),
+          color: const Color(0xFFF1FAEE),
           borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-          border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
         ),
         child: Row(
           children: [
@@ -220,36 +222,37 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Your Wallet Address',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
-                      color: AppTheme.textTertiary,
+                      color: AppTheme.textTertiaryColor(context),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     _shortenAddress(walletAddr),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
+                      color: AppTheme.textPrimaryColor(context),
                       letterSpacing: 0.3,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.content_copy_rounded,
-                size: 18, color: AppTheme.textTertiary),
+            Icon(Icons.content_copy_rounded,
+                size: 18, color: AppTheme.textTertiaryColor(context)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAmountCard({
+  Widget _buildAmountCard(
+    BuildContext context, {
     required String label,
     required String amount,
     required String time,
@@ -257,7 +260,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: const Color(0xFFF1FAEE),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
@@ -282,20 +285,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary.withValues(alpha: 0.6),
+                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.6),
                       ),
                     ),
                     Container(
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: AppTheme.textPrimary.withValues(alpha: 0.08),
+                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.content_copy_rounded,
                         size: 16,
-                        color: AppTheme.textPrimary.withValues(alpha: 0.5),
+                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -304,10 +307,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 // Amount
                 Text(
                   amount,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 40,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                     letterSpacing: -1.0,
                   ),
                 ),
@@ -320,7 +323,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: AppTheme.textPrimary.withValues(alpha: 0.45),
+                      color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.45),
                     ),
                   ),
                 ),
@@ -332,12 +335,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildActionButtons(String? walletAddr) {
+  Widget _buildActionButtons(BuildContext context, String? walletAddr) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildActionItem(Icons.qr_code_scanner_rounded, 'Scan QR', () {}),
-        _buildActionItem(Icons.share_outlined, 'Share', () {
+        _buildActionItem(context, Icons.qr_code_scanner_rounded, 'Scan QR', () {}),
+        _buildActionItem(context, Icons.share_outlined, 'Share', () {
           if (walletAddr != null) {
             Clipboard.setData(ClipboardData(text: walletAddr));
             AppSnackbarService.instance.info(
@@ -347,12 +350,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             );
           }
         }),
-        _buildActionItem(Icons.more_horiz_rounded, 'More', () {}),
+        _buildActionItem(context, Icons.more_horiz_rounded, 'More', () {}),
       ],
     );
   }
 
-  Widget _buildActionItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _buildActionItem(BuildContext context, IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -363,19 +366,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.textPrimary.withValues(alpha: 0.12),
+                color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.12),
                 width: 1.5,
               ),
             ),
-            child: Icon(icon, size: 22, color: AppTheme.textPrimary),
+            child: Icon(icon, size: 22, color: AppTheme.textPrimaryColor(context)),
           ),
           const SizedBox(height: 10),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: AppTheme.textPrimary,
+              color: AppTheme.textPrimaryColor(context),
             ),
           ),
         ],
@@ -383,13 +386,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildAmountInput() {
+  Widget _buildAmountInput(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: const Color(0xFFF1FAEE),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
       ),
       child: Row(
         children: [
@@ -399,23 +402,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
+                color: AppTheme.textPrimaryColor(context),
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Enter amount',
                 hintStyle: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w400,
-                  color: AppTheme.textHint,
+                  color: AppTheme.textHintColor(context),
                 ),
                 prefixText: '\$ ',
                 prefixStyle: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -435,15 +438,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 children: [
                   Text(
                     _currency,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
+                      color: AppTheme.textPrimaryColor(context),
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down_rounded,
-                      size: 18, color: AppTheme.textPrimary),
+                  Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 18, color: AppTheme.textPrimaryColor(context)),
                 ],
               ),
             ),
@@ -453,27 +456,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildReferenceInput() {
+  Widget _buildReferenceInput(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: const Color(0xFFF1FAEE),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
       ),
       child: TextField(
         controller: _referenceController,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: AppTheme.textPrimary,
+          color: AppTheme.textPrimaryColor(context),
         ),
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Reference ID (optional)',
           labelStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w400,
-            color: AppTheme.textTertiary,
+            color: AppTheme.textTertiaryColor(context),
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,

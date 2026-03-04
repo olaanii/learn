@@ -113,13 +113,17 @@ class _PayScreenState extends State<PayScreen> {
     }
   }
 
+  Color _numpadKeyColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkSurface
+          : AppTheme.backgroundLight;
+
   @override
   Widget build(BuildContext context) {
     return Consumer<WalletProvider>(
       builder: (context, wallet, _) {
         return Container(
-          decoration:
-              const BoxDecoration(gradient: AppTheme.backgroundGradient),
+          decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: AppBar(
@@ -127,121 +131,102 @@ class _PayScreenState extends State<PayScreen> {
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.maybePop(context),
               ),
-              title: const Text('Pay'),
+              title: const Text('Send Payment'),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.tune_rounded, size: 22),
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
                   onPressed: () {},
                 ),
                 const SizedBox(width: 4),
               ],
             ),
-            body: Column(
-              children: [
-                // Card chip on green background
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: _buildCardChip(),
-                  ),
-                ),
-                // White card panel for content
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
+            body: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Column(
+                children: [
+                  _buildRecipientCard(context),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.cardWhite,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
-                      ),
-                      boxShadow: AppTheme.cardShadow,
+                      color: AppTheme.textHintColor(context).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                      child: Column(
-                        children: [
-                          // Recipient
-                          _buildRecipientCard(),
-                          const SizedBox(height: 28),
-                          // Amount
-                          Text(
-                            _formattedAmount,
-                            style: const TextStyle(
-                              fontSize: 44,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: -1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Balance: \$${wallet.balance}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: AppTheme.textTertiary,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          // Note
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.sticky_note_2_outlined,
-                                  size: 18, color: AppTheme.textTertiary),
-                              SizedBox(width: 6),
-                              Text(
-                                'Note',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppTheme.textTertiary,
-                                ),
+                    child: Text(
+                      'Balance: \$${wallet.balance}',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondaryColor(context)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _formattedAmount,
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimaryColor(context),
+                      letterSpacing: -2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentYellow.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'No fees via Equb Network',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.accentYellow),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor(context),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.textHintColor(context).withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_note_rounded, size: 20, color: AppTheme.textTertiaryColor(context)),
+                        const SizedBox(width: 10),
+                        Text('Add a note (optional)', style: TextStyle(fontSize: 14, color: AppTheme.textTertiaryColor(context))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(child: _buildNumpad(context)),
+                  const SizedBox(height: 12),
+                  SafeArea(
+                    top: false,
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _isSending ? null : _handleSend,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.buttonColor(context),
+                          foregroundColor: AppTheme.buttonTextColor(context),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          elevation: 0,
+                        ),
+                        child: _isSending
+                            ? SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.buttonTextColor(context), strokeWidth: 2))
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('Send', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                                  const SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_rounded, size: 20, color: AppTheme.buttonTextColor(context)),
+                                ],
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          // Number pad
-                          Expanded(child: _buildNumpad()),
-                          const SizedBox(height: 16),
-                          // Send button
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: _isSending ? null : _handleSend,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.darkButton,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: _isSending
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Send',
-                                      style: TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
         );
@@ -249,138 +234,68 @@ class _PayScreenState extends State<PayScreen> {
     );
   }
 
-  Widget _buildCardChip() {
+  Widget _buildRecipientCard(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkButton,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 18,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 0,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEB001B),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 10,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF79E1B).withValues(alpha: 0.85),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            '••••2872',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Icon(Icons.keyboard_arrow_down_rounded,
-              color: Colors.white, size: 18),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecipientCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FA),
+        color: AppTheme.cardColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+        boxShadow: AppTheme.subtleShadowFor(context),
+        border: Border.all(color: AppTheme.textHintColor(context).withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
-            ),
-            child: const Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 22,
-              color: Color(0xFF3B82F6),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _recipientController,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textPrimary,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Recipient address (0x...)',
-                hintStyle: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textTertiary,
+          Text('TO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: AppTheme.textTertiaryColor(context))),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.secondaryColor.withValues(alpha: 0.12),
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
+                child: const Icon(Icons.person_outline_rounded, size: 22, color: AppTheme.secondaryColor),
               ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () {
-              // Could open a contact picker / QR scanner
-            },
-            child: const Text(
-              'Paste',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textTertiary,
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _recipientController,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textPrimaryColor(context)),
+                  decoration: InputDecoration(
+                    hintText: 'Name, tag, or address',
+                    hintStyle: TextStyle(fontSize: 14, color: AppTheme.textTertiaryColor(context)),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
               ),
-            ),
+              GestureDetector(
+                onTap: () {},
+                child: const Text('Contacts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.secondaryColor)),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNumpad() {
+  Widget _buildNumpad(BuildContext context) {
     final keys = [
       ['1', '2', '3'],
       ['4', '5', '6'],
       ['7', '8', '9'],
-      ['', '0', 'backspace'],
+      ['.', '0', 'backspace'],
     ];
+    final keyBg = _numpadKeyColor(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final buttonSize = (constraints.maxWidth - 24) / 3;
-        final buttonHeight =
-            ((constraints.maxHeight - 18) / 4).clamp(36.0, 64.0);
+        final buttonHeight = ((constraints.maxHeight - 18) / 4).clamp(36.0, 64.0);
 
         return Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -388,9 +303,6 @@ class _PayScreenState extends State<PayScreen> {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: row.map((key) {
-                if (key.isEmpty) {
-                  return SizedBox(width: buttonSize, height: buttonHeight);
-                }
                 return GestureDetector(
                   onTap: () => _onKeyTap(key),
                   child: Container(
@@ -398,23 +310,13 @@ class _PayScreenState extends State<PayScreen> {
                     height: buttonHeight,
                     margin: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
-                      color: key == 'backspace'
-                          ? Colors.transparent
-                          : const Color(0xFFF7F8FA),
+                      color: key == 'backspace' ? Colors.transparent : keyBg,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
                       child: key == 'backspace'
-                          ? const Icon(Icons.backspace_outlined,
-                              size: 22, color: AppTheme.textPrimary)
-                          : Text(
-                              key,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
+                          ? Icon(Icons.backspace_outlined, size: 22, color: AppTheme.textPrimaryColor(context))
+                          : Text(key, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor(context))),
                     ),
                   ),
                 );

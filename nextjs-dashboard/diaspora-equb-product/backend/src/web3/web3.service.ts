@@ -46,6 +46,18 @@ const PAYOUT_STREAM_ABI = [
   'event StreamFrozen(uint256 indexed poolId, address indexed beneficiary)',
 ];
 
+const EQUB_GOVERNOR_ABI = [
+  'function proposeRuleChange(uint256 equbId, (uint8,uint8,uint8,uint256,uint256,uint256,uint256) rules, string description) external returns (uint256)',
+  'function vote(uint256 proposalId, bool support) external',
+  'function executeProposal(uint256 proposalId) external',
+  'function cancelProposal(uint256 proposalId) external',
+  'function getProposal(uint256 proposalId) external view returns (uint256 equbId, address proposer, bytes32 ruleHash, string description, uint256 yesVotes, uint256 noVotes, uint256 deadline, bool executed, bool cancelled)',
+  'event ProposalCreated(uint256 indexed proposalId, uint256 indexed equbId, address proposer, bytes32 ruleHash, string description, uint256 deadline)',
+  'event VoteCast(uint256 indexed proposalId, address indexed voter, bool support)',
+  'event ProposalExecuted(uint256 indexed proposalId)',
+  'event ProposalCancelled(uint256 indexed proposalId)',
+];
+
 const EQUB_POOL_ABI = [
   // v2: createPool now accepts a token address (address(0) = native CTC)
   'function createPool(uint8 tier, uint256 contributionAmount, uint256 maxMembers, address treasury, address token) external returns (uint256)',
@@ -65,11 +77,40 @@ const EQUB_POOL_ABI = [
   'function lockPartialCollateral(uint256 poolId, address member) external',
   'function poolCount() external view returns (uint256)',
   'function poolToken(uint256 poolId) external view returns (address)',
+  'function getRules(uint256 poolId) external view returns (tuple(uint8 equbType, uint8 frequency, uint8 payoutMethod, uint256 gracePeriodSeconds, uint256 penaltySeverity, uint256 roundDurationSeconds, uint256 lateFeePercent))',
   'event PoolCreated(uint256 indexed poolId, uint256 contributionAmount, uint256 maxMembers, address token)',
+  'event RulesUpdated(uint256 indexed poolId)',
   'event JoinedPool(uint256 indexed poolId, address indexed member)',
   'event ContributionReceived(uint256 indexed poolId, address indexed member, uint256 round)',
   'event DefaultTriggered(uint256 indexed poolId, address indexed member, uint256 round)',
   'event RoundClosed(uint256 indexed poolId, uint256 round)',
+];
+
+const SWAP_ROUTER_ABI = [
+  'function swapCTCForToken(address token, uint256 minAmountOut) external payable',
+  'function swapTokenForCTC(address token, uint256 amountIn, uint256 minAmountOut) external',
+  'function addLiquidity(address token) external payable returns (uint256 shares)',
+  'function removeLiquidity(address token, uint256 shares) external',
+  'function getQuote(address token, uint256 amountIn, bool ctcToToken) external view returns (uint256 amountOut)',
+  'function getReserves(address token) external view returns (uint256 ctcReserve, uint256 tokenReserve)',
+  'event Swap(address indexed user, address indexed token, bool ctcToToken, uint256 amountIn, uint256 amountOut)',
+  'event LiquidityAdded(address indexed provider, address indexed token, uint256 ctcAmount, uint256 tokenAmount, uint256 sharesMinted)',
+  'event LiquidityRemoved(address indexed provider, address indexed token, uint256 ctcAmount, uint256 tokenAmount, uint256 sharesBurned)',
+];
+
+const ACHIEVEMENT_BADGE_ABI = [
+  'function mint(address to, uint256 badgeType, string metadataURI) external returns (uint256)',
+  'function setMinter(address _minter) external',
+  'function ownerOf(uint256 tokenId) external view returns (address)',
+  'function balanceOf(address _owner) external view returns (uint256)',
+  'function getBadge(uint256 tokenId) external view returns (tuple(uint256 badgeType, address recipient, string metadataURI, uint256 mintedAt))',
+  'function getBadgesOf(address _owner) external view returns (uint256[])',
+  'function hasBadgeType(address, uint256) external view returns (bool)',
+  'function tokenURI(uint256 tokenId) external view returns (string)',
+  'function totalSupply() external view returns (uint256)',
+  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
+  'event BadgeMinted(address indexed to, uint256 indexed tokenId, uint256 badgeType, string metadataURI)',
+  'event MinterUpdated(address indexed newMinter)',
 ];
 
 // ERC-20 ABI fragment (for building approve TXs on the client)
@@ -96,6 +137,9 @@ export class Web3Service implements OnModuleInit {
   private collateralVault: ethers.Contract;
   private payoutStream: ethers.Contract;
   private equbPool: ethers.Contract;
+  private swapRouter: ethers.Contract;
+  private equbGovernor: ethers.Contract;
+  private achievementBadge: ethers.Contract;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -155,6 +199,24 @@ export class Web3Service implements OnModuleInit {
       this.provider,
     );
 
+    this.equbGovernor = new ethers.Contract(
+      this.configService.get<string>('EQUB_GOVERNOR_ADDRESS') ?? zero,
+      EQUB_GOVERNOR_ABI,
+      this.provider,
+    );
+
+    this.swapRouter = new ethers.Contract(
+      this.configService.get<string>('SWAP_ROUTER_ADDRESS') ?? zero,
+      SWAP_ROUTER_ABI,
+      this.provider,
+    );
+
+    this.achievementBadge = new ethers.Contract(
+      this.configService.get<string>('ACHIEVEMENT_BADGE_ADDRESS') ?? zero,
+      ACHIEVEMENT_BADGE_ABI,
+      this.provider,
+    );
+
     this.logger.log('Web3 provider and contracts initialized');
   }
 
@@ -184,6 +246,18 @@ export class Web3Service implements OnModuleInit {
 
   getEqubPool(): ethers.Contract {
     return this.equbPool;
+  }
+
+  getEqubGovernor(): ethers.Contract {
+    return this.equbGovernor;
+  }
+
+  getSwapRouter(): ethers.Contract {
+    return this.swapRouter;
+  }
+
+  getAchievementBadge(): ethers.Contract {
+    return this.achievementBadge;
   }
 
   /**

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/auth_provider.dart';
+import '../providers/network_provider.dart';
 import '../services/wallet_service.dart';
 import '../config/theme.dart';
 import '../config/app_config.dart';
@@ -31,7 +32,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
     final wallet = context.watch<WalletService>();
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -66,7 +67,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                               Text(
                                 'Hash: ${auth.identityHash != null && auth.identityHash!.length >= 16 ? auth.identityHash!.substring(0, 16) : auth.identityHash ?? ''}...',
                                 style: TextStyle(
-                                  color: Colors.grey[700],
+                                  color: AppTheme.textSecondaryColor(context),
                                   fontSize: 12,
                                   fontFamily: 'monospace',
                                 ),
@@ -99,7 +100,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                 Text(
                   'Connect your EVM wallet to your Fayda identity via WalletConnect. '
                   'This creates a one-to-one binding that enables non-custodial transactions.',
-                  style: TextStyle(color: Colors.grey[600]),
+                  style: TextStyle(color: AppTheme.textSecondaryColor(context)),
                 ),
                 const SizedBox(height: 32),
 
@@ -114,12 +115,12 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                             setState(() => _isBinding = false);
                           },
                     icon: wallet.isConnecting
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: AppTheme.buttonTextColor(context),
                             ),
                           )
                         : const Icon(Icons.account_balance_wallet),
@@ -140,10 +141,10 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
-                            const Text(
-                              'Scan with your wallet (Creditcoin Testnet)',
+                            Text(
+                              'Scan with your wallet (${context.read<NetworkProvider>().networkName})',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -152,7 +153,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppTheme.cardColor(context),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: QrImageView(
@@ -165,7 +166,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                             Text(
                               'Waiting for wallet approval...',
                               style: TextStyle(
-                                color: Colors.grey[600],
+                                color: AppTheme.textSecondaryColor(context),
                                 fontSize: 12,
                               ),
                             ),
@@ -271,9 +272,9 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                         Text(
                           'Your private keys never leave your wallet. '
                           'The backend only builds unsigned transactions for you to approve. '
-                          'All pool contributions and payouts are executed on-chain.',
+                          'All equb contributions and payouts are executed on-chain.',
                           style:
-                              TextStyle(color: Colors.grey[600], fontSize: 13),
+                              TextStyle(color: AppTheme.textSecondaryColor(context), fontSize: 13),
                         ),
                       ],
                     ),

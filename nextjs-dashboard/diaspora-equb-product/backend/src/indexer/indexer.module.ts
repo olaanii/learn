@@ -10,7 +10,10 @@ import { Collateral } from '../entities/collateral.entity';
 import { Identity } from '../entities/identity.entity';
 import { IndexedBlock } from '../entities/indexed-block.entity';
 import { TokenTransfer } from '../entities/token-transfer.entity';
+import { EqubRulesEntity } from '../entities/equb-rules.entity';
+import { Proposal } from '../entities/proposal.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { RulesModule } from '../rules/rules.module';
 
 @Module({
   imports: [
@@ -24,8 +27,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
       Identity,
       IndexedBlock,
       TokenTransfer,
+      EqubRulesEntity,
+      Proposal,
     ]),
     NotificationsModule,
+    RulesModule,
   ],
   providers: [IndexerService],
   exports: [IndexerService],

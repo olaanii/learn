@@ -69,14 +69,17 @@ class WalletProvider extends ChangeNotifier {
   }
 
   /// Load the balance for a specific token.
+  /// Pass [tokenAddress] for arbitrary ERC-20 contracts not in the backend's known list.
   Future<void> loadBalance(String walletAddress,
-      {String token = 'USDC'}) async {
+      {String token = 'USDC', String? tokenAddress}) async {
     _startLoading();
     _errorMessage = null;
 
     try {
-      final data = await _api.getTokenBalance(walletAddress, token: token);
-      _balances[token.toUpperCase()] = {
+      final data = await _api.getTokenBalance(walletAddress,
+          token: token, tokenAddress: tokenAddress);
+      final key = (data['symbol'] ?? token).toString().toUpperCase();
+      _balances[key] = {
         'formatted': data['formatted'] ?? '0.00',
         'balance': data['balance'] ?? '0',
         'decimals': data['decimals'] ?? 6,
@@ -451,13 +454,18 @@ class WalletProvider extends ChangeNotifier {
     }));
   }
 
-  /// Load all wallet data at once (both USDC + USDT balances + all transactions).
-  Future<void> loadAll(String walletAddress, {String? token}) async {
-    await Future.wait([
+  /// Load all wallet data (USDC, USDT, optional native tCTC/CTC, transactions, rates).
+  /// Pass [nativeSymbol] (e.g. from NetworkProvider.nativeSymbol) to load native balance for pool status.
+  Future<void> loadAll(String walletAddress, {String? token, String? nativeSymbol}) async {
+    final tasks = <Future<void>>[
       loadBalance(walletAddress, token: 'USDC'),
       loadBalance(walletAddress, token: 'USDT'),
       loadTransactions(walletAddress),
       loadExchangeRates(),
-    ]);
+    ];
+    if (nativeSymbol != null && nativeSymbol.isNotEmpty) {
+      tasks.add(loadBalance(walletAddress, token: nativeSymbol));
+    }
+    await Future.wait(tasks);
   }
 }

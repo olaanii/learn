@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/network_provider.dart';
 import '../providers/wallet_provider.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -61,7 +62,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     await _restoreFilters();
     if (!mounted) return;
 
-    _loadTransactions();
+    await _loadTransactions();
   }
 
   Future<void> _restoreFilters() async {
@@ -124,7 +125,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   bool _validRange(String v) =>
       const {'2D', '7D', '30D', 'All', 'Custom'}.contains(v);
-  bool _validToken(String v) => const {'All', 'USDC', 'USDT', 'CTC'}.contains(v);
+  bool _validToken(String v) => const {'All', 'USDC', 'USDT', 'CTC', 'tCTC'}.contains(v);
   bool _validDirection(String v) =>
       const {'All', 'Sent', 'Received'}.contains(v);
   bool _validStatus(String v) => const {'All', 'Success', 'Failed'}.contains(v);
@@ -198,10 +199,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     try {
       await _loadTransactions();
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loadingOlder = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingOlder = false;
+        });
+      }
     }
   }
 
@@ -293,7 +295,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     await _loadTransactions();
   }
 
-  Widget _buildStateCard({
+  Widget _buildStateCard(
+    BuildContext context, {
     required IconData icon,
     required String title,
     required String subtitle,
@@ -307,24 +310,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           children: [
             Icon(icon,
                 size: 48,
-                color: AppTheme.textTertiary.withValues(alpha: 0.55)),
+                color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.55)),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textTertiaryColor(context),
               ),
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textTertiaryColor(context),
               ),
             ),
             if (action != null) ...[
@@ -402,13 +405,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return filtered;
   }
 
-  Widget _buildFilterChips() {
+  Widget _buildFilterChips(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
       child: Row(
         children: [
           _buildChoiceChip(
+            context,
             label: _rangePreset,
             onPressed: () async {
               final selected = await _showChoiceSheet(
@@ -421,11 +425,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           const SizedBox(width: 8),
           _buildChoiceChip(
+            context,
             label: _tokenFilter,
             onPressed: () async {
               final selected = await _showChoiceSheet(
                 title: 'Token',
-                options: const ['All', 'USDC', 'USDT', 'CTC'],
+                options: ['All', 'USDC', 'USDT', context.read<NetworkProvider>().nativeSymbol],
                 selected: _tokenFilter,
               );
               if (selected != null) await _setTokenFilter(selected);
@@ -433,6 +438,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           const SizedBox(width: 8),
           _buildChoiceChip(
+            context,
             label: _directionFilter,
             onPressed: () async {
               final selected = await _showChoiceSheet(
@@ -445,6 +451,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           const SizedBox(width: 8),
           _buildChoiceChip(
+            context,
             label: _statusFilter,
             onPressed: () async {
               final selected = await _showChoiceSheet(
@@ -458,37 +465,37 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           if (_rangePreset == 'Custom' && _customFrom != null && _customTo != null)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: Text(
-                '${DateFormat('MMM d').format(_customFrom!)} - ${DateFormat('MMM d').format(_customTo!)}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
+            child: Text(
+              '${DateFormat('MMM d').format(_customFrom!)} - ${DateFormat('MMM d').format(_customTo!)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondaryColor(context),
               ),
+            ),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildChoiceChip({required String label, required VoidCallback onPressed}) {
+  Widget _buildChoiceChip(BuildContext context, {required String label, required VoidCallback onPressed}) {
     return ActionChip(
       onPressed: onPressed,
-      backgroundColor: AppTheme.cardWhite,
-      side: BorderSide(color: AppTheme.textTertiary.withValues(alpha: 0.35)),
+      backgroundColor: AppTheme.cardColor(context),
+      side: BorderSide(color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.35)),
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
+              color: AppTheme.textPrimaryColor(context),
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.expand_more_rounded, size: 16, color: AppTheme.textSecondary),
+          Icon(Icons.expand_more_rounded, size: 16, color: AppTheme.textSecondaryColor(context)),
         ],
       ),
     );
@@ -513,10 +520,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
+                        color: AppTheme.textPrimaryColor(context),
                       ),
                     ),
                   ],
@@ -545,7 +552,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
     if (widget.standalone) {
       return Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -564,7 +571,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           body: Column(
             children: [
-              _buildFilterChips(),
+              _buildFilterChips(context),
               Expanded(child: body),
             ],
           ),
@@ -578,12 +585,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'Transactions',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(context),
                 ),
               ),
               const Spacer(),
@@ -594,7 +601,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ],
           ),
         ),
-        _buildFilterChips(),
+        _buildFilterChips(context),
         Expanded(child: body),
       ],
     );
@@ -605,6 +612,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       builder: (context, auth, wallet, _) {
         if (auth.walletAddress == null) {
           return _buildStateCard(
+            context,
             icon: Icons.account_balance_wallet_outlined,
             title: 'Connect wallet to view transactions',
             subtitle: 'Your transfer history appears after wallet binding.',
@@ -630,6 +638,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
         if (wallet.isLoading && txList.isEmpty) {
           return _buildStateCard(
+            context,
             icon: Icons.history_toggle_off_rounded,
             title: 'Loading transactions…',
             subtitle: 'Fetching your latest activity for the selected filters.',
@@ -642,6 +651,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
         if (wallet.errorMessage != null && txList.isEmpty) {
           return _buildStateCard(
+            context,
             icon: Icons.error_outline_rounded,
             title: wallet.errorMessage!,
             subtitle: 'Could not fetch transactions. Please retry.',
@@ -656,6 +666,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         if (filteredTxList.isEmpty) {
           if (txList.isEmpty) {
             return _buildStateCard(
+              context,
               icon: Icons.receipt_long_rounded,
               title: 'No transactions yet',
               subtitle: 'Your token transfers will appear here once your wallet is funded.',
@@ -663,6 +674,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           }
 
           return _buildStateCard(
+            context,
             icon: Icons.filter_alt_off_rounded,
             title: 'No transactions for current filters',
             subtitle: 'Adjust filters or reset to default 2D view.',
@@ -693,9 +705,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 ),
               for (var index = 0; index < grouped.length; index++) ...[
                 if (index > 0) const SizedBox(height: 24),
-                _buildGroupHeader(grouped[index].label),
+                _buildGroupHeader(context, grouped[index].label),
                 const SizedBox(height: 12),
-                _buildGroupCard(grouped[index].transactions),
+                _buildGroupCard(context, grouped[index].transactions),
               ],
               if (wallet.errorMessage != null)
                 Padding(
@@ -789,46 +801,47 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }).toList();
   }
 
-  Widget _buildGroupHeader(String label) {
+  Widget _buildGroupHeader(BuildContext context, String label) {
     return Padding(
       padding: const EdgeInsets.only(left: 4),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textTertiary,
+          color: AppTheme.textTertiaryColor(context),
         ),
       ),
     );
   }
 
-  Widget _buildGroupCard(List<Map<String, dynamic>> items) {
+  Widget _buildGroupCard(BuildContext context, List<Map<String, dynamic>> items) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
+        color: AppTheme.cardColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        boxShadow: AppTheme.subtleShadow,
+        boxShadow: AppTheme.subtleShadowFor(context),
       ),
       child: Column(
         children: List.generate(items.length, (i) {
           final item = items[i];
           final isLast = i == items.length - 1;
-          return _buildTransactionItem(item, isLast);
+          return _buildTransactionItem(context, item, isLast);
         }),
       ),
     );
   }
 
-  Widget _buildTransactionItem(Map<String, dynamic> item, bool isLast) {
+  Widget _buildTransactionItem(BuildContext context, Map<String, dynamic> item, bool isLast) {
     final type = item['type']?.toString() ?? 'received';
     final isSent = type == 'sent';
     final amount = double.tryParse(item['amount']?.toString() ?? '0') ?? 0;
     final tokenSymbol = item['token']?.toString() ?? 'USDC';
-    final isNative = tokenSymbol == 'CTC';
+    final nativeSym = context.read<NetworkProvider>().nativeSymbol;
+    final isNative = tokenSymbol == 'CTC' || tokenSymbol == 'tCTC';
     final isFailed = item['isError'] == true;
     final amountStr = isNative
-        ? '${isSent ? '-' : '+'}${amount.toStringAsFixed(4)} CTC'
+        ? '${isSent ? '-' : '+'}${amount.toStringAsFixed(4)} $nativeSym'
         : '${isSent ? '-\$' : '+\$'}${amount.toStringAsFixed(2)}';
 
     final from = item['from']?.toString() ?? '';
@@ -846,7 +859,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         : (blockNumber != null ? 'Block #$blockNumber' : '—');
 
     Color color = isSent ? const Color(0xFFEF4444) : const Color(0xFF22C55E);
-    if (isFailed) color = AppTheme.textTertiary;
+    if (isFailed) color = AppTheme.textTertiaryColor(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -854,7 +867,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         border: isLast
             ? null
             : const Border(
-                bottom: BorderSide(color: Color(0xFFF3F4F6), width: 1),
+                bottom: BorderSide(color: Color(0xFFE4F0E0), width: 1),
               ),
       ),
       child: Row(
@@ -879,10 +892,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textPrimaryColor(context),
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -892,9 +905,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       isFailed
                           ? 'Failed'
                           : '$tokenSymbol ${isSent ? "Sent" : "Received"}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.textTertiary,
+                        color: AppTheme.textTertiaryColor(context),
                       ),
                     ),
                     if (timeStr.isNotEmpty) ...[
@@ -903,16 +916,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         width: 3,
                         height: 3,
                         decoration: BoxDecoration(
-                          color: AppTheme.textTertiary.withValues(alpha: 0.5),
+                          color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         timeStr,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.textTertiary,
+                          color: AppTheme.textTertiaryColor(context),
                         ),
                       ),
                     ],

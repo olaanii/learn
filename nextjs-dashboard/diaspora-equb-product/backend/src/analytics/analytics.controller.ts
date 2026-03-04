@@ -1,9 +1,13 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Header, Param, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { AnalyticsService } from './analytics.service';
 import {
+  GlobalStatsQueryDto,
   JoinedProgressQueryDto,
+  LeaderboardQueryDto,
   PopularSeriesQueryDto,
+  ReputationParamDto,
   SummaryQueryDto,
 } from './dto/equb-insights-query.dto';
 
@@ -51,5 +55,50 @@ export class AnalyticsController {
   @ApiQuery({ name: 'status', required: false })
   getSummary(@Query() query: SummaryQueryDto) {
     return this.analyticsService.getSummary(query);
+  }
+
+  @Get('global-stats')
+  @SkipThrottle()
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60')
+  @ApiOperation({ summary: 'Get global equb statistics' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by equbType (smallint)' })
+  getGlobalStats(@Query() query: GlobalStatsQueryDto) {
+    return this.analyticsService.getGlobalStats(query);
+  }
+
+  @Get('leaderboard')
+  @SkipThrottle()
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60')
+  @ApiOperation({ summary: 'Get equb leaderboard ranked by various metrics' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by equbType' })
+  @ApiQuery({ name: 'sort', required: false, enum: ['members', 'contributions', 'completion', 'newest'] })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  getLeaderboard(@Query() query: LeaderboardQueryDto) {
+    return this.analyticsService.getLeaderboard(query);
+  }
+
+  @Get('trending')
+  @SkipThrottle()
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60')
+  @ApiOperation({ summary: 'Get trending equbs: fastest growing, completing soon, newest' })
+  getTrending() {
+    return this.analyticsService.getTrending();
+  }
+}
+
+@ApiTags('Analytics')
+@ApiBearerAuth()
+@Controller('analytics/danna')
+export class DannaAnalyticsController {
+  constructor(private readonly analyticsService: AnalyticsService) {}
+
+  @Get(':address/reputation')
+  @SkipThrottle()
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60')
+  @ApiOperation({ summary: 'Get creator reputation for a wallet address' })
+  @ApiParam({ name: 'address', description: 'Wallet address (0x...)' })
+  getReputation(@Param() params: ReputationParamDto) {
+    return this.analyticsService.getCreatorReputation(params.address);
   }
 }

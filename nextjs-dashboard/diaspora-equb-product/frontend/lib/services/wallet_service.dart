@@ -182,17 +182,30 @@ class WalletService extends ChangeNotifier {
             chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
         : _toHex(AppConfig.chainId.toString());
 
+    final valueHex = _toHex(unsignedTx['value'] ?? '0');
+    final gasHex = _toHex(unsignedTx['estimatedGas'] ?? '300000');
+
     final txParams = {
       'from': _walletAddress,
       'to': unsignedTx['to'],
       'data': unsignedTx['data'],
-      'value': _toHex(unsignedTx['value'] ?? '0'),
-      'gas': _toHex(unsignedTx['estimatedGas'] ?? '300000'),
+      'value': valueHex,
+      'gas': gasHex,
       'chainId': chainIdHex,
     };
 
+    debugPrint('[WalletService] signAndSend TX params:');
+    debugPrint('  from: $_walletAddress');
+    debugPrint('  to: ${unsignedTx['to']}');
+    debugPrint('  value: ${unsignedTx['value']} → $valueHex');
+    debugPrint('  gas: ${unsignedTx['estimatedGas']} → $gasHex');
+    debugPrint('  chainId: $chainIdHex');
+    final dataStr = unsignedTx['data']?.toString() ?? '';
+    debugPrint('  data: ${dataStr.length > 10 ? '${dataStr.substring(0, 10)}...(${dataStr.length} chars)' : dataStr}');
+
     // On web, use the injected provider
     if (kIsWeb && eth_provider.hasInjectedProvider) {
+      debugPrint('[WalletService] Sending via MetaMask injected provider...');
       try {
         final txHash = await eth_provider.sendTransactionViaInjected(txParams);
         if (txHash != null) {
@@ -242,9 +255,15 @@ class WalletService extends ChangeNotifier {
   /// Build user-facing message for a failed tx. If the error contains a 4-byte
   /// selector (e.g. 0xb39d8e65), append a hint about contract revert / token approval.
   static String _formatTxFailureMessage(Object e) {
-    final s = e.toString();
-    final base = 'Transaction failed: $e';
-    // Match 0x followed by 8 hex chars (custom error selector)
+    var s = e.toString();
+    // JS interop can produce "[object Object]" — strip it for a cleaner message
+    if (s.contains('[object Object]')) {
+      s = s.replaceAll('[object Object]', '').trim();
+      if (s.isEmpty || s == 'Exception:') {
+        s = 'Transaction rejected or failed in wallet';
+      }
+    }
+    final base = 'Transaction failed: $s';
     if (RegExp(r'0x[0-9a-fA-F]{8}').hasMatch(s)) {
       return '$base\n(Contract reverted. For token pools, approve the token first; or check Blockscout for the revert reason.)';
     }
@@ -286,6 +305,8 @@ class WalletService extends ChangeNotifier {
       const chainId = 'eip155:${AppConfig.chainId}';
       final hexMessage =
           '0x${message.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join()}';
+
+      await _tryOpenWallet(null);
 
       final result = await _signClient!.request(
         topic: _session!.topic,

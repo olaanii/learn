@@ -42,6 +42,19 @@ class CollateralProvider extends ChangeNotifier {
     return total;
   }
 
+  /// Locked amount scoped to a specific pool.
+  /// Includes entries with matching poolId plus entries with no poolId (global on-chain CTC).
+  double lockedForPool(String? poolId) {
+    double total = 0;
+    for (final c in _collaterals) {
+      final cPoolId = c['poolId']?.toString();
+      if (cPoolId == null || cPoolId.isEmpty || cPoolId == poolId) {
+        total += double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
+      }
+    }
+    return total;
+  }
+
   Future<void> loadCollateral(String walletAddress) async {
     _isLoading = true;
     _errorMessage = null;

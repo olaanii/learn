@@ -10,6 +10,7 @@ import { Season } from '../entities/season.entity';
 import { Round } from '../entities/round.entity';
 import { IdempotencyKey } from '../entities/idempotency-key.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { RulesModule } from '../rules/rules.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       IdempotencyKey,
     ]),
     NotificationsModule,
+    RulesModule,
   ],
   controllers: [PoolsController],
   providers: [PoolsService],

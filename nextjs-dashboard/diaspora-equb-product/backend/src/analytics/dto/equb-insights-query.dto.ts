@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class PopularSeriesQueryDto {
@@ -81,4 +82,40 @@ export class SummaryQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+}
+
+export class GlobalStatsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  type?: number;
+}
+
+export class LeaderboardQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  type?: number;
+
+  @IsOptional()
+  @IsIn(['members', 'contributions', 'completion', 'newest'])
+  sort?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class ReputationParamDto {
+  @IsString()
+  address!: string;
 }

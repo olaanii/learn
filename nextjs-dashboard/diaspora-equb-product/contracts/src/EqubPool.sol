@@ -8,6 +8,45 @@ import "./IdentityRegistry.sol";
 import "./TierRegistry.sol";
 import "./IERC20.sol";
 
+/// Equb type classification (traditional Ethiopian categories)
+enum EqubType {
+    Finance,
+    House,
+    Car,
+    Travel,
+    Special,
+    Workplace,
+    Education,
+    Wedding,
+    Emergency
+}
+
+/// Contribution frequency
+enum Frequency {
+    Daily,
+    Weekly,
+    BiWeekly,
+    Monthly
+}
+
+/// Payout method per round
+enum PayoutMethod {
+    Lottery,
+    Rotation,
+    Bid
+}
+
+/// Rules configurable by creator (Danna), updateable via governance
+struct EqubRules {
+    EqubType equbType;
+    Frequency frequency;
+    PayoutMethod payoutMethod;
+    uint256 gracePeriodSeconds;
+    uint256 penaltySeverity;
+    uint256 roundDurationSeconds;
+    uint256 lateFeePercent;
+}
+
 /**
  * @title EqubPool
  * @notice Core rotating-savings pool contract for Diaspora Equb.
@@ -17,6 +56,10 @@ import "./IERC20.sol";
  *  - If `token` is address(0), the pool uses native CTC (backward compatible).
  *  - For ERC-20 pools, users must `approve()` this contract before calling `contribute()`.
  *  - A new `approveToken()` helper builds the approve TX for the frontend.
+ *
+ * v3 Changes (Equb Rules):
+ *  - EqubRules struct with type, frequency, payoutMethod, gracePeriod, penaltySeverity, roundDuration, lateFee
+ *  - Rules set at creation; updateRules() restricted to governor (EqubGovernor in P1)
  */
 contract EqubPool {
     struct Pool {
@@ -29,6 +72,7 @@ contract EqubPool {
         address creator;
         address treasury;
         address token; // address(0) = native CTC; otherwise ERC-20 address
+        EqubRules rules;
         address[] members;
         mapping(address => bool) isMember;
         mapping(address => bool) isFrozenMember;
@@ -46,10 +90,18 @@ contract EqubPool {
 
     mapping(uint256 => Pool) private pools;
     uint256 public poolCount;
+    address public equbGovernor; // Set in P1 when EqubGovernor deployed; updateRules restricted to this
+    address public owner; // Deployer; can setGovernor
 
     modifier onlyPoolCreator(uint256 poolId) {
         require(pools[poolId].creator != address(0), "pool not found");
         require(pools[poolId].creator == msg.sender, "only creator");
+        _;
+    }
+
+    modifier onlyGovernor() {
+        require(equbGovernor != address(0), "governor not set");
+        require(msg.sender == equbGovernor, "only governor");
         _;
     }
 
@@ -94,6 +146,8 @@ contract EqubPool {
         address indexed member,
         uint256 amount
     );
+    event RulesUpdated(uint256 indexed poolId, EqubRules rules);
+    event GovernorSet(address indexed governor);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -109,17 +163,39 @@ contract EqubPool {
         creditRegistry = _creditRegistry;
         identityRegistry = _identityRegistry;
         tierRegistry = _tierRegistry;
+        owner = msg.sender;
+    }
+
+    function setGovernor(address _governor) external {
+        require(msg.sender == owner, "only owner");
+        equbGovernor = _governor;
+        emit GovernorSet(_governor);
     }
 
     // ─── Pool Lifecycle ───────────────────────────────────────────────────────
 
     /**
-     * @notice Create a new Equb pool with an ERC-20 token for contributions.
+     * @notice Create a new Equb pool with an ERC-20 token and rules.
      * @param tier       Tier level (0-3), determines collateral requirements.
      * @param contributionAmount  Amount each member contributes per round.
      * @param maxMembers Maximum number of pool members.
      * @param treasury   Address that receives pool funds.
      * @param token      ERC-20 token address for contributions, or address(0) for native CTC.
+     * @param rules      EqubRules configuration (type, frequency, payoutMethod, etc.)
+     */
+    function createPool(
+        uint8 tier,
+        uint256 contributionAmount,
+        uint256 maxMembers,
+        address treasury,
+        address token,
+        EqubRules calldata rules
+    ) external returns (uint256) {
+        return _createPool(tier, contributionAmount, maxMembers, treasury, token, rules);
+    }
+
+    /**
+     * @notice Create a new Equb pool with an ERC-20 token (default rules).
      */
     function createPool(
         uint8 tier,
@@ -128,12 +204,12 @@ contract EqubPool {
         address treasury,
         address token
     ) external returns (uint256) {
-        return _createPool(tier, contributionAmount, maxMembers, treasury, token);
+        EqubRules memory defaultRules = _defaultRules();
+        return _createPool(tier, contributionAmount, maxMembers, treasury, token, defaultRules);
     }
 
     /**
-     * @notice Legacy createPool without token parameter (uses native CTC).
-     *         Kept for backward compatibility with existing callers.
+     * @notice Legacy createPool without token parameter (uses native CTC, default rules).
      */
     function createPool(
         uint8 tier,
@@ -141,7 +217,20 @@ contract EqubPool {
         uint256 maxMembers,
         address treasury
     ) external returns (uint256) {
-        return _createPool(tier, contributionAmount, maxMembers, treasury, address(0));
+        EqubRules memory defaultRules = _defaultRules();
+        return _createPool(tier, contributionAmount, maxMembers, treasury, address(0), defaultRules);
+    }
+
+    function _defaultRules() internal pure returns (EqubRules memory) {
+        return EqubRules({
+            equbType: EqubType.Finance,
+            frequency: Frequency.Weekly,
+            payoutMethod: PayoutMethod.Lottery,
+            gracePeriodSeconds: 7 days,
+            penaltySeverity: 10,
+            roundDurationSeconds: 30 days,
+            lateFeePercent: 0
+        });
     }
 
     function _createPool(
@@ -149,7 +238,8 @@ contract EqubPool {
         uint256 contributionAmount,
         uint256 maxMembers,
         address treasury,
-        address token
+        address token,
+        EqubRules memory rules
     ) internal returns (uint256) {
         require(contributionAmount > 0, "invalid contribution");
         require(maxMembers > 1, "invalid members");
@@ -169,9 +259,26 @@ contract EqubPool {
         pool.creator = msg.sender;
         pool.treasury = treasury;
         pool.token = token;
+        pool.rules = rules;
 
         emit PoolCreated(poolCount, contributionAmount, maxMembers, token);
         return poolCount;
+    }
+
+    /**
+     * @notice Update pool rules. Restricted to equbGovernor (EqubGovernor contract in P1).
+     */
+    function updateRules(uint256 poolId, EqubRules calldata newRules) external onlyGovernor {
+        require(pools[poolId].creator != address(0), "pool not found");
+        pools[poolId].rules = newRules;
+        emit RulesUpdated(poolId, newRules);
+    }
+
+    /**
+     * @notice Get current rules for a pool.
+     */
+    function getRules(uint256 poolId) external view returns (EqubRules memory) {
+        return pools[poolId].rules;
     }
 
     function joinPool(uint256 poolId) external {
@@ -295,6 +402,10 @@ contract EqubPool {
      */
     function poolToken(uint256 poolId) external view returns (address) {
         return pools[poolId].token;
+    }
+
+    function isMember(uint256 poolId, address user) external view returns (bool) {
+        return pools[poolId].isMember[user];
     }
 
     // ─── Payout & Collateral ──────────────────────────────────────────────────

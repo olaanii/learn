@@ -7,6 +7,7 @@ import Foundation
 
 import connectivity_plus
 import flutter_secure_storage_macos
+import local_auth_darwin
 import package_info_plus
 import sentry_flutter
 import shared_preferences_foundation
@@ -15,6 +16,7 @@ import url_launcher_macos
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   ConnectivityPlusPlugin.register(with: registry.registrar(forPlugin: "ConnectivityPlusPlugin"))
   FlutterSecureStoragePlugin.register(with: registry.registrar(forPlugin: "FlutterSecureStoragePlugin"))
+  LocalAuthPlugin.register(with: registry.registrar(forPlugin: "LocalAuthPlugin"))
   FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
   SentryFlutterPlugin.register(with: registry.registrar(forPlugin: "SentryFlutterPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))

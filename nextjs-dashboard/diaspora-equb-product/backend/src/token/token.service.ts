@@ -33,11 +33,50 @@ interface TransactionFilters {
   cursor?: string;
 }
 
+interface TokenRate {
+  usd: number;
+}
+
+export interface RatesResponse {
+  [key: string]: TokenRate | string;
+  USDC: TokenRate;
+  USDT: TokenRate;
+  lastUpdated: string;
+}
+
+export interface PortfolioItem {
+  token: string;
+  symbol: string;
+  balance: string;
+  usdValue: number;
+}
+
+const COINGECKO_IDS: Record<string, string> = {
+  CTC: 'creditcoin-2',
+  tCTC: 'creditcoin-2',
+  USDC: 'usd-coin',
+  USDT: 'tether',
+};
+
+const RATES_TTL_MS = 5 * 60 * 1000;
+
+function fallbackRates(nativeSym: string): RatesResponse {
+  return {
+    [nativeSym]: { usd: 0.50 },
+    USDC: { usd: 1.0 },
+    USDT: { usd: 1.0 },
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
 @Injectable()
 export class TokenService {
   private readonly logger = new Logger(TokenService.name);
   private chainId: number;
   private tokenAddresses: Record<string, string> = {};
+
+  private ratesCache: RatesResponse | null = null;
+  private ratesCacheTime = 0;
 
   constructor(
     private readonly web3Service: Web3Service,
@@ -64,6 +103,10 @@ export class TokenService {
     );
   }
 
+  get nativeSymbol(): string {
+    return this.chainId === 102030 ? 'CTC' : 'tCTC';
+  }
+
   private getTokenAddress(symbol: string): string {
     const addr = this.tokenAddresses[symbol.toUpperCase()];
     if (!addr || addr === '0x0000000000000000000000000000000000000000') {
@@ -85,18 +128,83 @@ export class TokenService {
   }
 
   /**
-   * Get the USDC/USDT balance for a wallet address.
+   * Get token balance for a wallet. Supports USDC, USDT, native CTC/tCTC,
+   * and arbitrary ERC-20 tokens when `tokenAddress` is provided.
    */
   async getBalance(
     walletAddress: string,
     tokenSymbol: string = 'USDC',
+    tokenAddress?: string,
   ): Promise<{
     walletAddress: string;
     token: string;
+    symbol: string;
     balance: string;
     formatted: string;
     decimals: number;
   }> {
+    const zeroAddress = '0x0000000000000000000000000000000000000000';
+
+    // If a contract address is provided, query that ERC-20 directly
+    if (
+      tokenAddress &&
+      tokenAddress.toLowerCase() !== zeroAddress.toLowerCase()
+    ) {
+      try {
+        const contract = new ethers.Contract(
+          tokenAddress,
+          ['function balanceOf(address) view returns (uint256)',
+           'function decimals() view returns (uint8)',
+           'function symbol() view returns (string)'],
+          this.web3Service.getProvider(),
+        );
+        const [balance, decimals, onChainSymbol] = await Promise.all([
+          contract.balanceOf(walletAddress),
+          contract.decimals(),
+          contract.symbol().catch(() => tokenSymbol),
+        ]);
+        return {
+          walletAddress,
+          token: onChainSymbol || tokenSymbol.toUpperCase(),
+          symbol: onChainSymbol || tokenSymbol.toUpperCase(),
+          balance: balance.toString(),
+          formatted: ethers.formatUnits(balance, decimals),
+          decimals: Number(decimals),
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch ERC-20 balance at ${tokenAddress} for ${walletAddress}: ${error.message}`,
+        );
+        return {
+          walletAddress,
+          token: tokenSymbol.toUpperCase(),
+          symbol: tokenSymbol.toUpperCase(),
+          balance: '0',
+          formatted: '0.00',
+          decimals: 18,
+        };
+      }
+    }
+
+    const upper = (tokenSymbol || '').trim().toUpperCase();
+    if (upper === 'CTC' || upper === 'TCTC') {
+      const formatted = await this.getNativeBalance(walletAddress);
+      let balanceWei = '0';
+      try {
+        balanceWei = ethers.parseEther(formatted || '0').toString();
+      } catch {
+        // formatted may be invalid; keep balanceWei 0
+      }
+      return {
+        walletAddress,
+        token: this.nativeSymbol,
+        symbol: this.nativeSymbol,
+        balance: balanceWei,
+        formatted: formatted || '0',
+        decimals: 18,
+      };
+    }
+
     try {
       const contract = this.getTokenContract(tokenSymbol);
       const [balance, decimals] = await Promise.all([
@@ -107,6 +215,7 @@ export class TokenService {
       return {
         walletAddress,
         token: tokenSymbol.toUpperCase(),
+        symbol: tokenSymbol.toUpperCase(),
         balance: balance.toString(),
         formatted: ethers.formatUnits(balance, decimals),
         decimals: Number(decimals),
@@ -115,10 +224,10 @@ export class TokenService {
       this.logger.warn(
         `Failed to fetch balance for ${walletAddress}: ${error.message}`,
       );
-      // Return zero balance on error (e.g. token not deployed)
       return {
         walletAddress,
         token: tokenSymbol.toUpperCase(),
+        symbol: tokenSymbol.toUpperCase(),
         balance: '0',
         formatted: '0.00',
         decimals: 6,
@@ -267,8 +376,7 @@ export class TokenService {
       const isError = tx.isError === '1' || tx.txreceipt_status === '0';
       const toContract = (tx.to || '').toLowerCase();
 
-      // ERC-20 transfer: input = 0xa9059cbb + address(32) + amount(32)
-      let token = 'CTC';
+      let token = this.nativeSymbol;
       let amount: string;
       let rawAmount: string;
       const valueWei = BigInt(tx.value || '0');
@@ -507,10 +615,17 @@ export class TokenService {
     const fromTs = Number(filters.fromTimestamp);
     const toTs = Number(filters.toTimestamp);
 
+    const nativeAliases = new Set(['CTC', 'TCTC']);
     const filtered = transactions.filter((tx) => {
       const txToken = String(tx?.token || '').toUpperCase();
-      if (tokenFilter && tokenFilter !== 'ALL' && txToken !== tokenFilter) {
-        return false;
+      if (tokenFilter && tokenFilter !== 'ALL') {
+        const filterIsNative = nativeAliases.has(tokenFilter);
+        const txIsNative = nativeAliases.has(txToken);
+        if (filterIsNative && txIsNative) {
+          // Both are native token variants — match
+        } else if (txToken !== tokenFilter) {
+          return false;
+        }
       }
 
       if (filters.direction && tx?.type !== filters.direction) {
@@ -799,6 +914,98 @@ export class TokenService {
       throw new Error(
         `Faucet mint failed: ${error.shortMessage || error.message}. Make sure the deployer has CTC for gas.`,
       );
+    }
+  }
+
+  /**
+   * Live token→USD rates from CoinGecko with 5-minute in-memory cache.
+   */
+  async getRates(): Promise<RatesResponse> {
+    const now = Date.now();
+    if (this.ratesCache && now - this.ratesCacheTime < RATES_TTL_MS) {
+      return this.ratesCache;
+    }
+
+    const ids = Object.values(COINGECKO_IDS).join(',');
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+      const json = await res.json();
+
+      const fb = fallbackRates(this.nativeSymbol);
+      const rates: RatesResponse = {
+        [this.nativeSymbol]: { usd: json[COINGECKO_IDS[this.nativeSymbol]]?.usd ?? (fb[this.nativeSymbol] as TokenRate).usd },
+        USDC: { usd: json[COINGECKO_IDS.USDC]?.usd ?? (fb.USDC as TokenRate).usd },
+        USDT: { usd: json[COINGECKO_IDS.USDT]?.usd ?? (fb.USDT as TokenRate).usd },
+        lastUpdated: new Date().toISOString(),
+      };
+
+      this.ratesCache = rates;
+      this.ratesCacheTime = now;
+      return rates;
+    } catch (error) {
+      this.logger.warn(`CoinGecko request failed: ${error?.message ?? error}`);
+      if (this.ratesCache) return this.ratesCache;
+      return { ...fallbackRates(this.nativeSymbol), lastUpdated: new Date().toISOString() };
+    }
+  }
+
+  /**
+   * Aggregated portfolio: balances × live rates for CTC (native), USDC, USDT.
+   */
+  async getPortfolio(
+    walletAddress: string,
+  ): Promise<{ items: PortfolioItem[]; totalUsdValue: number }> {
+    const [rates, ctcBalanceRaw, usdcBalance, usdtBalance] = await Promise.all([
+      this.getRates(),
+      this.getNativeBalance(walletAddress),
+      this.getBalance(walletAddress, 'USDC'),
+      this.getBalance(walletAddress, 'USDT'),
+    ]);
+
+    const ctcBal = parseFloat(ctcBalanceRaw);
+    const usdcBal = parseFloat(usdcBalance.formatted);
+    const usdtBal = parseFloat(usdtBalance.formatted);
+
+    const nativeRate = rates[this.nativeSymbol] as TokenRate;
+    const items: PortfolioItem[] = [
+      {
+        token: this.chainId === 102030 ? 'Creditcoin' : 'Creditcoin Testnet',
+        symbol: this.nativeSymbol,
+        balance: ctcBal.toFixed(6),
+        usdValue: +(ctcBal * nativeRate.usd).toFixed(2),
+      },
+      {
+        token: 'USD Coin',
+        symbol: 'USDC',
+        balance: usdcBal.toFixed(6),
+        usdValue: +(usdcBal * (rates.USDC as TokenRate).usd).toFixed(2),
+      },
+      {
+        token: 'Tether',
+        symbol: 'USDT',
+        balance: usdtBal.toFixed(6),
+        usdValue: +(usdtBal * (rates.USDT as TokenRate).usd).toFixed(2),
+      },
+    ];
+
+    const totalUsdValue = +(items.reduce((sum, i) => sum + i.usdValue, 0)).toFixed(2);
+    return { items, totalUsdValue };
+  }
+
+  /**
+   * Native CTC balance for a wallet (in ether units).
+   */
+  private async getNativeBalance(walletAddress: string): Promise<string> {
+    try {
+      const provider = this.web3Service.getProvider();
+      const balance = await provider.getBalance(walletAddress);
+      return ethers.formatEther(balance);
+    } catch (error) {
+      this.logger.warn(`Failed to fetch native ${this.nativeSymbol} balance for ${walletAddress}: ${error?.message ?? error}`);
+      return '0';
     }
   }
 

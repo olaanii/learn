@@ -3,6 +3,32 @@ import 'dart:js_interop_unsafe';
 
 bool get hasInjectedProvider => globalContext.has('ethereum');
 
+/// Extract a human-readable message from a JS error object.
+/// MetaMask errors are typically `{ code: number, message: string, data?: { message } }`.
+String _extractJsErrorMessage(Object e) {
+  try {
+    if (e is JSObject) {
+      final msg = e.getProperty<JSAny?>('message'.toJS);
+      if (msg != null && msg is JSString) {
+        final dartMsg = msg.toDart;
+        if (dartMsg.isNotEmpty) return dartMsg;
+      }
+      // Some errors nest the reason inside data.message
+      final data = e.getProperty<JSAny?>('data'.toJS);
+      if (data != null && data is JSObject) {
+        final dataMsg = data.getProperty<JSAny?>('message'.toJS);
+        if (dataMsg != null && dataMsg is JSString) {
+          final dartDataMsg = dataMsg.toDart;
+          if (dartDataMsg.isNotEmpty) return dartDataMsg;
+        }
+      }
+    }
+  } catch (_) {}
+  final s = e.toString();
+  if (s == '[object Object]') return 'Unknown wallet error';
+  return s;
+}
+
 Future<String?> connectViaInjectedProvider() async {
   if (!hasInjectedProvider) return null;
 
@@ -27,24 +53,37 @@ Future<String?> personalSignViaInjected(String message, String address) async {
     'method': 'personal_sign',
     'params': [hexMessage, address],
   }.jsify();
-  final promise = ethereum.callMethod<JSPromise>('request'.toJS, params);
-  final result = await promise.toDart;
 
-  if (result == null) return null;
-  return (result as JSString).toDart;
+  try {
+    final promise = ethereum.callMethod<JSPromise>('request'.toJS, params);
+    final result = await promise.toDart;
+    if (result == null) return null;
+    return (result as JSString).toDart;
+  } catch (e) {
+    throw Exception(_extractJsErrorMessage(e));
+  }
 }
 
 Future<String?> sendTransactionViaInjected(Map<String, dynamic> tx) async {
   if (!hasInjectedProvider) return null;
 
+  final cleanTx = <String, dynamic>{};
+  for (final entry in tx.entries) {
+    if (entry.value != null) cleanTx[entry.key] = entry.value;
+  }
+
   final ethereum = globalContext['ethereum'] as JSObject;
   final params = {
     'method': 'eth_sendTransaction',
-    'params': [tx],
+    'params': [cleanTx],
   }.jsify();
-  final promise = ethereum.callMethod<JSPromise>('request'.toJS, params);
-  final result = await promise.toDart;
 
-  if (result == null) return null;
-  return (result as JSString).toDart;
+  try {
+    final promise = ethereum.callMethod<JSPromise>('request'.toJS, params);
+    final result = await promise.toDart;
+    if (result == null) return null;
+    return (result as JSString).toDart;
+  } catch (e) {
+    throw Exception(_extractJsErrorMessage(e));
+  }
 }

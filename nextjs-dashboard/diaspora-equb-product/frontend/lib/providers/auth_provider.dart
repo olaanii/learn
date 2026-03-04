@@ -101,10 +101,16 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      
+      debugPrint('Wallet connected with address: $address');
 
       // 2. Request challenge
       final challenge = await _api.walletChallenge(address);
+      debugPrint('Challenge received: $challenge');
       final message = challenge['message'] as String;
+
+      // Small delay to let wallet connect modal close and switch focus back to MetaMask for signing
+      await Future.delayed(const Duration(milliseconds: 500));
 
       // 3. Sign the challenge with MetaMask
       final signature = await _walletService.personalSign(message);

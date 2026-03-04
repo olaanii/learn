@@ -98,7 +98,13 @@ export class TiersService {
     };
   }
 
-  async getAllTiers() {
+  async getAllTiers(): Promise<Array<{
+    tier: number;
+    maxPoolSize: string;
+    collateralRateBps: number;
+    enabled: boolean;
+    source?: string;
+  }>> {
     // Try reading all 4 tiers from on-chain
     try {
       const tierRegistry = this.web3Service.getTierRegistry();

@@ -197,4 +197,70 @@ describe('TokenService', () => {
     expect(result).toHaveLength(1);
     expect(result[0].token).toBe('USDT');
   });
+
+  describe('getBalance', () => {
+    it('should return formatted balance for a token', async () => {
+      const mockContract = {
+        balanceOf: jest.fn().mockResolvedValue(BigInt(100_000_000)),
+        decimals: jest.fn().mockResolvedValue(6),
+        symbol: jest.fn().mockResolvedValue('USDC'),
+      };
+      jest.spyOn(service as any, 'getTokenContract').mockReturnValue(mockContract);
+
+      const result = await service.getBalance(
+        '0x1111111111111111111111111111111111111111',
+        'USDC',
+      );
+
+      expect(result.balance).toBeDefined();
+      expect(result.symbol).toBe('USDC');
+    });
+  });
+
+  describe('buildTransfer', () => {
+    it('should return unsigned TX for ERC-20 transfer', async () => {
+      jest.spyOn(service as any, 'getTokenAddress').mockReturnValue(
+        '0x1000000000000000000000000000000000000001',
+      );
+      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
+      (mockWeb3Service as any).buildUnsignedTx = jest.fn().mockReturnValue({
+        to: '0x1000000000000000000000000000000000000001',
+        data: '0xTransferData',
+        value: '0',
+        chainId: 102031,
+        estimatedGas: '80000',
+      });
+
+      const result = await service.buildTransfer(
+        '0xRecipient',
+        '100',
+        'USDC',
+      );
+
+      expect(result.to).toBe('0x1000000000000000000000000000000000000001');
+      expect(result.value).toBe('0');
+    });
+  });
+
+  describe('mintFaucetTokens', () => {
+    it('should call mint on the token contract via deployer', async () => {
+      const mockTx = { wait: jest.fn().mockResolvedValue({ blockNumber: 100, hash: '0xTx' }) };
+      const mockContract = {
+        mint: jest.fn().mockResolvedValue(mockTx),
+      };
+      jest.spyOn(service as any, 'getTokenContract').mockReturnValue(mockContract);
+      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
+      (mockWeb3Service as any).getDeployerSigner = jest.fn().mockReturnValue({
+        address: '0xDeployer',
+      });
+
+      const result = await service.mintFaucetTokens(
+        '0xUser',
+        1000,
+        'USDC',
+      );
+
+      expect(result).toBeDefined();
+    });
+  });
 });

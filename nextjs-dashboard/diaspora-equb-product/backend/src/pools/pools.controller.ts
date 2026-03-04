@@ -175,8 +175,17 @@ export class PoolsController {
 
   // ─── Read Endpoints (from DB cache, populated by event indexer) ───────────────
 
+  @Get(':id/rounds/active/eligible-winners')
+  @SkipThrottle()
+  @ApiOperation({
+    summary: 'Get eligible winner addresses for the active round (read-only)',
+  })
+  getEligibleWinners(@Param('id') id: string) {
+    return this.poolsService.getEligibleWinners(id);
+  }
+
   @Get(':id')
-  @SkipThrottle() // Allow polling for on-chain status without hitting rate limit
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get pool details by ID (from cache)' })
   getPool(@Param('id') id: string) {
     return this.poolsService.getPool(id);
@@ -261,5 +270,17 @@ export class PoolsController {
       dto.upfrontPercent,
       dto.totalRounds,
     );
+  }
+
+  // ─── Admin ───────────────────────────────────────────────────────────────────
+
+  @Post('admin/configure-tiers')
+  @SkipThrottle()
+  @ApiOperation({
+    summary:
+      '[Admin] Enable tiers 1-3 on-chain via deployer signer (dev/test)',
+  })
+  configureTiers() {
+    return this.poolsService.configureTiersOnChain();
   }
 }

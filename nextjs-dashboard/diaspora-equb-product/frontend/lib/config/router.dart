@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../screens/onboarding_screen.dart';
@@ -16,6 +17,11 @@ import '../screens/collateral_screen.dart';
 import '../screens/fund_wallet_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/equb_insights_screen.dart';
+import '../screens/equb_rules_screen.dart';
+import '../screens/swap_screen.dart';
+import '../screens/equb_governance_screen.dart';
+import '../screens/referral_screen.dart';
+import '../screens/badges_screen.dart';
 
 GoRouter createRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -45,7 +51,6 @@ GoRouter createRouter(AuthProvider authProvider) {
       return null;
     },
     routes: [
-      // ── Auth flow ────────────────────────────────────────────────
       GoRoute(
         path: '/',
         name: 'onboarding',
@@ -56,15 +61,11 @@ GoRouter createRouter(AuthProvider authProvider) {
         name: 'bind-wallet',
         builder: (context, state) => const WalletBindingScreen(),
       ),
-
-      // ── Main app (bottom nav shell) ──────────────────────────────
       GoRoute(
         path: '/dashboard',
         name: 'dashboard',
         builder: (context, state) => const MainShell(),
       ),
-
-      // ── Standalone screens ───────────────────────────────────────
       GoRoute(
         path: '/pay',
         name: 'pay',
@@ -86,12 +87,13 @@ GoRouter createRouter(AuthProvider authProvider) {
         name: 'profile',
         builder: (context, state) => const ProfileScreen(standalone: true),
       ),
-
-      // ── Existing equb screens ────────────────────────────────────
       GoRoute(
         path: '/pools',
         name: 'pools',
-        builder: (context, state) => const PoolBrowserScreen(),
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Equbs')),
+          body: const PoolBrowserScreen(),
+        ),
       ),
       GoRoute(
         path: '/pools/:id',
@@ -139,6 +141,37 @@ GoRouter createRouter(AuthProvider authProvider) {
         path: '/equb-insights',
         name: 'equb-insights',
         builder: (context, state) => const EqubInsightsScreen(),
+      ),
+      GoRoute(
+        path: '/equb-rules/:id',
+        name: 'equb-rules',
+        builder: (context, state) {
+          final equbId = state.pathParameters['id']!;
+          return EqubRulesScreen(equbId: equbId);
+        },
+      ),
+      GoRoute(
+        path: '/equb-governance/:id',
+        name: 'equb-governance',
+        builder: (context, state) {
+          final equbId = state.pathParameters['id']!;
+          return EqubGovernanceScreen(equbId: equbId);
+        },
+      ),
+      GoRoute(
+        path: '/swap',
+        name: 'swap',
+        builder: (context, state) => const SwapScreen(),
+      ),
+      GoRoute(
+        path: '/referral',
+        name: 'referral',
+        builder: (context, state) => const ReferralScreen(),
+      ),
+      GoRoute(
+        path: '/badges',
+        name: 'badges',
+        builder: (context, state) => const BadgesScreen(),
       ),
     ],
   );

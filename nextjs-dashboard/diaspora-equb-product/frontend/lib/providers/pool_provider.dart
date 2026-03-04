@@ -46,8 +46,20 @@ class PoolProvider extends ChangeNotifier {
     try {
       final data = await _api.listPools(tier: tier);
       _pools = List<Map<String, dynamic>>.from(data);
+      debugPrint('[PoolProvider] loadPools: ${_pools.length} pools loaded');
+      for (final p in _pools) {
+        debugPrint('[PoolProvider]   id=${p['id']}, onChainPoolId=${p['onChainPoolId']}, status=${p['status']}, tier=${p['tier']}');
+      }
     } catch (e) {
-      _errorMessage = 'Failed to load pools';
+      final msg = e.toString();
+      if (msg.contains('401') || msg.contains('Unauthorized')) {
+        _errorMessage = 'Session expired — please log in again';
+      } else if (msg.contains('SocketException') || msg.contains('Connection refused')) {
+        _errorMessage = 'Cannot reach server — check if backend is running';
+      } else {
+        _errorMessage = 'Failed to load equbs: ${msg.length > 80 ? msg.substring(0, 80) : msg}';
+      }
+      debugPrint('[PoolProvider] loadPools ERROR: $e');
     }
 
     _isLoading = false;
@@ -179,6 +191,17 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<String>> getEligibleWinners(String poolId) async {
+    try {
+      final data = await _api.getEligibleWinners(poolId);
+      final list = data['eligible'] as List? ?? [];
+      return list.map((e) => e.toString()).toList();
+    } catch (e) {
+      debugPrint('[PoolProvider] getEligibleWinners error: $e');
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> pickWinnerForActiveRound(String poolId) async {
     _isLoading = true;
     _errorMessage = null;
@@ -227,12 +250,15 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('[PoolProvider] buildAndSignJoinPool: poolId=$onChainPoolId, caller=$caller, walletAddr=${_walletService.walletAddress}');
       final unsignedTx = await _api.buildJoinPool(
         onChainPoolId,
         caller: caller,
       );
+      debugPrint('[PoolProvider] Join unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, chainId=${unsignedTx['chainId']}');
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
+      debugPrint('[PoolProvider] Join result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
@@ -268,16 +294,21 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('[PoolProvider] buildAndSignContribute: poolId=$onChainPoolId, amount=$contributionAmount, token=$tokenAddress');
       final unsignedTx = await _api.buildContribute(
         onChainPoolId: onChainPoolId,
         contributionAmount: contributionAmount,
         tokenAddress: tokenAddress,
       );
+      debugPrint('[PoolProvider] Got unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, gas=${unsignedTx['estimatedGas']}, chainId=${unsignedTx['chainId']}');
+      debugPrint('[PoolProvider] Wallet connected: ${_walletService.isConnected}, addr: ${_walletService.walletAddress}');
+
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
+      debugPrint('[PoolProvider] signAndSend result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
-        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
+        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected by wallet';
       } else if (poolId != null) {
         await loadPool(poolId);
       }
@@ -286,6 +317,7 @@ class PoolProvider extends ChangeNotifier {
       notifyListeners();
       return txHash;
     } catch (e) {
+      debugPrint('[PoolProvider] buildAndSignContribute ERROR: $e');
       _errorMessage = _apiErrorMessage(e, 'Failed to contribute');
       _isLoading = false;
       notifyListeners();

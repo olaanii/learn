@@ -167,10 +167,11 @@ class AppSnackbarService {
   SnackBar _buildSnackBar(AppSnackMessage snack) {
     final accent = _accentForType(snack.type);
     final icon = _iconForType(snack.type);
+    final ctx = messengerKey.currentContext;
 
     return SnackBar(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.white,
+      backgroundColor: ctx != null ? AppTheme.cardColor(ctx) : AppTheme.cardWhite,
       duration: snack.duration,
       content: Row(
         children: [
@@ -184,16 +185,16 @@ class AppSnackbarService {
                 if (snack.title != null && snack.title!.isNotEmpty)
                   Text(
                     snack.title!,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
+                    style: TextStyle(
+                      color: ctx != null ? AppTheme.textPrimaryColor(ctx) : AppTheme.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   ),
                 Text(
                   snack.message,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
+                  style: TextStyle(
+                    color: ctx != null ? AppTheme.textPrimaryColor(ctx) : AppTheme.textPrimary,
                     fontSize: 13,
                   ),
                 ),

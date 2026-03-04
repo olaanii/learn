@@ -1,0 +1,39 @@
+{
+  "buildCommand": "flutter build web --release --web-renderer canvaskit --dart-define=API_BASE_URL=$API_BASE_URL --dart-define=WALLETCONNECT_PROJECT_ID=$WALLETCONNECT_PROJECT_ID --dart-define=CHAIN_ID=$CHAIN_ID --dart-define=RPC_URL=$RPC_URL --dart-define=SENTRY_DSN=$SENTRY_DSN",
+  "outputDirectory": "build/web",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
+    {
+      "source": "/flutter_service_worker.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/main.dart.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+  "env": {
+    "API_BASE_URL": "https://api.diaspora-equb.com/api",
+    "WALLETCONNECT_PROJECT_ID": "@walletconnect_project_id",
+    "CHAIN_ID": "102031",
+    "RPC_URL": "https://rpc.cc3-testnet.creditcoin.network",
+    "SENTRY_DSN": "@sentry_dsn"
+  }
+}

@@ -58,7 +58,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Color _colorForType(String type) {
+  Color _colorForType(BuildContext context, String type) {
     switch (type) {
       case 'payout_received':
       case 'contribution_confirmed':
@@ -80,7 +80,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'all_contributed':
         return AppTheme.primaryColor;
       default:
-        return AppTheme.textSecondary;
+        return AppTheme.textSecondaryColor(context);
     }
   }
 
@@ -189,18 +189,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               const SizedBox(height: 10),
               Text(
                 notification.body,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textPrimary,
+                  color: AppTheme.textPrimaryColor(dialogContext),
                   height: 1.35,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 _timeAgo(notification.createdAt),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textSecondary,
+                  color: AppTheme.textSecondaryColor(dialogContext),
                 ),
               ),
             ],
@@ -217,7 +217,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _groupTitle(NotificationGroupItem group) {
-    final poolSuffix = group.poolId != null ? ' in Pool #${group.poolId}' : '';
+    final poolSuffix = group.poolId != null ? ' in Equb #${group.poolId}' : '';
 
     switch (group.type) {
       case 'round_closed':
@@ -227,9 +227,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'contribution_confirmed':
         return '${group.count} contributions confirmed$poolSuffix';
       case 'pool_joined':
-        return '${group.count} pool join confirmations$poolSuffix';
+        return '${group.count} equb join confirmations$poolSuffix';
       case 'pool_created':
-        return '${group.count} pools created';
+        return '${group.count} equbs created';
       default:
         return '${group.count} grouped updates$poolSuffix';
     }
@@ -264,7 +264,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final n = group.notifications[index];
-                final color = _colorForType(n.type);
+                final color = _colorForType(context, n.type);
                 return ListTile(
                   dense: true,
                   contentPadding:
@@ -314,15 +314,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String label) {
+  Widget _buildSectionHeader(BuildContext context, String label) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: AppTheme.textTertiary,
+          color: AppTheme.textTertiaryColor(context),
         ),
       ),
     );
@@ -333,7 +333,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     NotificationProvider provider,
     AppNotification n,
   ) {
-    final color = _colorForType(n.type);
+    final color = _colorForType(context, n.type);
     final status = _statusForNotification(n);
     final showStatusChip = n.isTransaction;
     final isCritical = n.isCritical;
@@ -442,7 +442,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     NotificationGroupItem group,
   ) {
     final latest = group.latestNotification;
-    final color = _colorForType(group.type);
+    final color = _colorForType(context, group.type);
     final unreadCount = group.notifications.where((n) => !n.read).length;
 
     return ListTile(
@@ -525,7 +525,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -572,21 +572,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
                   if (sections.critical.isNotEmpty) ...[
-                    _buildSectionHeader('Critical Alerts'),
+                    _buildSectionHeader(context, 'Critical Alerts'),
                     for (final item in sections.critical) ...[
                       _buildSingleTile(context, provider, item.notification),
                       const Divider(height: 1, indent: 72),
                     ],
                   ],
                   if (sections.latest.isNotEmpty) ...[
-                    _buildSectionHeader('Latest Updates'),
+                    _buildSectionHeader(context, 'Latest Updates'),
                     for (final item in sections.latest) ...[
                       _buildSingleTile(context, provider, item.notification),
                       const Divider(height: 1, indent: 72),
                     ],
                   ],
                   if (sections.grouped.isNotEmpty) ...[
-                    _buildSectionHeader('Earlier Summaries'),
+                    _buildSectionHeader(context, 'Earlier Summaries'),
                     for (final item in sections.grouped) ...[
                       if (item is NotificationSingleItem)
                         _buildSingleTile(context, provider, item.notification)

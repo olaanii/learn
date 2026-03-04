@@ -31,9 +31,9 @@ const config: HardhatUserConfig = {
       url: 'http://127.0.0.1:8545',
     },
     creditcoin: {
-      url: process.env.RPC_URL || 'https://rpc.creditcoin.org',
-      chainId: Number(process.env.CHAIN_ID) || 102030,
-      accounts: [DEPLOYER_PRIVATE_KEY],
+      url: process.env.MAINNET_RPC_URL || 'https://mainnet-rpc.creditcoin.org',
+      chainId: 102030,
+      accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
     },
     creditcoinTestnet: {
       url: 'https://rpc.cc3-testnet.creditcoin.network',

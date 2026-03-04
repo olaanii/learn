@@ -6,7 +6,7 @@ import { Pool } from '../entities/pool.entity';
 import { PayoutStreamEntity } from '../entities/payout-stream.entity';
 import { Round } from '../entities/round.entity';
 import { Season } from '../entities/season.entity';
-import { AnalyticsController } from './analytics.controller';
+import { AnalyticsController, DannaAnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
 @Module({
@@ -20,7 +20,7 @@ import { AnalyticsService } from './analytics.service';
       PayoutStreamEntity,
     ]),
   ],
-  controllers: [AnalyticsController],
+  controllers: [AnalyticsController, DannaAnalyticsController],
   providers: [AnalyticsService],
 })
 export class AnalyticsModule {}
