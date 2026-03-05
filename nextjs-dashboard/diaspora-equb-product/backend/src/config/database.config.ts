@@ -7,18 +7,27 @@ export const getDatabaseConfig = (
 ): TypeOrmModuleOptions => {
   const isProduction =
     configService.get<string>('NODE_ENV') === 'production';
+  const databaseUrl = configService.get<string>('DATABASE_URL', '');
+
+  const base = {
+    autoLoadEntities: true,
+    synchronize: !isProduction,
+    migrationsRun: isProduction,
+    migrations: [join(__dirname, '..', 'migrations', '*{.ts,.js}')],
+    logging: !isProduction,
+  };
+
+  if (databaseUrl && databaseUrl.startsWith('postgres')) {
+    return { ...base, url: databaseUrl };
+  }
 
   return {
+    ...base,
     type: 'postgres',
     host: configService.get<string>('DATABASE_HOST', 'localhost'),
     port: configService.get<number>('DATABASE_PORT', 5432),
     username: configService.get<string>('DATABASE_USERNAME', 'equb'),
     password: configService.get<string>('DATABASE_PASSWORD', 'change_me'),
     database: configService.get<string>('DATABASE_NAME', 'diaspora_equb'),
-    autoLoadEntities: true,
-    synchronize: !isProduction,
-    migrationsRun: isProduction,
-    migrations: [join(__dirname, '..', 'migrations', '*{.ts,.js}')],
-    logging: !isProduction,
   };
 };

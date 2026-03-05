@@ -5,11 +5,16 @@ const evmAddress = Joi.string()
   .default('0x0000000000000000000000000000000000000000');
 
 export const envValidationSchema = Joi.object({
-  // Database
+  // Database (use DATABASE_URL for Vercel Postgres / Neon, or individual vars)
+  DATABASE_URL: Joi.string().uri({ scheme: ['postgres', 'postgresql'] }).allow('').default(''),
   DATABASE_HOST: Joi.string().default('localhost'),
   DATABASE_PORT: Joi.number().default(5432),
   DATABASE_USERNAME: Joi.string().default('equb'),
-  DATABASE_PASSWORD: Joi.string().required(),
+  DATABASE_PASSWORD: Joi.when('DATABASE_URL', {
+    is: Joi.string().min(1),
+    then: Joi.string().allow('').optional(),
+    otherwise: Joi.string().required(),
+  }),
   DATABASE_NAME: Joi.string().default('diaspora_equb'),
 
   // JWT (SRS NFR-2: 32+ chars in production)
