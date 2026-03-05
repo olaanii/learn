@@ -89,3 +89,5 @@ Set **API_BASE_URL** in the **frontend** Vercel project (e-equb) to this value a
 - **Entry**: `dist/vercel.js` (serverless handler). `vercel.json` routes all requests to it.
 
 No Docker; the backend runs as a single serverless function on Vercel.
+
+**Do not remove `builds` from `vercel.json`.** The Nest serverless handler (`dist/vercel.js`) needs it. If you remove `builds`, Vercel will not run your API and you may see 404 or "no serverless function" behavior. The warning *"Build and Development Settings will not apply"* is expected and safe to ignore.
