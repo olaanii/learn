@@ -1,5 +1,10 @@
-# Netlify config for learn repo.
-# Base must be a relative path inside the repo. Do not use "/opt/build" (that is the server path, not your repo).
+# Netlify config: deploy Flutter web app (Diaspora Equb frontend).
+# This overrides the Netlify UI. Do not set "Build command" to "build/web" in the UI —
+# that is the publish directory, not a command.
 
 [build]
-  base = ""
+  base = "nextjs-dashboard/diaspora-equb-product/frontend"
+  command = "if [ ! -d .flutter ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable .flutter; fi && .flutter/bin/flutter config --enable-web && .flutter/bin/flutter pub get && bash scripts/vercel_build.sh"
+  publish = "build/web"
+
+# Set in Netlify UI (Build env): API_BASE_URL, WALLETCONNECT_PROJECT_ID, CHAIN_ID, RPC_URL (optional: SENTRY_DSN)
