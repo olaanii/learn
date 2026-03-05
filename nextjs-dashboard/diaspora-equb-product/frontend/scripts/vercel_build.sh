@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -e
 # Run from frontend root; Vercel injects API_BASE_URL, WALLETCONNECT_PROJECT_ID, CHAIN_ID, RPC_URL, SENTRY_DSN
-echo "[vercel_build] pwd=$(pwd)" >&2
-echo "[vercel_build] ls -la:" >&2
-ls -la >&2
-if [ -d .flutter ]; then echo "[vercel_build] .flutter exists"; else echo "[vercel_build] .flutter MISSING"; fi >&2
-echo "[vercel_build] running flutter --version" >&2
-./.flutter/bin/flutter --version >&2
-echo "[vercel_build] running flutter build web" >&2
 ./.flutter/bin/flutter build web --release --web-renderer canvaskit \
   --dart-define=API_BASE_URL="${API_BASE_URL:-http://localhost:3001/api}" \
   --dart-define=WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}" \

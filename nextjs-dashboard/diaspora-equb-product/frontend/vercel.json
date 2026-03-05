@@ -1,6 +1,6 @@
 {
   "installCommand": "if [ ! -d .flutter ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable .flutter; fi && .flutter/bin/flutter config --enable-web && .flutter/bin/flutter pub get",
-  "buildCommand": "bash -x scripts/vercel_build.sh",
+  "buildCommand": "bash scripts/vercel_build.sh",
   "outputDirectory": "build/web",
   "framework": null,
   "rewrites": [
