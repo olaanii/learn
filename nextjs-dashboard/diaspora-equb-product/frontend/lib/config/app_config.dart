@@ -1,9 +1,19 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
-  /// Backend API base URL. Override with --dart-define=API_BASE_URL=... for local (e.g. http://localhost:3001/api).
-  static const String apiBaseUrl = String.fromEnvironment(
+  static const String _apiBaseUrlRaw = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://equb-db.netlify.app/api',
   );
+
+  /// Backend API base URL. In release builds, if the baked-in value is localhost (e.g. old build),
+  /// we use production URL so deployed app works without rebuild.
+  static String get apiBaseUrl {
+    if (kReleaseMode && _apiBaseUrlRaw.contains('localhost')) {
+      return 'https://equb-db.netlify.app/api';
+    }
+    return _apiBaseUrlRaw;
+  }
 
   /// Creditcoin RPC endpoint. Override via --dart-define=RPC_URL=...
   /// Testnet: https://rpc.cc3-testnet.creditcoin.network  (102031)
