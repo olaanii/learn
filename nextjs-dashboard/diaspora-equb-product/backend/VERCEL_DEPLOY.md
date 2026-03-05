@@ -1,6 +1,6 @@
 # Deploy Nest backend to Vercel
 
-The backend runs as a **serverless function** on Vercel. All routes are under `/api`.
+The backend runs as a **serverless function** on Vercel. All routes are under `/api`. **GET /api** returns a short JSON response; **GET /api/health** is the health check. If you see 404, try **/api/health** and check Vercel function logs (env or DB errors can cause 500).
 
 ## 1. Database (required)
 

@@ -7,6 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { envValidationSchema } from './config/env.validation';
 import { getDatabaseConfig } from './config/database.config';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { AppController } from './app.controller';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
 import { AuthModule } from './auth/auth.module';
@@ -79,6 +80,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     SwapModule,
     BadgesModule,
   ],
+  controllers: [AppController],
   providers: [
     // Global JWT authentication guard
     {
