@@ -43,5 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Release signing (do not commit)
+/android/key.properties
+/android/*.jks
+/android/*.keystore
 .vercel
 .env*.local
