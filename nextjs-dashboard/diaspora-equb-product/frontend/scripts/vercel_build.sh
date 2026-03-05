@@ -3,7 +3,7 @@ set -e
 # Run from frontend root; Vercel injects API_BASE_URL, WALLETCONNECT_PROJECT_ID, CHAIN_ID, RPC_URL, SENTRY_DSN
 # --web-renderer was removed in Flutter 3.22+; default is used
 ./.flutter/bin/flutter build web --release \
-  --dart-define=API_BASE_URL="${API_BASE_URL:-http://localhost:3001/api}" \
+  --dart-define=API_BASE_URL="${API_BASE_URL:-https://equb-db.netlify.app/api}" \
   --dart-define=WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}" \
   --dart-define=CHAIN_ID="${CHAIN_ID:-102031}" \
   --dart-define=RPC_URL="${RPC_URL:-https://rpc.cc3-testnet.creditcoin.network}" \

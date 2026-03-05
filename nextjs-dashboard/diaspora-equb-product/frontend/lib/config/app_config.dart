@@ -1,7 +1,8 @@
 class AppConfig {
+  /// Backend API base URL. Override with --dart-define=API_BASE_URL=... for local (e.g. http://localhost:3001/api).
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3001/api',
+    defaultValue: 'https://equb-db.netlify.app/api',
   );
 
   /// Creditcoin RPC endpoint. Override via --dart-define=RPC_URL=...
