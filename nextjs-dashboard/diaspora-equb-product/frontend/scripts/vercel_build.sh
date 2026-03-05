@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e
 # Run from frontend root; Vercel injects API_BASE_URL, WALLETCONNECT_PROJECT_ID, CHAIN_ID, RPC_URL, SENTRY_DSN
-./.flutter/bin/flutter build web --release --web-renderer canvaskit \
+# --web-renderer was removed in Flutter 3.22+; default is used
+./.flutter/bin/flutter build web --release \
   --dart-define=API_BASE_URL="${API_BASE_URL:-http://localhost:3001/api}" \
   --dart-define=WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}" \
   --dart-define=CHAIN_ID="${CHAIN_ID:-102031}" \
