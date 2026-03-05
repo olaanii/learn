@@ -1,0 +1,5 @@
+# Netlify config for learn repo.
+# Base must be a relative path inside the repo. Do not use "/opt/build" (that is the server path, not your repo).
+
+[build]
+  base = ""
