@@ -165,7 +165,7 @@ class _LotteryDrawModalState extends State<LotteryDrawModal>
               if (_error != null) ...[
                 Text(
                   _error!,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 14,
                     color: AppTheme.negative,
                   ),

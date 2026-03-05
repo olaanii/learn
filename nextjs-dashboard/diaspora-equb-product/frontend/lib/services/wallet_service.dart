@@ -306,7 +306,10 @@ class WalletService extends ChangeNotifier {
       final hexMessage =
           '0x${message.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join()}';
 
+      // On mobile: open wallet first so it is in foreground when the sign request is sent
       await _tryOpenWallet(null);
+      // Give the wallet app time to come to foreground and be ready to receive the request
+      await Future.delayed(const Duration(milliseconds: 1500));
 
       final result = await _signClient!.request(
         topic: _session!.topic,

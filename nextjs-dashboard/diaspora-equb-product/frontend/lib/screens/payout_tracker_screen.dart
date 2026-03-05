@@ -194,7 +194,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
           total: totalPrize.toStringAsFixed(0),
           upfrontPercent: pool['season']?['payoutSplitPct'] ?? 20,
           totalRounds: pool['maxMembers'] ?? members.length,
-          caller: caller!,
+          caller: caller,
           onProgress: (msg) {
             if (mounted) {
               AppSnackbarService.instance.info(
@@ -819,7 +819,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
             const SizedBox(height: 6),
             Text(
               randomizingDisplay,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'monospace',
@@ -837,7 +837,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
           const Icon(Icons.celebration_rounded,
               size: 32, color: AppTheme.accentYellow),
           const SizedBox(height: 6),
-          Text(
+          const Text(
             'Winner!',
             style: TextStyle(
               fontSize: 16,
@@ -1257,8 +1257,8 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
                             ),
                             if (isPaid)
                               Text(
-                                'ROUND ${roundNum} WINNER',
-                                style: TextStyle(
+                                'ROUND $roundNum WINNER',
+                                style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.5,
@@ -1280,7 +1280,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
                       if (isPaid)
                         Text(
                           '\$${amount.toStringAsFixed(2)}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: AppTheme.positive,
@@ -1322,7 +1322,7 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Icon(Icons.verified_rounded,
+                        const Icon(Icons.verified_rounded,
                             size: 12, color: AppTheme.positive),
                         const SizedBox(width: 4),
                         Text(

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
 import '../services/api_client.dart';
 import '../services/wallet_service.dart';
 import '../config/app_config.dart';
@@ -109,10 +109,10 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('Challenge received: $challenge');
       final message = challenge['message'] as String;
 
-      // Small delay to let wallet connect modal close and switch focus back to MetaMask for signing
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Delay so wallet UI is ready: web = modal close; mobile = WalletConnect session ready before sign request
+      await Future.delayed(const Duration(milliseconds: kIsWeb ? 500 : 1800));
 
-      // 3. Sign the challenge with MetaMask
+      // 3. Sign the challenge with MetaMask (on mobile this opens MetaMask again for the sign prompt)
       final signature = await _walletService.personalSign(message);
       if (signature == null) {
         _errorMessage =

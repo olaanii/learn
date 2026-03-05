@@ -384,10 +384,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: AppTheme.textTertiaryColor(context),
             ),
           ),
-          if (walletService.errorMessage != null) ...[
+          if ((walletService.errorMessage ?? auth.errorMessage) != null) ...[
             const SizedBox(height: 8),
             Text(
-              walletService.errorMessage!,
+              walletService.errorMessage ?? auth.errorMessage ?? '',
               style: const TextStyle(
                 fontSize: 11,
                 color: AppTheme.negative,
@@ -435,13 +435,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ] else
                 ElevatedButton.icon(
-                  onPressed: walletService.isConnecting
+                  onPressed: (walletService.isConnecting ||
+                          auth.status == AuthStatus.loading)
                       ? null
-                      : () {
-                          walletService.connect();
-                          setState(() {});
+                      : () async {
+                          await auth.loginWithWalletOnly();
+                          if (mounted) setState(() {});
                         },
-                  icon: walletService.isConnecting
+                  icon: (walletService.isConnecting ||
+                          auth.status == AuthStatus.loading)
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -451,9 +453,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         )
                       : const Icon(Icons.link_rounded, size: 18),
-                  label: Text(walletService.isConnecting
-                      ? 'Connecting...'
-                      : 'Connect wallet'),
+                  label: Text(
+                    walletService.isConnecting
+                        ? 'Connecting...'
+                        : (auth.status == AuthStatus.loading
+                            ? 'Sign in wallet...'
+                            : 'Connect wallet'),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                   ),
