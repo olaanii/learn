@@ -18,7 +18,7 @@ export const getDatabaseConfig = (
   };
 
   if (databaseUrl && databaseUrl.startsWith('postgres')) {
-    return { ...base, url: databaseUrl };
+    return { ...base, type: 'postgres', url: databaseUrl };
   }
 
   return {
