@@ -1,0 +1,20 @@
+# Keep CLI upload under 10MB and under 15k files – Vercel clones Flutter and builds on their side
+build/
+.dart_tool/
+.flutter/
+.pub-cache/
+.pub/
+# Platform dirs (not needed for web build; cuts tens of thousands of files)
+android/
+ios/
+linux/
+macos/
+windows/
+*.iml
+.idea/
+.vscode/
+*.log
+coverage/
+.env
+.env.*
+test/

@@ -1,0 +1,4 @@
+# Drop your Android APK here to host it on Vercel.
+# After building: flutter build apk
+# Copy: build/app/outputs/flutter-apk/app-release.apk -> frontend/public/app-release.apk
+# Then deploy. The APK will be at: https://your-app.vercel.app/app-release.apk

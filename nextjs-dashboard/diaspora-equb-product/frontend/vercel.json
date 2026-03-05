@@ -1,5 +1,6 @@
 {
-  "buildCommand": "flutter build web --release --web-renderer canvaskit --dart-define=API_BASE_URL=$API_BASE_URL --dart-define=WALLETCONNECT_PROJECT_ID=$WALLETCONNECT_PROJECT_ID --dart-define=CHAIN_ID=$CHAIN_ID --dart-define=RPC_URL=$RPC_URL --dart-define=SENTRY_DSN=$SENTRY_DSN",
+  "installCommand": "if [ ! -d .flutter ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable .flutter; fi && .flutter/bin/flutter config --enable-web && .flutter/bin/flutter pub get",
+  "buildCommand": "bash scripts/vercel_build.sh",
   "outputDirectory": "build/web",
   "framework": null,
   "rewrites": [
