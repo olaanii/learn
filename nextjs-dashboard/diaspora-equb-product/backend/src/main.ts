@@ -32,12 +32,13 @@ async function bootstrap() {
   // Security
   app.use(helmet());
 
-  // CORS – restrict origins in production, allow all in development
+  // CORS – use CORS_ORIGINS list when set; otherwise allow all (avoids blocking when env not set)
   const corsOrigins = configService.get<string>('CORS_ORIGINS', '');
   app.enableCors({
-    origin: nodeEnv === 'production'
-      ? (corsOrigins ? corsOrigins.split(',').map((o) => o.trim()) : false)
-      : true,
+    origin:
+      nodeEnv === 'production' && corsOrigins
+        ? corsOrigins.split(',').map((o) => o.trim())
+        : true,
     credentials: true,
   });
 

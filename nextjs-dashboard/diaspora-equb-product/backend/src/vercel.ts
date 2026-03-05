@@ -34,10 +34,8 @@ async function createApp(): Promise<(req: any, res: any) => void> {
   const corsOrigins = configService.get<string>('CORS_ORIGINS', '');
   app.enableCors({
     origin:
-      nodeEnv === 'production'
-        ? corsOrigins
-          ? corsOrigins.split(',').map((o) => o.trim())
-          : false
+      nodeEnv === 'production' && corsOrigins
+        ? corsOrigins.split(',').map((o) => o.trim())
         : true,
     credentials: true,
   });
