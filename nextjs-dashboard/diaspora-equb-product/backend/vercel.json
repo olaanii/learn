@@ -2,12 +2,7 @@
   "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
-  "builds": [
-    {
-      "src": "dist/vercel.js",
-      "use": "@vercel/node"
-    }
-  ],
+  
   "rewrites": [
     { "source": "/", "destination": "/api" }
   ],
