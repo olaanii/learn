@@ -2,14 +2,15 @@
 # In Netlify UI: Base directory = nextjs-dashboard/diaspora-equb-product/backend
 
 [build]
-  command = "npm install && npm run build"
+  # Prune devDependencies so function zip stays under Netlify limit; dist + node_modules are included in the function
+  command = "npm install && npm run build && npm prune --production"
   publish = "dist"
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
-  # Include compiled Nest app so the function can require("../../dist/vercel")
-  included_files = ["./dist/**"]
+  # Include dist and node_modules so dist/vercel.js can require("@sentry/node", "@nestjs/core", etc.
+  included_files = ["./dist/**", "./node_modules/**"]
 
 # Send all traffic to the serverless function so /api/* and / work
 [[redirects]]
