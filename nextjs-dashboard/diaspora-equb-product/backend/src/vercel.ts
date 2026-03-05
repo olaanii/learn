@@ -66,12 +66,16 @@ async function createApp(): Promise<(req: any, res: any) => void> {
   }
 
   await app.init();
-  const expressApp = app.getHttpAdapter().getInstance() as (req: any, res: any) => void;
+  const expressApp = app.getHttpAdapter().getInstance();
   return expressApp;
 }
 
+/** Default handler for Vercel (req, res). */
 export default async function handler(req: any, res: any) {
   if (!appPromise) appPromise = createApp();
   const handle = await appPromise;
-  return handle(req, res);
+  return (handle as (req: any, res: any) => void)(req, res);
 }
+
+/** Export for Netlify: returns the Express app so serverless-http can wrap it. */
+export { createApp };

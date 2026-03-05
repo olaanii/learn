@@ -1,0 +1,19 @@
+# Netlify config for the NestJS backend (use when this folder is the site base directory).
+# In Netlify UI: Base directory = nextjs-dashboard/diaspora-equb-product/backend
+
+[build]
+  command = "npm ci && npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  # Include compiled Nest app so the function can require("../../dist/vercel")
+  included_files = ["./dist/**"]
+
+# Send all traffic to the serverless function so /api/* and / work
+[[redirects]]
+  force = true
+  from = "/*"
+  to = "/.netlify/functions/server"
+  status = 200
