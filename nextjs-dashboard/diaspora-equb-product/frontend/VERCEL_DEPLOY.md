@@ -4,6 +4,32 @@ Deploy this app to your Vercel project so it replaces the previous deployment an
 
 ---
 
+## Flutter web: backend URL + WalletConnect
+
+The app is configured to talk to the backend at **`https://equb-db.vercel.app/api`** (set in `vercel.json`). WalletConnect is included when you set `WALLETCONNECT_PROJECT_ID` in Vercel.
+
+**1. Environment variables (Vercel dashboard)**  
+In your **frontend** project: **Settings → Environment Variables**. Add for **Production** (and Preview if you want):
+
+| Name | Value |
+|------|--------|
+| `API_BASE_URL` | `https://equb-db.vercel.app/api` *(optional: already in vercel.json)* |
+| `WALLETCONNECT_PROJECT_ID` | Your project ID from [WalletConnect Cloud](https://cloud.walletconnect.com) (e.g. `10aaa86fb2c0d5a86ee20ce532834485`) |
+
+**2. Deploy**
+
+- **From Git:** push to the connected branch; Vercel builds from `vercel.json` and `scripts/vercel_build.sh` (which uses `API_BASE_URL` and `WALLETCONNECT_PROJECT_ID` in the Flutter build).
+- **From CLI (frontend folder):**
+  ```bash
+  cd frontend
+  npx vercel --prod
+  ```
+  If you hit the file-count limit: `npx vercel --prod --archive=tgz`
+
+**Result:** Flutter web build uses `https://equb-db.vercel.app/api` for all API calls and includes your WalletConnect project ID for wallet pairing.
+
+---
+
 ## Android APK on Vercel (host for download)
 
 Vercel doesn’t **build** Android apps; it serves the **Flutter web** build. You can still **host an Android APK** on the same deployment so users can download it:
@@ -31,15 +57,14 @@ If you run `npx vercel --prod` **from the `frontend` folder** and see:
 
 `Error: The provided path "...\frontend\nextjs-dashboard\diaspora-equb-product\frontend" does not exist`
 
-**Cause:** The Vercel project has **Root Directory** set to `nextjs-dashboard/diaspora-equb-product/frontend` (for Git deploys from the full repo). When you deploy via CLI from `frontend`, that path is appended to your current folder and becomes invalid.
+**Cause:** The **e-equb** project has **Root Directory** set to `nextjs-dashboard/diaspora-equb-product/frontend` (for Git deploys from the repo root). When you deploy via CLI from inside `frontend`, Vercel still uses that setting and resolves the path as `(current dir)\nextjs-dashboard\diaspora-equb-product\frontend`, which does not exist.
 
-**Fix:** In the Vercel dashboard:
+**Fix (when deploying from the `frontend` folder):**
 
 1. Open **https://vercel.com/olaaniis-projects/e-equb/settings**
 2. Go to **General** → **Build & Development Settings**
-3. Find **Root Directory**
-4. **Clear it** (leave empty) or set to `.` so the project root is the folder you deploy from (the `frontend` folder when using CLI).
-5. Save, then run again from the frontend folder: `npx vercel --prod`
+3. Find **Root Directory** and **clear it** (leave the field empty), then **Save**.
+4. In your terminal, from the `frontend` folder, run again: `npx vercel --prod`
 
 If you later deploy via **Git** from the full repo, set Root Directory back to `nextjs-dashboard/diaspora-equb-product/frontend`.
 

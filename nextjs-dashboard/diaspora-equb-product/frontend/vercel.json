@@ -31,10 +31,8 @@
     }
   ],
   "env": {
-    "API_BASE_URL": "https://api.diaspora-equb.com/api",
-    "WALLETCONNECT_PROJECT_ID": "@walletconnect_project_id",
+    "API_BASE_URL": "https://equb-db.vercel.app/api",
     "CHAIN_ID": "102031",
-    "RPC_URL": "https://rpc.cc3-testnet.creditcoin.network",
-    "SENTRY_DSN": "@sentry_dsn"
+    "RPC_URL": "https://rpc.cc3-testnet.creditcoin.network"
   }
 }
