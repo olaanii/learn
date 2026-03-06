@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ethers } from 'ethers';
 import { TokenService } from './token.service';
 import { Web3Service } from '../web3/web3.service';
 import { IndexerService } from '../indexer/indexer.service';
@@ -11,6 +12,7 @@ describe('TokenService', () => {
   const mockProvider = {
     getBlockNumber: jest.fn(),
     getBlock: jest.fn(),
+    estimateGas: jest.fn(),
   };
 
   const mockWeb3Service = {
@@ -30,7 +32,7 @@ describe('TokenService', () => {
 
   const mockIndexerService = {};
   const mockNotifications = {
-    create: jest.fn(),
+    create: jest.fn().mockResolvedValue({}),
   };
 
   beforeEach(async () => {
@@ -219,10 +221,10 @@ describe('TokenService', () => {
 
   describe('buildTransfer', () => {
     it('should return unsigned TX for ERC-20 transfer', async () => {
-      jest.spyOn(service as any, 'getTokenAddress').mockReturnValue(
-        '0x1000000000000000000000000000000000000001',
-      );
-      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
+      jest.spyOn(service as any, 'getTokenContract').mockReturnValue({
+        decimals: jest.fn().mockResolvedValue(6),
+      });
+      mockProvider.estimateGas.mockResolvedValue(BigInt(80000));
       (mockWeb3Service as any).buildUnsignedTx = jest.fn().mockReturnValue({
         to: '0x1000000000000000000000000000000000000001',
         data: '0xTransferData',
@@ -232,7 +234,8 @@ describe('TokenService', () => {
       });
 
       const result = await service.buildTransfer(
-        '0xRecipient',
+        '0x1111111111111111111111111111111111111111',
+        '0x2222222222222222222222222222222222222222',
         '100',
         'USDC',
       );
@@ -244,14 +247,22 @@ describe('TokenService', () => {
 
   describe('mintFaucetTokens', () => {
     it('should call mint on the token contract via deployer', async () => {
-      const mockTx = { wait: jest.fn().mockResolvedValue({ blockNumber: 100, hash: '0xTx' }) };
+      const mockTx = {
+        hash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        wait: jest.fn().mockResolvedValue({
+          blockNumber: 100,
+          hash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        }),
+      };
       const mockContract = {
+        decimals: jest.fn().mockResolvedValue(6),
         mint: jest.fn().mockResolvedValue(mockTx),
       };
-      jest.spyOn(service as any, 'getTokenContract').mockReturnValue(mockContract);
-      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
+      jest.spyOn(ethers, 'Contract').mockImplementation(
+        () => mockContract as unknown as ethers.Contract,
+      );
       (mockWeb3Service as any).getDeployerSigner = jest.fn().mockReturnValue({
-        address: '0xDeployer',
+        address: '0x3000000000000000000000000000000000000003',
       });
 
       const result = await service.mintFaucetTokens(

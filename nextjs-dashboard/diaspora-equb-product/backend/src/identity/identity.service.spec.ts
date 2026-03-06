@@ -120,11 +120,15 @@ describe('IdentityService', () => {
   describe('buildStoreOnChain', () => {
     it('should return unsigned TX for on-chain binding', async () => {
       mockIdentityRepo.findOne.mockResolvedValue({
-        identityHash: '0xHash',
+        identityHash:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
         walletAddress: '0xwallet',
       });
 
-      const result = await service.buildStoreOnChain('0xHash', '0xWallet');
+      const result = await service.buildStoreOnChain(
+        '0x1111111111111111111111111111111111111111111111111111111111111111',
+        '0xWallet',
+      );
       expect(result.to).toBe('0xIdentityRegistryAddr');
       expect(result.data).toBe('0xBindData');
       expect(result.value).toBe('0');
