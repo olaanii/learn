@@ -3,14 +3,14 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   static const String _apiBaseUrlRaw = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://equb-db.netlify.app/api',
+    defaultValue: 'https://e-equb.vercel.app//api',
   );
 
   /// Backend API base URL. In release builds, if the baked-in value is localhost (e.g. old build),
   /// we use production URL so deployed app works without rebuild.
   static String get apiBaseUrl {
     if (kReleaseMode && _apiBaseUrlRaw.contains('localhost')) {
-      return 'https://equb-db.netlify.app/api';
+      return 'https://e-equb.vercel.app//api';
     }
     return _apiBaseUrlRaw;
   }
