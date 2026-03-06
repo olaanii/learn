@@ -16,6 +16,23 @@ async function bootstrap() {
   }
 
   const server = express();
+  server.get('/favicon.ico', (_req: Request, res: Response) => {
+    res.status(204).end();
+  });
+  server.use((req: Request, _res: Response, next) => {
+    if (req.url === '/') {
+      req.url = '/api';
+      next();
+      return;
+    }
+
+    if (!req.url.startsWith('/api')) {
+      req.url = `/api${req.url.startsWith('/') ? '' : '/'}${req.url}`;
+    }
+
+    next();
+  });
+
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
     logger: ['error', 'warn', 'log'],
   });
