@@ -23,16 +23,6 @@ class ApiClient {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Ensure baseUrl always ends with a slash so Dio appends paths properly
-        if (!options.baseUrl.endsWith('/')) {
-           options.baseUrl = '${options.baseUrl}/';
-        }
-        
-        // Remove leading slash from path to prevent Dio from treating it as absolute
-        if (options.path.startsWith('/')) {
-          options.path = options.path.substring(1);
-        }
-        
         final token = await _storage.read(key: _tokenKey);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -71,7 +61,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in verifyFayda: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in verifyFayda: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -85,7 +76,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in walletChallenge: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in walletChallenge: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -105,7 +97,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in walletVerify: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in walletVerify: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -119,7 +112,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in devLogin: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in devLogin: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -314,7 +308,8 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getEligibleWinners(String poolId) async {
-    final response = await _dio.get('pools/$poolId/rounds/active/eligible-winners');
+    final response =
+        await _dio.get('pools/$poolId/rounds/active/eligible-winners');
     return response.data;
   }
 
@@ -402,8 +397,7 @@ class ApiClient {
     required String tokenSymbol,
     required String txHash,
   }) async {
-    final response =
-        await _dio.post('collateral/deposit-token/confirm', data: {
+    final response = await _dio.post('collateral/deposit-token/confirm', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       'tokenSymbol': tokenSymbol,
@@ -749,7 +743,8 @@ class ApiClient {
     return response.data;
   }
 
-  Future<Map<String, dynamic>> getProposal(String poolId, String proposalId) async {
+  Future<Map<String, dynamic>> getProposal(
+      String poolId, String proposalId) async {
     final response = await _dio.get('pools/$poolId/proposals/$proposalId');
     return Map<String, dynamic>.from(response.data as Map);
   }

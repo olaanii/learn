@@ -14,15 +14,23 @@ class AppConfig {
   static String get apiBaseUrl {
     final configured = _apiBaseUrlFromEnv.trim();
     if (configured.isNotEmpty) {
-      return configured;
+      return _normalizeApiBaseUrl(configured);
     }
     if (kIsWeb) {
-      return '/api';
+      return _normalizeApiBaseUrl('/api');
     }
     if (kReleaseMode) {
-      return 'https://equb-db.vercel.app/api';
+      return _normalizeApiBaseUrl('https://equb-db.vercel.app/api');
     }
-    return 'http://localhost:3001/api';
+    return _normalizeApiBaseUrl('http://localhost:3001/api');
+  }
+
+  static String _normalizeApiBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || trimmed.endsWith('/')) {
+      return trimmed;
+    }
+    return '$trimmed/';
   }
 
   static const String rpcUrl = String.fromEnvironment(

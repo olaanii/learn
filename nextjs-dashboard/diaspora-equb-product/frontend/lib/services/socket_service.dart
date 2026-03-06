@@ -24,7 +24,8 @@ class EqubSocketEvent {
       poolId: map['poolId']?.toString(),
       onChainPoolId: map['onChainPoolId'] as int?,
       data: Map<String, dynamic>.from(map['data'] as Map? ?? {}),
-      timestamp: map['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+      timestamp:
+          map['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch,
     );
   }
 }
@@ -46,6 +47,9 @@ class SocketService {
 
   String get _baseUrl {
     String base = AppConfig.apiBaseUrl;
+    if (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
     if (base.endsWith('/api')) {
       base = base.substring(0, base.length - 4);
     }
