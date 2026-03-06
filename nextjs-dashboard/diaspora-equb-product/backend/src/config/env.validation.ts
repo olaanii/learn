@@ -16,6 +16,7 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().required(),
   }),
   DATABASE_NAME: Joi.string().default('diaspora_equb'),
+  DATABASE_SSL: Joi.boolean().default(false),
 
   // JWT (SRS NFR-2: 32+ chars in production)
   JWT_SECRET: Joi.string().min(32).required(),

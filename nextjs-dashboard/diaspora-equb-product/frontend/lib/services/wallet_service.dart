@@ -123,6 +123,9 @@ class WalletService extends ChangeNotifier {
     try {
       const chainId = 'eip155:${AppConfig.chainId}';
 
+      debugPrint('[WalletService] Starting WalletConnect connection');
+      debugPrint('[WalletService] chainId: $chainId');
+
       final connectResponse = await _signClient!.connect(
         optionalNamespaces: {
           'eip155': const RequiredNamespace(
@@ -139,14 +142,18 @@ class WalletService extends ChangeNotifier {
       );
 
       _pairingUri = connectResponse.uri?.toString();
+      debugPrint('[WalletService] pairingUri: $_pairingUri');
       notifyListeners();
 
       if (_pairingUri != null) {
         await _tryOpenWallet(_pairingUri!);
       }
 
+      debugPrint('[WalletService] Waiting for session...');
       _session = await connectResponse.session.future;
+      debugPrint('[WalletService] Session established: ${_session != null}');
       _extractWalletAddress();
+      debugPrint('[WalletService] Wallet address: $_walletAddress');
 
       _isConnecting = false;
       _pairingUri = null;
@@ -154,6 +161,7 @@ class WalletService extends ChangeNotifier {
 
       return _walletAddress;
     } catch (e) {
+      debugPrint('[WalletService] WalletConnect connection error: $e');
       _errorMessage = 'Wallet connection failed: $e';
       _isConnecting = false;
       notifyListeners();
@@ -201,7 +209,8 @@ class WalletService extends ChangeNotifier {
     debugPrint('  gas: ${unsignedTx['estimatedGas']} → $gasHex');
     debugPrint('  chainId: $chainIdHex');
     final dataStr = unsignedTx['data']?.toString() ?? '';
-    debugPrint('  data: ${dataStr.length > 10 ? '${dataStr.substring(0, 10)}...(${dataStr.length} chars)' : dataStr}');
+    debugPrint(
+        '  data: ${dataStr.length > 10 ? '${dataStr.substring(0, 10)}...(${dataStr.length} chars)' : dataStr}');
 
     // On web, use the injected provider
     if (kIsWeb && eth_provider.hasInjectedProvider) {
@@ -272,6 +281,13 @@ class WalletService extends ChangeNotifier {
 
   /// Sign a personal message (e.g. for authentication).
   Future<String?> personalSign(String message) async {
+    debugPrint('[WalletService] personalSign called with message: $message');
+    debugPrint('[WalletService] walletAddress: $_walletAddress');
+    debugPrint('[WalletService] kIsWeb: $kIsWeb');
+    debugPrint(
+        '[WalletService] hasInjectedProvider: ${kIsWeb ? eth_provider.hasInjectedProvider : false}');
+    debugPrint('[WalletService] session: ${_session != null}');
+
     if (_walletAddress == null) {
       _errorMessage = 'Wallet not connected';
       notifyListeners();
@@ -311,6 +327,11 @@ class WalletService extends ChangeNotifier {
       // Give the wallet app time to come to foreground and be ready to receive the request
       await Future.delayed(const Duration(milliseconds: 1500));
 
+      debugPrint(
+          '[WalletService] Sending personal_sign request to WalletConnect');
+      debugPrint('[WalletService] chainId: $chainId');
+      debugPrint('[WalletService] hexMessage: $hexMessage');
+
       final result = await _signClient!.request(
         topic: _session!.topic,
         chainId: chainId,
@@ -320,8 +341,10 @@ class WalletService extends ChangeNotifier {
         ),
       );
 
+      debugPrint('[WalletService] personal_sign result: $result');
       return result.toString();
     } catch (e) {
+      debugPrint('[WalletService] personal_sign error: $e');
       _errorMessage = 'Signing failed: $e';
       notifyListeners();
       return null;

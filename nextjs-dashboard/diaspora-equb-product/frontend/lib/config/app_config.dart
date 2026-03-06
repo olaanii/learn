@@ -1,23 +1,30 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-  static const String _apiBaseUrlRaw = String.fromEnvironment(
+  static const String _apiBaseUrlFromEnv = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://equb-db.vercel.app/api',
+    defaultValue: '',
   );
 
-  /// Backend API base URL. In release builds, if the baked-in value is localhost (e.g. old build),
-  /// we use production URL so deployed app works without rebuild.
+  /// API base URL priority:
+  /// 1) `--dart-define=API_BASE_URL=...`
+  /// 2) Web default (`/api`) for same-origin deployments
+  /// 3) Non-web release fallback (`equb-db`)
+  /// 4) Local dev fallback
   static String get apiBaseUrl {
-    if (kReleaseMode && _apiBaseUrlRaw.contains('localhost')) {
+    final configured = _apiBaseUrlFromEnv.trim();
+    if (configured.isNotEmpty) {
+      return configured;
+    }
+    if (kIsWeb) {
+      return '/api';
+    }
+    if (kReleaseMode) {
       return 'https://equb-db.vercel.app/api';
     }
-    return _apiBaseUrlRaw;
+    return 'http://localhost:3001/api';
   }
 
-  /// Creditcoin RPC endpoint. Override via --dart-define=RPC_URL=...
-  /// Testnet: https://rpc.cc3-testnet.creditcoin.network  (102031)
-  /// Mainnet: https://mainnet3.creditcoin.network          (102030)
   static const String rpcUrl = String.fromEnvironment(
     'RPC_URL',
     defaultValue: 'https://rpc.cc3-testnet.creditcoin.network',

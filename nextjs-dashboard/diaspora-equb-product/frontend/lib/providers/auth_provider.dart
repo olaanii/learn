@@ -1,10 +1,17 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+  show ChangeNotifier, debugPrint;
 import '../services/api_client.dart';
 import '../services/wallet_service.dart';
 import '../config/app_config.dart';
 
-enum AuthStatus { unauthenticated, loading, authenticated, walletBound }
+enum AuthStatus {
+  unauthenticated,
+  loading,
+  walletConnected,
+  authenticated,
+  walletBound
+}
 
 class AuthProvider extends ChangeNotifier {
   final ApiClient _api;
@@ -82,17 +89,13 @@ class AuthProvider extends ChangeNotifier {
   bool get isDevBypassEnabled => AppConfig.devBypassFayda;
 
   /// Wallet-only login using Sign-In with Ethereum:
-  /// 1. Connect MetaMask → get wallet address
-  /// 2. Request a challenge from the backend
-  /// 3. Sign the challenge with MetaMask
-  /// 4. Backend verifies signature → issues JWT
-  Future<void> loginWithWalletOnly() async {
+  /// Step 1: Connect MetaMask → get wallet address
+  Future<void> connectWallet() async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // 1. Connect wallet
       final address = await _walletService.connect();
       if (address == null) {
         _errorMessage =
@@ -101,44 +104,72 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      
+
       debugPrint('Wallet connected with address: $address');
 
-      // 2. Request challenge
-      final challenge = await _api.walletChallenge(address);
-      debugPrint('Challenge received: $challenge');
+      _walletAddress = address;
+      _status = AuthStatus.walletConnected;
+    } catch (e) {
+      _errorMessage = 'Wallet connection failed: $e';
+      _status = AuthStatus.unauthenticated;
+    }
+
+    notifyListeners();
+  }
+
+  /// Step 2: Sign the challenge with MetaMask
+  Future<void> signWalletChallenge() async {
+    if (_walletAddress == null) {
+      _errorMessage = 'No wallet address available';
+      _status = AuthStatus.walletConnected;
+      notifyListeners();
+      return;
+    }
+
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Request challenge
+      final challenge = await _api.walletChallenge(_walletAddress!);
       final message = challenge['message'] as String;
 
-      // Delay so wallet UI is ready: web = modal close; mobile = WalletConnect session ready before sign request
-      await Future.delayed(const Duration(milliseconds: kIsWeb ? 500 : 1800));
+      // Sign the challenge with MetaMask
 
-      // 3. Sign the challenge with MetaMask (on mobile this opens MetaMask again for the sign prompt)
       final signature = await _walletService.personalSign(message);
       if (signature == null) {
         _errorMessage =
             _walletService.errorMessage ?? 'Message signing rejected';
-        _status = AuthStatus.unauthenticated;
+        _status = AuthStatus.walletConnected;
         notifyListeners();
         return;
       }
 
-      // 4. Verify signature and get JWT
+      // Verify signature and get JWT
       final response = await _api.walletVerify(
-        walletAddress: address,
+        walletAddress: _walletAddress!,
         signature: signature,
         message: message,
       );
 
       await _api.saveToken(response['accessToken']);
       _identityHash = response['identityHash'];
-      _walletAddress = address;
       _status = AuthStatus.walletBound;
     } catch (e) {
-      _errorMessage = 'Wallet login failed: $e';
-      _status = AuthStatus.unauthenticated;
+      _errorMessage = 'Wallet signing failed: $e';
+      _status = AuthStatus.walletConnected;
     }
 
     notifyListeners();
+  }
+
+  /// Legacy method - connects and signs in one go
+  Future<void> loginWithWalletOnly() async {
+    await connectWallet();
+    if (_status == AuthStatus.walletConnected) {
+      await signWalletChallenge();
+    }
   }
 
   /// Bind wallet using WalletConnect: connect the user's real wallet,

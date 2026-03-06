@@ -525,6 +525,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 return null;
               },
             ),
+
             const SizedBox(height: 14),
             SizedBox(
               height: 48,
