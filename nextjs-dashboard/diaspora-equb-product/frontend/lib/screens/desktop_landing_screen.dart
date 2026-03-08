@@ -178,8 +178,8 @@ class _LandingTopBar extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 612,
-          height: 408,
+          width: 182,
+          height: 74,
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: logoCardColor,
@@ -192,8 +192,8 @@ class _LandingTopBar extends StatelessWidget {
             child: Image.asset(
               'assets/logo.png',
               fit: BoxFit.contain,
-              width: 612,
-              height: 408,
+              width: 1224,
+              height: 816,
             ),
           ),
         ),
