@@ -12,6 +12,9 @@ import '../services/api_client.dart';
 import '../widgets/desktop_dashboard_panels.dart';
 import '../widgets/desktop_layout.dart';
 
+// Controls which desktop composition this screen should render.
+// Mobile always uses the default `full` layout, while desktop shells can
+// request a narrower subset or the unified dashboard grid.
 enum DesktopHomeMode { full, leftPanel, middlePanel, unifiedDesktop }
 
 class HomeScreen extends StatefulWidget {
@@ -24,18 +27,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Wallet UI state.
   bool _balanceVisible = true;
   bool _initialLoadDone = false;
   String? _lastLoadedWallet;
   String _selectedEqubType = 'All';
   String _selectedTimeRange = '30d';
 
+  // Cached analytics payloads used by the dashboard cards.
   Map<String, dynamic>? _globalStats;
   Map<String, dynamic>? _trending;
   List<dynamic>? _leaderboard;
   List<double> _chartPoints = [];
   bool _statsLoading = false;
 
+  // UI filter options for the analytics section.
   static const _equbTypes = [
     'All',
     'Finance',
@@ -58,6 +64,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final auth = context.read<AuthProvider>();
+
+    // Reload wallet-scoped data only when the connected wallet changes.
     if (auth.walletAddress != null &&
         _lastLoadedWallet != auth.walletAddress &&
         mounted) {
@@ -69,6 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (auth.walletAddress == null) {
       _lastLoadedWallet = null;
     }
+
+    // Fetch global analytics once on first entry, even without a wallet.
     if (_globalStats == null && !_statsLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadPerformanceData();
@@ -80,12 +90,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = context.read<AuthProvider>();
     final wallet = context.read<WalletProvider>();
     final network = context.read<NetworkProvider>();
+
+    // Wallet balances depend on both the active account and active network.
     if (auth.walletAddress != null) {
       wallet.loadAll(auth.walletAddress!, nativeSymbol: network.nativeSymbol);
     }
+
+    // Refresh analytics alongside wallet data so the dashboard stays coherent.
     _loadPerformanceData();
   }
 
+  // Converts the chart filter label into the API time window.
   int _timeRangeToDays(String range) {
     switch (range) {
       case '7d':
@@ -112,6 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final from = now - (days * 24 * 60 * 60 * 1000);
 
     try {
+      // Fetch all dashboard analytics in parallel so the screen updates as one
+      // coherent snapshot instead of flickering card-by-card.
       final results = await Future.wait([
         api.getEqubGlobalStats(type: typeCode),
         api.getEqubTrending(),
@@ -129,7 +146,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final seriesData = results[3] as Map<String, dynamic>;
       final seriesList = (seriesData['series'] as List?) ?? [];
 
-      // Aggregate all series points into a single cumulative time-series
+      // Merge multiple returned series into one cumulative chart so the home
+      // screen can show a single simple trend line.
       final bucketMap = <int, double>{};
       for (final s in seriesList) {
         final points = (s['points'] as List?) ?? [];
@@ -174,6 +192,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Consumer2<WalletProvider, AuthProvider>(
       builder: (context, wallet, auth, _) {
+        // This guards against the case where the widget rebuilds before the
+        // initial wallet payload has been fetched for the current address.
         if (auth.walletAddress != null &&
             wallet.transactions.isEmpty &&
             !wallet.isLoading &&
@@ -187,6 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final mode = widget.desktopMode;
 
+        // Desktop shells can request specialized dashboard slices instead of
+        // the standard mobile-first composition below.
         if (mode == DesktopHomeMode.unifiedDesktop) {
           return _buildUnifiedDesktopContent(context, wallet, auth);
         }
@@ -200,6 +222,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final showSkeleton =
             !_initialLoadDone && (wallet.isLoading || _statsLoading);
 
+        // Show a placeholder only for the first load. Later refreshes should
+        // keep the existing content visible to avoid jarring layout shifts.
         if (showSkeleton) {
           return _buildSkeletonBody(context);
         }
@@ -362,6 +386,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildLeftPanelContent(
       BuildContext context, WalletProvider wallet, AuthProvider auth) {
+    // Used by split desktop layouts where overview and analytics live in the
+    // main column and secondary panels render elsewhere.
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -384,6 +410,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildUnifiedDesktopContent(
       BuildContext context, WalletProvider wallet, AuthProvider auth) {
+    // This is the current desktop-first home experience: one scroll surface,
+    // one responsive grid, and no separate right rail.
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
@@ -398,6 +426,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
+              // The grid uses span-based sizing so important modules can take
+              // two columns on larger screens while still collapsing cleanly.
               final columns = constraints.maxWidth >= 1320
                   ? 3
                   : constraints.maxWidth >= 920
@@ -497,7 +527,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const DesktopSectionTitle(
                       title: 'Transactions Overview',
-                      subtitle: 'Settlement history and recent wallet movements',
+                      subtitle:
+                          'Settlement history and recent wallet movements',
                     ),
                     const SizedBox(height: 16),
                     _buildTransactionsSection(context, wallet),
@@ -505,25 +536,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
 
+              // Module order matters because `Wrap` flows left-to-right and
+              // top-to-bottom. The sequence below defines the dashboard story.
               final items = <Widget>[
                 SizedBox(
                   width: spanWidth(columns == 1 ? 1 : 2),
                   child: balanceModule,
                 ),
                 SizedBox(width: spanWidth(1), child: actionsModule),
-                SizedBox(width: spanWidth(1), child: const DesktopWorkspaceStatusCard()),
+                SizedBox(
+                    width: spanWidth(1),
+                    child: const DesktopWorkspaceStatusCard()),
                 SizedBox(
                   width: spanWidth(columns == 1 ? 1 : 2),
                   child: const DesktopQuickTransferCard(),
                 ),
-                SizedBox(width: spanWidth(1), child: const DesktopShortcutsCard()),
+                SizedBox(
+                    width: spanWidth(1), child: const DesktopShortcutsCard()),
                 SizedBox(
                   width: spanWidth(columns == 1 ? 1 : 2),
                   child: performanceModule,
                 ),
                 SizedBox(width: spanWidth(1), child: leaderboardModule),
                 SizedBox(width: spanWidth(1), child: trendsModule),
-                SizedBox(width: spanWidth(1), child: const DesktopRecentActivityCard()),
+                SizedBox(
+                    width: spanWidth(1),
+                    child: const DesktopRecentActivityCard()),
                 SizedBox(
                   width: spanWidth(columns == 1 ? 1 : 2),
                   child: transactionsModule,
@@ -543,6 +581,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMiddlePanelContent(BuildContext context, WalletProvider wallet) {
+    // Used by older split desktop compositions where transactions occupy the
+    // central content column.
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
@@ -562,6 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDesktopOverviewGrid(
       BuildContext context, WalletProvider wallet, AuthProvider auth) {
+    // Legacy two-module desktop overview kept for narrower shell variants.
     return LayoutBuilder(
       builder: (context, constraints) {
         final useTwoColumnCards = constraints.maxWidth >= 500;
@@ -640,6 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDesktopPerformanceGrid(BuildContext context) {
+    // Legacy desktop analytics composition kept for split shell variants.
     return LayoutBuilder(
       builder: (context, constraints) {
         final splitSecondary = constraints.maxWidth >= 460;
@@ -720,6 +762,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader(BuildContext context, AuthProvider auth) {
+    // Mobile/tablet header. Desktop unified mode does not use this header.
     final name = auth.walletAddress != null
         ? '${auth.walletAddress!.substring(0, 6)}...'
         : 'User';
@@ -775,12 +818,14 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () async {
         final auth = context.read<AuthProvider>();
         final wallet = context.read<WalletProvider>();
-        final nativeSym = network.nativeSymbol;
         final address = auth.walletAddress;
         await network.toggleNetwork();
         if (!mounted) return;
         if (address != null) {
-          unawaited(wallet.loadAll(address, nativeSymbol: nativeSym));
+          // Reload after switching chain so balances and symbols stay aligned
+          // with the new network context.
+          unawaited(
+              wallet.loadAll(address, nativeSymbol: network.nativeSymbol));
         }
       },
       child: Container(
@@ -860,6 +905,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTokenSelector(
       BuildContext context, WalletProvider wallet, AuthProvider auth) {
+    // The wallet provider exposes balances per supported stablecoin and this
+    // segmented control switches the active one for the balance card.
     final tokens = ['USDC', 'USDT'];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final trackColor = isDark ? AppTheme.darkSurface : AppTheme.backgroundLight;
@@ -936,6 +983,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBalanceCard(BuildContext context, WalletProvider wallet) {
+    // The top balance card is intentionally more visual than the other cards
+    // because it anchors the dashboard and communicates wallet status first.
     final rawBalance = wallet.balance;
     final balanceNum = double.tryParse(rawBalance) ?? 0.0;
     final balanceFormatted = _formatBalance(balanceNum);
@@ -1058,6 +1107,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatBalance(double balance) {
+    // Local formatter to avoid pulling in a heavier dependency for a single
+    // currency-style display in the main wallet card.
     final parts = balance.toStringAsFixed(2).split('.');
     final intPart = parts[0];
     final decPart = parts[1];
@@ -1071,6 +1122,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildQuickActions(BuildContext context,
       {bool forceGrid = false, bool compactCards = false}) {
+    // Keep action definitions centralized so both mobile and desktop variants
+    // render from the same source of truth.
     final actions = [
       _HomeActionData(
         icon: Icons.account_balance_wallet_outlined,
@@ -1101,6 +1154,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Smaller widths use a simple row. Wider desktop cards switch to a
+        // grid so labels remain readable and touch targets stay balanced.
         final useGrid = forceGrid || constraints.maxWidth >= 420;
         if (!useGrid) {
           return Row(
@@ -1260,6 +1315,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPerformanceSection(BuildContext context) {
+    // Mobile/tablet analytics layout. Desktop unified mode composes these
+    // building blocks into its own larger grid.
     return LayoutBuilder(
       builder: (context, constraints) {
         final splitLayout = constraints.maxWidth >= 620;
@@ -1332,6 +1389,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTypeChips(BuildContext context) {
+    // Changing the chip updates the server-side filter, then refreshes all
+    // analytics panels that depend on the selected Equb category.
     return SizedBox(
       height: 36,
       child: ListView.separated(
@@ -1372,6 +1431,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMetricsRow(BuildContext context) {
+    // These are compact summary KPIs derived from the global stats payload.
     if (_statsLoading && _globalStats == null) {
       return const SizedBox(
         height: 60,
@@ -1400,6 +1460,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatTvl(double tvl) {
+    // Shortens large monetary values for dashboard display.
     if (tvl >= 1e9) return '\$${(tvl / 1e9).toStringAsFixed(1)}B';
     if (tvl >= 1e6) return '\$${(tvl / 1e6).toStringAsFixed(1)}M';
     if (tvl >= 1e3) return '\$${(tvl / 1e3).toStringAsFixed(1)}K';
@@ -1407,6 +1468,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatNumber(int n) {
+    // Matches the compact style used for TVL labels and leaderboard stats.
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return '$n';
@@ -1439,6 +1501,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPerformanceChart(BuildContext context) {
+    // The chart is intentionally lightweight: the API data is pre-aggregated
+    // in `_loadPerformanceData`, and this widget only handles display.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -1520,6 +1584,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTrendingEqubs(BuildContext context) {
+    // The backend returns separate buckets; the UI flattens them into one
+    // horizontal scroller while preserving each item's source category.
     final sections = <MapEntry<String, List<dynamic>>>[];
     if (_trending != null) {
       final fg = (_trending!['fastestGrowing'] as List?) ?? [];
@@ -1582,6 +1648,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTrendingCard(
       BuildContext context, String category, Map<String, dynamic> pool) {
+    // Trending cards are intentionally compact and route directly into the
+    // pool detail page for fast exploration.
     final poolId = pool['poolId']?.toString() ?? '';
     final onChainId = pool['onChainPoolId'];
     final name = onChainId != null
@@ -1645,6 +1713,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLeaderboard(BuildContext context) {
+    // Leaderboard ranking is driven by the backend response order.
     final items = _leaderboard ?? [];
 
     return Column(
@@ -1770,6 +1839,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTransactionsSection(
       BuildContext context, WalletProvider wallet) {
+    // The home screen only previews the most recent transactions to keep the
+    // card compact; the full history lives on the dedicated route.
     final txList = wallet.transactions;
     return Column(
       children: [
@@ -1827,6 +1898,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTransactionTile(
       BuildContext context, Map<String, dynamic> tx, bool isLast) {
+    // Transactions are normalized here into one visual model so token and
+    // native transfers can share the same row component.
     final type = tx['type'] as String? ?? 'received';
     final isSent = type == 'sent';
     final amount = double.tryParse(tx['amount']?.toString() ?? '0') ?? 0;
@@ -2067,6 +2140,7 @@ class _DataChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.length < 2) return;
 
+    // Paint the line and the subtle fill under it.
     final paint = Paint()
       ..color = AppTheme.accentYellowDark.withValues(alpha: 0.8)
       ..strokeWidth = 2.5
@@ -2091,6 +2165,8 @@ class _DataChartPainter extends CustomPainter {
     final padding = size.height * 0.08;
     final drawHeight = size.height - padding * 2;
 
+    // Normalize values into a 0..1 range so any dataset can be projected into
+    // the available paint area.
     double normalize(double v) {
       if (range == 0) return 0.5;
       return (v - minVal) / range;
@@ -2100,6 +2176,8 @@ class _DataChartPainter extends CustomPainter {
     final fillPath = Path();
     final stepX = size.width / (points.length - 1);
 
+    // Build both the visible trend line and the closed area-fill path in a
+    // single pass through the point list.
     for (int i = 0; i < points.length; i++) {
       final x = i * stepX;
       final y = padding + drawHeight * (1 - normalize(points[i]));
@@ -2141,6 +2219,8 @@ class _DataChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _DataChartPainter oldDelegate) =>
       !_listEquals(oldDelegate.points, points);
 
+  // Custom comparison avoids unnecessary repaints when the point list content
+  // is unchanged but a new list instance is created.
   static bool _listEquals(List<double> a, List<double> b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {

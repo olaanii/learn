@@ -96,18 +96,19 @@ class _DesktopLandingScreenState extends State<DesktopLandingScreen> {
                                 ],
                               )
                             else
-                              IntrinsicHeight(
+                              SizedBox(
+                                height: 560,
                                 child: Row(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     Expanded(
-                                      flex: 11,
+                                      flex: 10,
                                       child: _HeroCopyPanel(key: _heroKey),
                                     ),
                                     const SizedBox(width: 14),
                                     Expanded(
-                                      flex: 10,
+                                      flex: 11,
                                       child: _HeroVisualPanel(
                                         heroPreviewAsset: _heroPreviewAsset,
                                       ),
@@ -231,86 +232,90 @@ class _HeroCopyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return _LandingPanel(
-      padding: const EdgeInsets.fromLTRB(36, 40, 36, 30),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: AppTheme.darkBorder.withValues(alpha: 0.85),
-              ),
-            ),
-            child: Text(
-              'Desktop-first savings workspace',
-              style: textTheme.labelLarge?.copyWith(
-                color: AppTheme.darkAccent,
-              ),
-            ),
-          ),
-          const SizedBox(height: 26),
-          Text(
-            'Your Equb,\nSimplified.',
-            style: textTheme.displayLarge?.copyWith(
-              color: AppTheme.darkTextPrimary,
-              height: 0.94,
-              fontWeight: FontWeight.w800,
-              fontSize: 64,
-            ),
-          ),
-          const SizedBox(height: 20),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Text(
-              'Control payouts, pool activity, governance, and wallet actions from one desktop command center built around larger screens and calmer decision making.',
-              style: textTheme.bodyLarge?.copyWith(
-                color: AppTheme.darkTextSecondary,
-                height: 1.65,
-              ),
-            ),
-          ),
-          const SizedBox(height: 26),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              ElevatedButton(
-                onPressed: () => context.go('/auth'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.darkAccent,
-                  foregroundColor: AppTheme.darkBackground,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 520),
+      child: _LandingPanel(
+        padding: const EdgeInsets.fromLTRB(36, 40, 36, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.darkSurface.withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: AppTheme.darkBorder.withValues(alpha: 0.85),
                 ),
-                child: const Text('Get Started'),
               ),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/pools'),
-                icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
-                label: const Text('Explore Pools'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.darkTextPrimary,
-                  side: BorderSide(
-                    color: AppTheme.darkBorder.withValues(alpha: 0.95),
+              child: Text(
+                'Desktop-first savings workspace',
+                style: textTheme.labelLarge?.copyWith(
+                  color: AppTheme.darkAccent,
+                ),
+              ),
+            ),
+            const SizedBox(height: 26),
+            Text(
+              'Your Equb,\nSimplified.',
+              style: textTheme.displayLarge?.copyWith(
+                color: AppTheme.darkTextPrimary,
+                height: 0.94,
+                fontWeight: FontWeight.w800,
+                fontSize: 64,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Text(
+                'Control payouts, pool activity, governance, and wallet actions from one desktop command center built around larger screens and calmer decision making.',
+                style: textTheme.bodyLarge?.copyWith(
+                  color: AppTheme.darkTextSecondary,
+                  height: 1.65,
+                ),
+              ),
+            ),
+            const SizedBox(height: 26),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                ElevatedButton(
+                  onPressed: () => context.go('/auth'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.darkAccent,
+                    foregroundColor: AppTheme.darkBackground,
                   ),
-                  backgroundColor: AppTheme.darkSurface.withValues(alpha: 0.52),
+                  child: const Text('Get Started'),
                 ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Wrap(
-            spacing: 28,
-            runSpacing: 12,
-            children: const [
-              _MutedBrandLabel(label: 'Wallet-ready'),
-              _MutedBrandLabel(label: 'Round insights'),
-              _MutedBrandLabel(label: 'Payout control'),
-            ],
-          ),
-        ],
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/pools'),
+                  icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
+                  label: const Text('Explore Pools'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.darkTextPrimary,
+                    side: BorderSide(
+                      color: AppTheme.darkBorder.withValues(alpha: 0.95),
+                    ),
+                    backgroundColor:
+                        AppTheme.darkSurface.withValues(alpha: 0.52),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Wrap(
+              spacing: 28,
+              runSpacing: 12,
+              children: const [
+                _MutedBrandLabel(label: 'Wallet-ready'),
+                _MutedBrandLabel(label: 'Round insights'),
+                _MutedBrandLabel(label: 'Payout control'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -340,60 +345,102 @@ class _HeroVisualPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _LandingPanel(
-      padding: const EdgeInsets.all(0),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned(
-            top: 36,
-            left: 40,
-            child: Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.secondaryColor.withValues(alpha: 0.12),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 56,
-            top: 30,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.accentYellow.withValues(alpha: 0.12),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppTheme.darkSurface.withValues(alpha: 0.88),
-                    AppTheme.darkBackground,
-                  ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 520),
+      child: _LandingPanel(
+        padding: const EdgeInsets.all(0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final imageWidth = math.min(constraints.maxWidth * 1.08, 660.0);
+
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  top: 34,
+                  left: 36,
+                  child: Container(
+                    width: 170,
+                    height: 170,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.secondaryColor.withValues(alpha: 0.12),
+                    ),
+                  ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Image.asset(
-                  heroPreviewAsset,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const _HeroDeviceFallback();
-                  },
+                Positioned(
+                  right: 42,
+                  top: 26,
+                  child: Container(
+                    width: 210,
+                    height: 210,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.accentYellow.withValues(alpha: 0.13),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-        ],
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.darkSurface.withValues(alpha: 0.92),
+                          AppTheme.darkBackground,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  top: 0,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Transform.translate(
+                      offset: const Offset(0, 18),
+                      child: SizedBox(
+                        width: imageWidth,
+                        child: Image.asset(
+                          heroPreviewAsset,
+                          fit: BoxFit.fitWidth,
+                          alignment: Alignment.bottomCenter,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const _HeroDeviceFallback();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: 120,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            AppTheme.darkBackground.withValues(alpha: 0.28),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
