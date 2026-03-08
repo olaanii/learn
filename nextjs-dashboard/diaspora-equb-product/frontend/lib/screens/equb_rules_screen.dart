@@ -6,11 +6,17 @@ import '../services/api_client.dart';
 import '../services/app_snackbar_service.dart';
 import '../providers/auth_provider.dart';
 import '../services/wallet_service.dart';
+import '../widgets/desktop_layout.dart';
 
 class EqubRulesScreen extends StatefulWidget {
   final String equbId;
+  final bool embeddedDesktop;
 
-  const EqubRulesScreen({super.key, required this.equbId});
+  const EqubRulesScreen({
+    super.key,
+    required this.equbId,
+    this.embeddedDesktop = false,
+  });
 
   @override
   State<EqubRulesScreen> createState() => _EqubRulesScreenState();
@@ -161,6 +167,84 @@ class _EqubRulesScreenState extends State<EqubRulesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final embeddedDesktop = widget.embeddedDesktop && AppTheme.isDesktop(context);
+
+    final body = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : SingleChildScrollView(
+            padding: embeddedDesktop
+                ? EdgeInsets.zero
+                : const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!_isCreator && !_isEditing)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentYellow.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 18, color: AppTheme.accentYellowDark),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Only the pool creator (Danna) can edit these rules.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondaryColor(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_isEditing)
+                  ..._buildEditForm(context)
+                else
+                  ..._buildReadOnly(context),
+                const SizedBox(height: 24),
+                if (_isEditing) _buildActionButtons(context),
+              ],
+            ),
+          );
+
+    if (embeddedDesktop) {
+      return DesktopContent(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: DesktopSectionTitle(
+                    title: _isEditing ? 'Edit Rules' : 'Equb Rules',
+                    subtitle: 'Review pool rules and edit them from the desktop workspace when creator access is available.',
+                  ),
+                ),
+                if (_isCreator && !_isEditing && !_isLoading)
+                  IconButton(
+                    icon: const Icon(Icons.edit_rounded),
+                    tooltip: 'Edit rules',
+                    onPressed: () => setState(() => _isEditing = true),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: _loadRules,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
@@ -184,46 +268,7 @@ class _EqubRulesScreenState extends State<EqubRulesScreen> {
             ),
           ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!_isCreator && !_isEditing)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accentYellow.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.info_outline, size: 18, color: AppTheme.accentYellowDark),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Only the pool creator (Danna) can edit these rules.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondaryColor(context),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (_isEditing)
-                      ..._buildEditForm(context)
-                    else
-                      ..._buildReadOnly(context),
-                    const SizedBox(height: 24),
-                    if (_isEditing) _buildActionButtons(context),
-                  ],
-                ),
-              ),
+        body: body,
       ),
     );
   }

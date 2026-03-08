@@ -12,10 +12,17 @@ import '../services/app_snackbar_service.dart';
 import '../services/wallet_service.dart';
 import '../config/theme.dart';
 import '../config/app_config.dart';
+import '../widgets/desktop_layout.dart';
 
 class PoolStatusScreen extends StatefulWidget {
   final String poolId;
-  const PoolStatusScreen({super.key, required this.poolId});
+  final bool embeddedDesktop;
+
+  const PoolStatusScreen({
+    super.key,
+    required this.poolId,
+    this.embeddedDesktop = false,
+  });
 
   @override
   State<PoolStatusScreen> createState() => _PoolStatusScreenState();
@@ -26,6 +33,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
   bool _isJoining = false;
   bool _isBindingIdentity = false;
   bool _isClosingRound = false;
+  final GlobalKey _membersSectionKey = GlobalKey();
 
   @override
   void initState() {
@@ -44,9 +52,26 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       final wallet = context.read<WalletProvider>();
       final network = context.read<NetworkProvider>();
       if (auth.walletAddress != null) {
-        unawaited(wallet.loadBalance(auth.walletAddress!, token: network.nativeSymbol));
+        unawaited(wallet.loadBalance(auth.walletAddress!,
+            token: network.nativeSymbol));
       }
     }
+  }
+
+  Future<void> _scrollToMembersSection() async {
+    final sectionContext = _membersSectionKey.currentContext;
+    if (sectionContext == null) return;
+
+    await Scrollable.ensureVisible(
+      sectionContext,
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
+    );
+  }
+
+  void _openPayoutStream() {
+    context.push('/payouts/${widget.poolId}');
   }
 
   String _tokenSymbolFor(BuildContext ctx) {
@@ -71,8 +96,12 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     final n = double.tryParse(raw);
     if (n == null) return '$raw $sym';
     if (n == n.truncateToDouble()) return '${n.toInt()} $sym';
-    if (n < 0.01) return '${n.toStringAsFixed(6).replaceAll(RegExp(r'0+$'), '')} $sym';
-    if (n < 1) return '${n.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '')} $sym';
+    if (n < 0.01) {
+      return '${n.toStringAsFixed(6).replaceAll(RegExp(r'0+$'), '')} $sym';
+    }
+    if (n < 1) {
+      return '${n.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '')} $sym';
+    }
     return '${n.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '')} $sym';
   }
 
@@ -83,7 +112,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     for (final member in members) {
       String address;
       if (member is Map) {
-        address = (member['walletAddress'] ?? '').toString().toLowerCase().trim();
+        address =
+            (member['walletAddress'] ?? '').toString().toLowerCase().trim();
       } else {
         address = member.toString().toLowerCase().trim();
       }
@@ -92,7 +122,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     return false;
   }
 
-  bool _isMemberOfPoolAny(Map<String, dynamic> pool, String? authAddr, String? walletAddr) {
+  bool _isMemberOfPoolAny(
+      Map<String, dynamic> pool, String? authAddr, String? walletAddr) {
     return _isMemberOfPool(pool, authAddr) || _isMemberOfPool(pool, walletAddr);
   }
 
@@ -173,11 +204,13 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     final onChainPoolId = pool['onChainPoolId'];
     final contributionAmount = pool['contributionAmount'] ?? '0';
 
-    debugPrint('[Contribute] START: onChainPoolId=$onChainPoolId, amount=$contributionAmount, walletConnected=${wallet.isConnected}, walletAddr=${wallet.walletAddress}');
+    debugPrint(
+        '[Contribute] START: onChainPoolId=$onChainPoolId, amount=$contributionAmount, walletConnected=${wallet.isConnected}, walletAddr=${wallet.walletAddress}');
 
     if (onChainPoolId == null) {
       AppSnackbarService.instance.warning(
-        message: 'This equb has no on-chain ID yet — it must be created on-chain first.',
+        message:
+            'This equb has no on-chain ID yet — it must be created on-chain first.',
         dedupeKey: 'pool_status_missing_onchain_id_contribute',
       );
       return;
@@ -192,10 +225,12 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       );
       final addr = await wallet.connect();
       if (!mounted) return;
-      debugPrint('[Contribute] Connect result: addr=$addr, error=${wallet.errorMessage}');
+      debugPrint(
+          '[Contribute] Connect result: addr=$addr, error=${wallet.errorMessage}');
       if (addr == null) {
         AppSnackbarService.instance.error(
-          message: wallet.errorMessage ?? 'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
+          message: wallet.errorMessage ??
+              'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
           dedupeKey: 'pool_status_wallet_not_connected',
           duration: const Duration(seconds: 5),
         );
@@ -216,7 +251,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     String? txHash;
 
     try {
-      debugPrint('[Contribute] Native $poolSymbol flow: buildAndSignContribute(poolId=$onChainPoolId, amount=$contributionAmount)');
+      debugPrint(
+          '[Contribute] Native $poolSymbol flow: buildAndSignContribute(poolId=$onChainPoolId, amount=$contributionAmount)');
       txHash = await pools.buildAndSignContribute(
         onChainPoolId as int,
         contributionAmount.toString(),
@@ -234,7 +270,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       return;
     }
 
-    debugPrint('[Contribute] Result: txHash=$txHash, error=${pools.errorMessage}');
+    debugPrint(
+        '[Contribute] Result: txHash=$txHash, error=${pools.errorMessage}');
 
     if (!mounted) return;
     setState(() => _isContributing = false);
@@ -261,10 +298,13 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         },
       );
     } else {
-      final err = pools.errorMessage ?? wallet.errorMessage ?? 'Transaction was rejected or failed';
+      final err = pools.errorMessage ??
+          wallet.errorMessage ??
+          'Transaction was rejected or failed';
       debugPrint('[Contribute] FAILED: $err');
       AppSnackbarService.instance.error(
-        message: '$err\n\nMake sure you are a member of this equb, have enough $poolSymbol balance, and approve the transaction in MetaMask.',
+        message:
+            '$err\n\nMake sure you are a member of this equb, have enough $poolSymbol balance, and approve the transaction in MetaMask.',
         dedupeKey: 'pool_status_contribute_failed',
         duration: const Duration(seconds: 8),
       );
@@ -277,11 +317,13 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     Map<String, dynamic> pool,
   ) async {
     final onChainPoolId = pool['onChainPoolId'];
-    debugPrint('[Join] START: onChainPoolId=$onChainPoolId, walletConnected=${wallet.isConnected}');
+    debugPrint(
+        '[Join] START: onChainPoolId=$onChainPoolId, walletConnected=${wallet.isConnected}');
 
     if (onChainPoolId == null) {
       AppSnackbarService.instance.warning(
-        message: 'This equb has no on-chain ID yet — it must be created on-chain first.',
+        message:
+            'This equb has no on-chain ID yet — it must be created on-chain first.',
         dedupeKey: 'pool_status_missing_onchain_id_join',
       );
       return;
@@ -291,10 +333,12 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       debugPrint('[Join] Wallet not connected, calling connect()...');
       final addr = await wallet.connect();
       if (!mounted) return;
-      debugPrint('[Join] Connect result: addr=$addr, error=${wallet.errorMessage}');
+      debugPrint(
+          '[Join] Connect result: addr=$addr, error=${wallet.errorMessage}');
       if (addr == null) {
         AppSnackbarService.instance.error(
-          message: wallet.errorMessage ?? 'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
+          message: wallet.errorMessage ??
+              'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
           dedupeKey: 'pool_status_wallet_not_connected_join',
           duration: const Duration(seconds: 5),
         );
@@ -412,16 +456,19 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       final round = pool['currentRound'] ?? 1;
       final poolSym = _tokenSymbolFor(context);
       final label = 'Contribute $poolSym (Round $round)';
-      const hint = 'Your wallet (MetaMask) will pop up to sign this transaction.';
+      const hint =
+          'Your wallet (MetaMask) will pop up to sign this transaction.';
 
       // Collateral gate: check if user has locked enough collateral for this pool
       final collateral = context.watch<CollateralProvider>();
       final contributionRaw = pool['contributionAmount']?.toString() ?? '0';
       final wei = BigInt.tryParse(contributionRaw) ?? BigInt.zero;
       final div = BigInt.from(10).pow(18);
-      final requiredCollateral = (wei ~/ div).toDouble() + (wei % div).toDouble() / 1e18;
+      final requiredCollateral =
+          (wei ~/ div).toDouble() + (wei % div).toDouble() / 1e18;
       final poolLocked = collateral.lockedForPool(widget.poolId);
-      final hasEnoughCollateral = poolLocked >= requiredCollateral && requiredCollateral > 0;
+      final hasEnoughCollateral =
+          poolLocked >= requiredCollateral && requiredCollateral > 0;
 
       if (!hasEnoughCollateral && requiredCollateral > 0) {
         return Column(
@@ -450,7 +497,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
             const SizedBox(height: 10),
             Text(
               'Lock collateral equal to one round\'s contribution before contributing.',
-              style: TextStyle(color: AppTheme.textTertiaryColor(context), fontSize: 12),
+              style: TextStyle(
+                  color: AppTheme.textTertiaryColor(context), fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -464,9 +512,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton.icon(
-              onPressed: isBusy
-                  ? null
-                  : () => _contributeOnChain(pools, wallet, pool),
+              onPressed:
+                  isBusy ? null : () => _contributeOnChain(pools, wallet, pool),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.buttonColor(context),
                 foregroundColor: AppTheme.buttonTextColor(context),
@@ -554,7 +601,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         loading: true,
         onPressed: null,
         color: AppTheme.primaryColor,
-        hint: 'Confirm the transaction in your wallet to bind your identity on-chain.',
+        hint:
+            'Confirm the transaction in your wallet to bind your identity on-chain.',
       );
     }
 
@@ -575,9 +623,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       label: 'Join Equb',
       icon: Icons.group_add_outlined,
       loading: false,
-      onPressed: isBusy
-          ? null
-          : () => _smartJoin(pools, wallet, pool, auth),
+      onPressed: isBusy ? null : () => _smartJoin(pools, wallet, pool, auth),
       color: AppTheme.primaryColor,
       hint: 'Your identity will be bound on-chain automatically if needed.',
     );
@@ -667,7 +713,9 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     if (joinTx != null) {
       context.read<NotificationProvider>().triggerFastSync();
       if (auth.walletAddress != null) {
-        await context.read<WalletProvider>().refreshAfterTx(auth.walletAddress!);
+        await context
+            .read<WalletProvider>()
+            .refreshAfterTx(auth.walletAddress!);
       }
       if (!mounted) return;
       setState(() => _isJoining = false);
@@ -707,7 +755,9 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       if (txHash != null) {
         context.read<NotificationProvider>().triggerFastSync();
         if (auth.walletAddress != null) {
-          await context.read<WalletProvider>().refreshAfterTx(auth.walletAddress!);
+          await context
+              .read<WalletProvider>()
+              .refreshAfterTx(auth.walletAddress!);
         }
         if (!mounted) return;
         AppSnackbarService.instance.success(
@@ -720,7 +770,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         await _joinPoolOnChain(pools, wallet, pool);
       } else {
         AppSnackbarService.instance.error(
-          message: auth.errorMessage ?? 'Identity binding failed. Please try again.',
+          message:
+              auth.errorMessage ?? 'Identity binding failed. Please try again.',
           dedupeKey: 'pool_status_smart_bind_failed',
           duration: const Duration(seconds: 5),
         );
@@ -742,34 +793,41 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     final wallet = context.watch<WalletService>();
     final walletProvider = context.watch<WalletProvider>();
     final pool = pools.selectedPool;
+    final embeddedDesktop = widget.embeddedDesktop && AppTheme.isDesktop(context);
 
     return Container(
       decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text(pool?['name']?.toString() ?? 'Equb Status'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 22),
-              tooltip: 'Refresh',
-              onPressed: () async => _loadPoolData(),
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz_rounded, size: 22),
-              onSelected: (v) {
-                if (v == 'payouts') context.push('/payouts/${widget.poolId}');
-                if (v == 'governance') context.push('/equb-governance/${widget.poolId}');
-                if (v == 'rules') context.push('/equb-rules/${widget.poolId}');
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'payouts', child: Text('Payout Stream')),
-                PopupMenuItem(value: 'governance', child: Text('Governance')),
-                PopupMenuItem(value: 'rules', child: Text('Rules')),
-              ],
-            ),
-          ],
-        ),
+        appBar: embeddedDesktop
+            ? null
+            : AppBar(
+                title: Text(pool?['name']?.toString() ?? 'Equb Status'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 22),
+                    tooltip: 'Refresh',
+                    onPressed: () async => _loadPoolData(),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                    onSelected: (v) {
+                      if (v == 'payouts') _openPayoutStream();
+                      if (v == 'governance') {
+                        context.push('/equb-governance/${widget.poolId}');
+                      }
+                      if (v == 'rules') {
+                        context.push('/equb-rules/${widget.poolId}');
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'payouts', child: Text('Payout Stream')),
+                      PopupMenuItem(value: 'governance', child: Text('Governance')),
+                      PopupMenuItem(value: 'rules', child: Text('Rules')),
+                    ],
+                  ),
+                ],
+              ),
         bottomNavigationBar: pool != null && auth.walletAddress != null
             ? _buildStickyBottomBar(context, pool, pools, wallet, auth)
             : null,
@@ -779,44 +837,185 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                 onRefresh: _loadPoolData,
                 child: Builder(
                   builder: (context) {
-                    final isPoolAdmin = _isPoolAdmin(pool, auth.walletAddress, wallet.walletAddress);
+                    final isPoolAdmin = _isPoolAdmin(
+                        pool, auth.walletAddress, wallet.walletAddress);
                     final members = (pool['members'] as List?) ?? const [];
                     final memberCount = members.length;
-                    final maxMembers = int.tryParse('${pool['maxMembers'] ?? 0}') ?? 0;
+                    final maxMembers =
+                        int.tryParse('${pool['maxMembers'] ?? 0}') ?? 0;
                     final season = pool['season'] as Map<String, dynamic>?;
                     final seasonComplete = (pool['seasonComplete'] == true) ||
-                        ((season?['status']?.toString() ?? '').toLowerCase() == 'completed');
-                    final currentRoundStatus = (pool['currentRoundStatus']?.toString() ??
-                            pool['activeRound']?['status']?.toString() ?? '')
-                        .toLowerCase();
+                        ((season?['status']?.toString() ?? '').toLowerCase() ==
+                            'completed');
+                    final currentRoundStatus =
+                        (pool['currentRoundStatus']?.toString() ??
+                                pool['activeRound']?['status']?.toString() ??
+                                '')
+                            .toLowerCase();
                     final canCloseRound = isPoolAdmin &&
                         pool['onChainPoolId'] != null &&
                         wallet.isConnected &&
                         !seasonComplete;
-                    final currentRound = (pool['currentRound'] as num?)?.toInt() ?? 1;
-                    final progress = maxMembers > 0 ? (currentRound / maxMembers).clamp(0.0, 1.0) : 0.0;
+                    final currentRound =
+                        (pool['currentRound'] as num?)?.toInt() ?? 1;
+                    final progress = maxMembers > 0
+                        ? (currentRound / maxMembers).clamp(0.0, 1.0)
+                        : 0.0;
 
-                    return ListView(
+                    final mobileBody = ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                       children: [
-                        _buildHeroPayoutCard(context, pool, members, currentRound, maxMembers, progress, currentRoundStatus),
+                        _buildHeroPayoutCard(
+                            context,
+                            pool,
+                            members,
+                            currentRound,
+                            maxMembers,
+                            progress,
+                            currentRoundStatus),
                         const SizedBox(height: 20),
-                        _buildPayoutScheduleSection(context, pool, members, currentRound, auth, wallet),
+                        _buildPayoutScheduleSection(
+                            context, pool, members, currentRound, auth, wallet),
                         const SizedBox(height: 20),
-                        if (auth.walletAddress != null && wallet.isConnected) ...[
-                          _buildBalancePreviewCard(context, walletProvider, pool),
+                        if (auth.walletAddress != null &&
+                            wallet.isConnected) ...[
+                          _buildBalancePreviewCard(
+                              context, walletProvider, pool),
                           const SizedBox(height: 20),
                         ],
                         if (pool['onChainPoolId'] != null || isPoolAdmin) ...[
-                          _buildAdminCard(context, pools, pool, canCloseRound, seasonComplete, wallet, isPoolAdmin),
+                          _buildAdminCard(context, pools, pool, canCloseRound,
+                              seasonComplete, wallet, isPoolAdmin),
                           const SizedBox(height: 20),
                         ],
-                        _buildMembersSection(context, members, memberCount, maxMembers, auth, wallet),
+                        _buildMembersSection(context, members, memberCount,
+                            maxMembers, auth, wallet),
                         const SizedBox(height: 16),
                         if (pools.lastTxHash != null)
                           _buildLastTxCard(context, pools.lastTxHash!),
                       ],
                     );
+
+                    final desktopBody = SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics()),
+                      child: DesktopContent(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 96),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            DesktopSectionTitle(
+                              title: pool['name']?.toString() ?? 'Equb Status',
+                              subtitle: 'Round status, members, payouts, and management all stay inside the desktop workspace.',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    onPressed: _loadPoolData,
+                                    icon: const Icon(Icons.refresh_rounded, size: 22),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                                    onSelected: (v) {
+                                      if (v == 'payouts') _openPayoutStream();
+                                      if (v == 'governance') {
+                                        context.push('/equb-governance/${widget.poolId}');
+                                      }
+                                      if (v == 'rules') {
+                                        context.push('/equb-rules/${widget.poolId}');
+                                      }
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(value: 'payouts', child: Text('Payout Stream')),
+                                      PopupMenuItem(value: 'governance', child: Text('Governance')),
+                                      PopupMenuItem(value: 'rules', child: Text('Rules')),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: AppTheme.desktopSectionGap),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 7,
+                                  child: Column(
+                                    children: [
+                                      _buildHeroPayoutCard(
+                                          context,
+                                          pool,
+                                          members,
+                                          currentRound,
+                                          maxMembers,
+                                          progress,
+                                          currentRoundStatus),
+                                      const SizedBox(
+                                          height: AppTheme.desktopSectionGap),
+                                      _buildPayoutScheduleSection(context, pool,
+                                          members, currentRound, auth, wallet),
+                                      if (pools.lastTxHash != null) ...[
+                                        const SizedBox(
+                                            height: AppTheme.desktopSectionGap),
+                                        _buildLastTxCard(
+                                            context, pools.lastTxHash!),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: AppTheme.desktopPanelGap),
+                                Expanded(
+                                  flex: 4,
+                                  child: Column(
+                                    children: [
+                                      if (isPoolAdmin) ...[
+                                        _buildDesktopManagementCard(context),
+                                        const SizedBox(
+                                            height: AppTheme.desktopSectionGap),
+                                      ],
+                                      if (auth.walletAddress != null &&
+                                          wallet.isConnected) ...[
+                                        _buildBalancePreviewCard(
+                                            context, walletProvider, pool),
+                                        const SizedBox(
+                                            height: AppTheme.desktopSectionGap),
+                                      ],
+                                      if (pool['onChainPoolId'] != null ||
+                                          isPoolAdmin) ...[
+                                        _buildAdminCard(
+                                            context,
+                                            pools,
+                                            pool,
+                                            canCloseRound,
+                                            seasonComplete,
+                                            wallet,
+                                            isPoolAdmin),
+                                        const SizedBox(
+                                            height: AppTheme.desktopSectionGap),
+                                      ],
+                                      KeyedSubtree(
+                                        key: _membersSectionKey,
+                                        child: _buildMembersSection(
+                                            context,
+                                            members,
+                                            memberCount,
+                                            maxMembers,
+                                            auth,
+                                            wallet),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+
+                    return AppTheme.isDesktop(context)
+                        ? desktopBody
+                        : mobileBody;
                   },
                 ),
               ),
@@ -824,8 +1023,16 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildHeroPayoutCard(BuildContext context, Map<String, dynamic> pool, List members, int currentRound, int maxMembers, double progress, String roundStatus) {
-    final contribution = _formatContributionDisplay(pool['contributionAmount']?.toString() ?? '0');
+  Widget _buildHeroPayoutCard(
+      BuildContext context,
+      Map<String, dynamic> pool,
+      List members,
+      int currentRound,
+      int maxMembers,
+      double progress,
+      String roundStatus) {
+    final contribution = _formatContributionDisplay(
+        pool['contributionAmount']?.toString() ?? '0');
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -839,9 +1046,15 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('NEXT PAYOUT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: AppTheme.textTertiaryColor(context))),
+              Text('NEXT PAYOUT',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: AppTheme.textTertiaryColor(context))),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppTheme.positive.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
@@ -849,9 +1062,14 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 14, color: AppTheme.positive),
+                    const Icon(Icons.calendar_today_rounded,
+                        size: 14, color: AppTheme.positive),
                     const SizedBox(width: 5),
-                    Text('Round $currentRound', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.positive)),
+                    Text('Round $currentRound',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.positive)),
                   ],
                 ),
               ),
@@ -860,7 +1078,11 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
           const SizedBox(height: 12),
           Text(
             contribution,
-            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: AppTheme.textPrimaryColor(context), letterSpacing: -1),
+            style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimaryColor(context),
+                letterSpacing: -1),
           ),
           const SizedBox(height: 16),
           Row(
@@ -871,8 +1093,15 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Your Turn', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor(context))),
-                    Text('Cycle $currentRound of $maxMembers', style: TextStyle(fontSize: 12, color: AppTheme.textTertiaryColor(context))),
+                    Text('Your Turn',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimaryColor(context))),
+                    Text('Cycle $currentRound of $maxMembers',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiaryColor(context))),
                   ],
                 ),
               ),
@@ -883,8 +1112,10 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: AppTheme.textHintColor(context).withValues(alpha: 0.25),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              backgroundColor:
+                  AppTheme.textHintColor(context).withValues(alpha: 0.25),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
               minHeight: 6,
             ),
           ),
@@ -896,7 +1127,11 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
   Widget _buildSmallAvatarStack(BuildContext context, List members) {
     final count = members.length;
     final show = count > 3 ? 3 : count;
-    final colors = [AppTheme.accentYellow, AppTheme.positive, AppTheme.secondaryColor];
+    final colors = [
+      AppTheme.accentYellow,
+      AppTheme.positive,
+      AppTheme.secondaryColor
+    ];
     return SizedBox(
       width: show * 18.0 + (count > 3 ? 18 : 0) + 6,
       height: 28,
@@ -906,26 +1141,36 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
             Positioned(
               left: i * 16.0,
               child: Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: colors[i % colors.length].withValues(alpha: 0.25),
-                  border: Border.all(color: AppTheme.cardColor(context), width: 2),
+                  border:
+                      Border.all(color: AppTheme.cardColor(context), width: 2),
                 ),
-                child: Icon(Icons.person, size: 14, color: colors[i % colors.length]),
+                child: Icon(Icons.person,
+                    size: 14, color: colors[i % colors.length]),
               ),
             ),
           if (count > 3)
             Positioned(
               left: show * 16.0,
               child: Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppTheme.textHintColor(context).withValues(alpha: 0.3),
-                  border: Border.all(color: AppTheme.cardColor(context), width: 2),
+                  border:
+                      Border.all(color: AppTheme.cardColor(context), width: 2),
                 ),
-                child: Center(child: Text('+${count - 3}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.textSecondaryColor(context)))),
+                child: Center(
+                    child: Text('+${count - 3}',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textSecondaryColor(context)))),
               ),
             ),
         ],
@@ -933,17 +1178,31 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildPayoutScheduleSection(BuildContext context, Map<String, dynamic> pool, List members, int currentRound, AuthProvider auth, WalletService wallet) {
+  Widget _buildPayoutScheduleSection(
+      BuildContext context,
+      Map<String, dynamic> pool,
+      List members,
+      int currentRound,
+      AuthProvider auth,
+      WalletService wallet) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Payout Schedule', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text('Payout Schedule',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
             GestureDetector(
               onTap: () => context.push('/payouts/${widget.poolId}'),
-              child: const Text('View Full', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.secondaryColor)),
+              child: const Text('View Full',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.secondaryColor)),
             ),
           ],
         ),
@@ -958,7 +1217,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
           child: Column(
             children: [
               for (int i = 0; i < members.length && i < 4; i++)
-                _buildTimelineEntry(context, i, members, currentRound, auth, wallet),
+                _buildTimelineEntry(
+                    context, i, members, currentRound, auth, wallet),
             ],
           ),
         ),
@@ -966,12 +1226,16 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildTimelineEntry(BuildContext context, int index, List members, int currentRound, AuthProvider auth, WalletService wallet) {
+  Widget _buildTimelineEntry(BuildContext context, int index, List members,
+      int currentRound, AuthProvider auth, WalletService wallet) {
     final member = members[index];
-    final address = (member is Map ? member['walletAddress'] ?? '' : member.toString()).toString();
+    final address =
+        (member is Map ? member['walletAddress'] ?? '' : member.toString())
+            .toString();
     final addrLower = address.toLowerCase();
-    final isCurrentUser = addrLower == (auth.walletAddress ?? '').toLowerCase() ||
-        addrLower == (wallet.walletAddress ?? '').toLowerCase();
+    final isCurrentUser =
+        addrLower == (auth.walletAddress ?? '').toLowerCase() ||
+            addrLower == (wallet.walletAddress ?? '').toLowerCase();
     final roundNum = index + 1;
     final isPast = roundNum < currentRound;
     final isCurrent = roundNum == currentRound;
@@ -986,16 +1250,28 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
             child: Column(
               children: [
                 Container(
-                  width: 12, height: 12,
+                  width: 12,
+                  height: 12,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isPast ? AppTheme.positive : isCurrent ? AppTheme.primaryColor : AppTheme.textHintColor(context),
-                    border: isCurrent ? Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3), width: 3) : null,
+                    color: isPast
+                        ? AppTheme.positive
+                        : isCurrent
+                            ? AppTheme.primaryColor
+                            : AppTheme.textHintColor(context),
+                    border: isCurrent
+                        ? Border.all(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                            width: 3)
+                        : null,
                   ),
                 ),
                 if (!isLast)
                   Expanded(
-                    child: Container(width: 2, color: AppTheme.textHintColor(context).withValues(alpha: 0.3)),
+                    child: Container(
+                        width: 2,
+                        color: AppTheme.textHintColor(context)
+                            .withValues(alpha: 0.3)),
                   ),
               ],
             ),
@@ -1011,34 +1287,51 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isCurrent && isCurrentUser ? '${_truncateAddress(address)} (You)' : _truncateAddress(address),
+                          isCurrent && isCurrentUser
+                              ? '${_truncateAddress(address)} (You)'
+                              : _truncateAddress(address),
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                            color: isCurrent ? AppTheme.textPrimaryColor(context) : AppTheme.textSecondaryColor(context),
+                            fontWeight:
+                                isCurrent ? FontWeight.w700 : FontWeight.w500,
+                            color: isCurrent
+                                ? AppTheme.textPrimaryColor(context)
+                                : AppTheme.textSecondaryColor(context),
                           ),
                         ),
                         if (isCurrent && isCurrentUser)
-                          const Text('Receiving payout', style: TextStyle(fontSize: 12, color: AppTheme.positive)),
+                          const Text('Receiving payout',
+                              style: TextStyle(
+                                  fontSize: 12, color: AppTheme.positive)),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: isPast
                           ? AppTheme.positive.withValues(alpha: 0.1)
                           : isCurrent
                               ? AppTheme.accentYellow.withValues(alpha: 0.15)
-                              : AppTheme.textHintColor(context).withValues(alpha: 0.1),
+                              : AppTheme.textHintColor(context)
+                                  .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      isPast ? 'Paid' : isCurrent ? 'Next' : 'Pending',
+                      isPast
+                          ? 'Paid'
+                          : isCurrent
+                              ? 'Next'
+                              : 'Pending',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isPast ? AppTheme.positive : isCurrent ? AppTheme.accentYellow : AppTheme.textTertiaryColor(context),
+                        color: isPast
+                            ? AppTheme.positive
+                            : isCurrent
+                                ? AppTheme.accentYellow
+                                : AppTheme.textTertiaryColor(context),
                       ),
                     ),
                   ),
@@ -1051,7 +1344,14 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildAdminCard(BuildContext context, PoolProvider pools, Map<String, dynamic> pool, bool canCloseRound, bool seasonComplete, WalletService wallet, bool isPoolAdmin) {
+  Widget _buildAdminCard(
+      BuildContext context,
+      PoolProvider pools,
+      Map<String, dynamic> pool,
+      bool canCloseRound,
+      bool seasonComplete,
+      WalletService wallet,
+      bool isPoolAdmin) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1070,10 +1370,15 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                   color: AppTheme.primaryColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.admin_panel_settings_outlined, size: 20, color: AppTheme.primaryColor),
+                child: const Icon(Icons.admin_panel_settings_outlined,
+                    size: 20, color: AppTheme.primaryColor),
               ),
               const SizedBox(width: 12),
-              Text('Danna (Admin)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Danna (Admin)',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 14),
@@ -1084,13 +1389,17 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                   ? () => _closeRoundOnly(pools, pool)
                   : null,
               icon: _isClosingRound
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.flag_outlined, size: 20),
               label: Text(_isClosingRound ? 'Closing round...' : 'Close round'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryColor,
                 side: const BorderSide(color: AppTheme.primaryColor),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -1101,21 +1410,33 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                 : canCloseRound
                     ? 'Close only the active round. Winner selection is handled in Payout Stream.'
                     : 'Only the creator wallet can close the active round.',
-            style: TextStyle(fontSize: 12, color: AppTheme.textTertiaryColor(context)),
+            style: TextStyle(
+                fontSize: 12, color: AppTheme.textTertiaryColor(context)),
           ),
           if (!canCloseRound) ...[
             const SizedBox(height: 8),
             if (!wallet.isConnected)
               Row(children: [
-                const Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.warningColor),
+                const Icon(Icons.warning_amber_rounded,
+                    size: 16, color: AppTheme.warningColor),
                 const SizedBox(width: 6),
-                Expanded(child: Text('Connect your wallet to enable close round.', style: TextStyle(fontSize: 12, color: AppTheme.textTertiaryColor(context)))),
+                Expanded(
+                    child: Text('Connect your wallet to enable close round.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiaryColor(context)))),
               ]),
             if (wallet.isConnected && !isPoolAdmin)
               Row(children: [
-                const Icon(Icons.info_outline, size: 16, color: AppTheme.warningColor),
+                const Icon(Icons.info_outline,
+                    size: 16, color: AppTheme.warningColor),
                 const SizedBox(width: 6),
-                Expanded(child: Text('Only the wallet that signed equb creation can close rounds.', style: TextStyle(fontSize: 12, color: AppTheme.textTertiaryColor(context)))),
+                Expanded(
+                    child: Text(
+                        'Only the wallet that signed equb creation can close rounds.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiaryColor(context)))),
               ]),
           ],
         ],
@@ -1123,11 +1444,149 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildMembersSection(BuildContext context, List members, int memberCount, int maxMembers, AuthProvider auth, WalletService wallet) {
+  Widget _buildDesktopManagementCard(BuildContext context) {
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.dashboard_customize_outlined,
+                    size: 20, color: AppTheme.secondaryColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Creator Management',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Manage this Equb from the desktop sidebar.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildManagementActionTile(
+            context,
+            icon: Icons.groups_rounded,
+            title: 'Members',
+            subtitle: 'Jump to the current member roster',
+            onTap: _scrollToMembersSection,
+          ),
+          const SizedBox(height: 10),
+          _buildManagementActionTile(
+            context,
+            icon: Icons.payments_outlined,
+            title: 'Payouts',
+            subtitle: 'Open the payout stream for this Equb',
+            onTap: _openPayoutStream,
+          ),
+          const SizedBox(height: 10),
+          _buildManagementActionTile(
+            context,
+            icon: Icons.emoji_events_outlined,
+            title: 'Winner Selection',
+            subtitle: 'Continue in payout stream to pick a winner',
+            onTap: _openPayoutStream,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManagementActionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor(context).withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(14),
+          border: AppTheme.borderFor(context, opacity: 0.04),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color:
+                    AppTheme.textPrimaryColor(context).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: AppTheme.textPrimaryColor(context),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_rounded,
+              size: 18,
+              color: AppTheme.textTertiaryColor(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMembersSection(
+      BuildContext context,
+      List members,
+      int memberCount,
+      int maxMembers,
+      AuthProvider auth,
+      WalletService wallet) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Members ($memberCount/$maxMembers)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text('Members ($memberCount/$maxMembers)',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
@@ -1140,7 +1599,11 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
               for (int i = 0; i < members.length; i++) ...[
                 _buildMemberRow(context, members[i], i, auth, wallet),
                 if (i < members.length - 1)
-                  Divider(height: 1, indent: 60, color: AppTheme.textHintColor(context).withValues(alpha: 0.3)),
+                  Divider(
+                      height: 1,
+                      indent: 60,
+                      color: AppTheme.textHintColor(context)
+                          .withValues(alpha: 0.3)),
               ],
             ],
           ),
@@ -1149,54 +1612,93 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildMemberRow(BuildContext context, dynamic member, int index, AuthProvider auth, WalletService wallet) {
-    final address = (member is Map ? member['walletAddress'] ?? '' : member.toString()).toString();
+  Widget _buildMemberRow(BuildContext context, dynamic member, int index,
+      AuthProvider auth, WalletService wallet) {
+    final address =
+        (member is Map ? member['walletAddress'] ?? '' : member.toString())
+            .toString();
     final addrLower = address.toLowerCase();
-    final isCurrentUser = addrLower == (auth.walletAddress ?? '').toLowerCase() ||
-        addrLower == (wallet.walletAddress ?? '').toLowerCase();
-    final colors = [AppTheme.accentYellow, AppTheme.positive, AppTheme.secondaryColor, AppTheme.primaryColor];
+    final isCurrentUser =
+        addrLower == (auth.walletAddress ?? '').toLowerCase() ||
+            addrLower == (wallet.walletAddress ?? '').toLowerCase();
+    final colors = [
+      AppTheme.accentYellow,
+      AppTheme.positive,
+      AppTheme.secondaryColor,
+      AppTheme.primaryColor
+    ];
     final c = colors[index % colors.length];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: isCurrentUser ? AppTheme.primaryColor : c.withValues(alpha: 0.2)),
-            child: Icon(Icons.person, size: 18, color: isCurrentUser ? Colors.white : c),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isCurrentUser
+                    ? AppTheme.primaryColor
+                    : c.withValues(alpha: 0.2)),
+            child: Icon(Icons.person,
+                size: 18, color: isCurrentUser ? Colors.white : c),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_truncateAddress(address), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, fontFamily: 'monospace', color: AppTheme.textPrimaryColor(context))),
-                Text(isCurrentUser ? 'You' : 'Member', style: TextStyle(fontSize: 12, color: isCurrentUser ? AppTheme.primaryColor : AppTheme.textTertiaryColor(context))),
+                Text(_truncateAddress(address),
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                        color: AppTheme.textPrimaryColor(context))),
+                Text(isCurrentUser ? 'You' : 'Member',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isCurrentUser
+                            ? AppTheme.primaryColor
+                            : AppTheme.textTertiaryColor(context))),
               ],
             ),
           ),
           if (isCurrentUser)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-              child: const Text('You', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+              decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Text('You',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryColor)),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildStickyBottomBar(BuildContext context, Map<String, dynamic> pool, PoolProvider pools, WalletService wallet, AuthProvider auth) {
-    final isMember = _isMemberOfPoolAny(pool, auth.walletAddress, wallet.walletAddress);
+  Widget _buildStickyBottomBar(BuildContext context, Map<String, dynamic> pool,
+      PoolProvider pools, WalletService wallet, AuthProvider auth) {
+    final isMember =
+        _isMemberOfPoolAny(pool, auth.walletAddress, wallet.walletAddress);
     final memberCount = ((pool['members'] as List?) ?? []).length;
     final maxMembers = int.tryParse('${pool['maxMembers'] ?? 0}') ?? 0;
     final hasOpenSlots = maxMembers == 0 || memberCount < maxMembers;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).padding.bottom + 12),
+      padding: EdgeInsets.fromLTRB(
+          20, 12, 20, MediaQuery.of(context).padding.bottom + 12),
       decoration: BoxDecoration(
         color: AppTheme.cardColor(context),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -4))
+        ],
       ),
       child: _buildAdaptiveActionButton(
         context,
@@ -1219,15 +1721,25 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded, color: AppTheme.successColor, size: 22),
+          const Icon(Icons.check_circle_rounded,
+              color: AppTheme.successColor, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Last Transaction', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor(context))),
+                Text('Last Transaction',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimaryColor(context))),
                 const SizedBox(height: 2),
-                Text(txHash, style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: AppTheme.textTertiaryColor(context)), overflow: TextOverflow.ellipsis),
+                Text(txHash,
+                    style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: AppTheme.textTertiaryColor(context)),
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -1236,13 +1748,15 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     );
   }
 
-  Widget _buildBalancePreviewCard(BuildContext context, WalletProvider walletProvider, Map<String, dynamic> pool) {
+  Widget _buildBalancePreviewCard(BuildContext context,
+      WalletProvider walletProvider, Map<String, dynamic> pool) {
     final contributionRaw = pool['contributionAmount']?.toString() ?? '0';
     final symbol = _tokenSymbolFor(context);
     final bal = double.tryParse(walletProvider.balanceOf(symbol)) ?? 0;
     final wei = BigInt.tryParse(contributionRaw) ?? BigInt.zero;
     final div = BigInt.from(10).pow(18);
-    final contributionNum = (wei ~/ div).toDouble() + (wei % div).toDouble() / 1e18;
+    final contributionNum =
+        (wei ~/ div).toDouble() + (wei % div).toDouble() / 1e18;
     final contributionStr = '-${_formatContributionDisplay(contributionRaw)}';
     const decimals = 6;
     final currentBalance = bal.toStringAsFixed(decimals);
@@ -1254,7 +1768,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
         color: AppTheme.cardColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
         boxShadow: AppTheme.subtleShadowFor(context),
-        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.15)),
+        border:
+            Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,31 +1777,60 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
           Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.account_balance_wallet_rounded, size: 20, color: AppTheme.primaryColor),
+              decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.account_balance_wallet_rounded,
+                  size: 20, color: AppTheme.primaryColor),
             ),
             const SizedBox(width: 12),
-            Text('Your balance', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTheme.textSecondaryColor(context))),
+            Text('Your balance',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textSecondaryColor(context))),
           ]),
           const SizedBox(height: 12),
-          Text('$currentBalance $symbol', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimaryColor(context), letterSpacing: -0.5)),
+          Text('$currentBalance $symbol',
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimaryColor(context),
+                  letterSpacing: -0.5)),
           const SizedBox(height: 14),
-          Container(height: 1, color: AppTheme.textTertiaryColor(context).withValues(alpha: 0.15)),
+          Container(
+              height: 1,
+              color:
+                  AppTheme.textTertiaryColor(context).withValues(alpha: 0.15)),
           const SizedBox(height: 12),
-          _balancePreviewRow(context, 'Contribution', contributionStr, isNegative: true),
+          _balancePreviewRow(context, 'Contribution', contributionStr,
+              isNegative: true),
           const SizedBox(height: 6),
-          _balancePreviewRow(context, 'After contribution', '$afterBalance $symbol', isNegative: false),
+          _balancePreviewRow(
+              context, 'After contribution', '$afterBalance $symbol',
+              isNegative: false),
         ],
       ),
     );
   }
 
-  Widget _balancePreviewRow(BuildContext context, String label, String value, {required bool isNegative}) {
+  Widget _balancePreviewRow(BuildContext context, String label, String value,
+      {required bool isNegative}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondaryColor(context))),
-        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isNegative ? AppTheme.negative : AppTheme.textPrimaryColor(context))),
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textSecondaryColor(context))),
+        Text(value,
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isNegative
+                    ? AppTheme.negative
+                    : AppTheme.textPrimaryColor(context))),
       ],
     );
   }

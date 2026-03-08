@@ -67,4 +67,18 @@ export class AuthController {
     }
     return this.authService.devLogin(body.walletAddress);
   }
+
+  @Get('firebase/status')
+  @Public()
+  @ApiOperation({ summary: 'Check if backend Firebase Auth verification is configured' })
+  firebaseStatus() {
+    return this.authService.getFirebaseStatus();
+  }
+
+  @Post('firebase/session')
+  @Public()
+  @ApiOperation({ summary: 'Exchange a Firebase ID token for an app API session' })
+  firebaseSession(@Body() body: { idToken: string }) {
+    return this.authService.exchangeFirebaseSession(body.idToken);
+  }
 }

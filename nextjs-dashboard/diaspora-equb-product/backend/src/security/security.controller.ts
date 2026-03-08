@@ -13,7 +13,7 @@ import { SecurityService } from './security.service';
 
 @ApiTags('Security')
 @ApiBearerAuth()
-@Controller('api/security')
+@Controller('security')
 export class SecurityController {
   constructor(private readonly securityService: SecurityService) {}
 
@@ -24,6 +24,14 @@ export class SecurityController {
   }
 
   // ─── 2FA ────────────────────────────────────────────────────────
+
+  @Get('2fa/status')
+  @ApiOperation({ summary: 'Get 2FA enabled status for authenticated wallet' })
+  async get2FAStatus(@Req() req: any) {
+    return {
+      enabled: await this.securityService.is2FAEnabled(this.getWallet(req)),
+    };
+  }
 
   @Post('2fa/setup')
   @ApiOperation({ summary: 'Set up 2FA for authenticated wallet' })
@@ -49,6 +57,19 @@ export class SecurityController {
   @ApiOperation({ summary: 'List trusted devices' })
   listDevices(@Req() req: any) {
     return this.securityService.listDevices(this.getWallet(req));
+  }
+
+  @Post('devices/register')
+  @ApiOperation({ summary: 'Register or refresh the current trusted device' })
+  registerDevice(
+    @Req() req: any,
+    @Body() body: { fingerprint: string; userAgent?: string },
+  ) {
+    return this.securityService.registerDevice(
+      this.getWallet(req),
+      body.fingerprint,
+      body.userAgent ?? null,
+    );
   }
 
   @Delete('devices/:id')

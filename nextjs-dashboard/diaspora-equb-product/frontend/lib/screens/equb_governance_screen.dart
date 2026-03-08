@@ -8,11 +8,17 @@ import '../providers/governance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/wallet_service.dart';
 import '../services/app_snackbar_service.dart';
+import '../widgets/desktop_layout.dart';
 
 class EqubGovernanceScreen extends StatefulWidget {
   final String equbId;
+  final bool embeddedDesktop;
 
-  const EqubGovernanceScreen({super.key, required this.equbId});
+  const EqubGovernanceScreen({
+    super.key,
+    required this.equbId,
+    this.embeddedDesktop = false,
+  });
 
   @override
   State<EqubGovernanceScreen> createState() => _EqubGovernanceScreenState();
@@ -40,6 +46,77 @@ class _EqubGovernanceScreenState extends State<EqubGovernanceScreen>
   @override
   Widget build(BuildContext context) {
     final gov = context.watch<GovernanceProvider>();
+    final embeddedDesktop = widget.embeddedDesktop && AppTheme.isDesktop(context);
+
+    final tabView = gov.isLoading && gov.activeProposals.isEmpty && gov.pastProposals.isEmpty
+        ? const Center(child: CircularProgressIndicator())
+        : TabBarView(
+            controller: _tabController,
+            children: [
+              _buildProposalList(
+                context,
+                gov.activeProposals,
+                isActive: true,
+                emptyIcon: Icons.how_to_vote_rounded,
+                emptyTitle: 'No Active Proposals',
+                emptySubtitle:
+                    'When the Danna proposes a rule change, it will appear here for voting.',
+              ),
+              _buildProposalList(
+                context,
+                gov.pastProposals,
+                isActive: false,
+                emptyIcon: Icons.history_rounded,
+                emptyTitle: 'No Past Proposals',
+                emptySubtitle:
+                    'Completed governance votes will be listed here.',
+              ),
+            ],
+          );
+
+    if (embeddedDesktop) {
+      return DesktopContent(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: DesktopSectionTitle(
+                    title: 'Governance',
+                    subtitle: 'Review active proposals, past votes, and propose rule changes from the desktop workspace.',
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: () => gov.fetchProposals(widget.equbId),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: () => _showProposeDialog(context),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Propose'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TabBar(
+              controller: _tabController,
+              indicatorColor: AppTheme.accentYellowDark,
+              labelColor: AppTheme.textPrimaryColor(context),
+              unselectedLabelColor: AppTheme.textTertiaryColor(context),
+              tabs: const [
+                Tab(text: 'Active Proposals'),
+                Tab(text: 'Past Results'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(child: tabView),
+          ],
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
@@ -76,31 +153,7 @@ class _EqubGovernanceScreenState extends State<EqubGovernanceScreen>
           icon: const Icon(Icons.add_rounded),
           label: const Text('Propose'),
         ),
-        body: gov.isLoading && gov.activeProposals.isEmpty && gov.pastProposals.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildProposalList(
-                    context,
-                    gov.activeProposals,
-                    isActive: true,
-                    emptyIcon: Icons.how_to_vote_rounded,
-                    emptyTitle: 'No Active Proposals',
-                    emptySubtitle:
-                        'When the Danna proposes a rule change, it will appear here for voting.',
-                  ),
-                  _buildProposalList(
-                    context,
-                    gov.pastProposals,
-                    isActive: false,
-                    emptyIcon: Icons.history_rounded,
-                    emptyTitle: 'No Past Proposals',
-                    emptySubtitle:
-                        'Completed governance votes will be listed here.',
-                  ),
-                ],
-              ),
+        body: tabView,
       ),
     );
   }

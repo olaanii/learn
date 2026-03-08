@@ -6,6 +6,7 @@ import '../providers/network_provider.dart';
 import '../providers/pool_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/wallet_service.dart';
+import '../widgets/desktop_layout.dart';
 
 class PoolBrowserScreen extends StatefulWidget {
   const PoolBrowserScreen({super.key});
@@ -24,12 +25,24 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
   bool _initialLoadDone = false;
 
   static const _categories = [
-    'All', 'Finance', 'House', 'Car', 'Travel', 'Special',
-    'Workplace', 'Education', 'Wedding', 'Emergency',
+    'All',
+    'Finance',
+    'House',
+    'Car',
+    'Travel',
+    'Special',
+    'Workplace',
+    'Education',
+    'Wedding',
+    'Emergency',
   ];
   static const _frequencies = ['All', 'Daily', 'Weekly', 'Monthly'];
   static const _sortOptions = [
-    'Newest', 'Most Members', 'Highest Completion', 'Contribution Amount', 'Health Score',
+    'Newest',
+    'Most Members',
+    'Highest Completion',
+    'Contribution Amount',
+    'Health Score',
   ];
 
   @override
@@ -62,7 +75,7 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -73,7 +86,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               GestureDetector(
                 onTap: () => _showCreateDialog(context),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: AppTheme.buttonColor(context),
                     borderRadius: BorderRadius.circular(20),
@@ -81,9 +95,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.add_rounded, size: 18, color: AppTheme.buttonTextColor(context)),
+                      Icon(Icons.add_rounded,
+                          size: 18, color: AppTheme.buttonTextColor(context)),
                       const SizedBox(width: 4),
-                      Text('Create', style: TextStyle(color: AppTheme.buttonTextColor(context), fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text('Create',
+                          style: TextStyle(
+                              color: AppTheme.buttonTextColor(context),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -99,7 +118,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             indicatorColor: AppTheme.accentYellowDark,
             labelColor: AppTheme.textPrimaryColor(context),
             unselectedLabelColor: AppTheme.textTertiaryColor(context),
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             tabs: const [
               Tab(text: 'Browse Equbs'),
               Tab(text: 'My Equbs'),
@@ -117,6 +137,15 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
         ),
       ],
     );
+
+    if (AppTheme.isDesktop(context)) {
+      return DesktopContent(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: content,
+      );
+    }
+
+    return content;
   }
 
   bool get _hasActiveFilters =>
@@ -126,6 +155,7 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     return Consumer<PoolProvider>(
       builder: (context, pool, _) {
         final pools = _filterPools(pool.pools);
+        final desktop = AppTheme.isDesktop(context);
         return Column(
           children: [
             Padding(
@@ -140,7 +170,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                         hintText: 'Search equbs...',
                         prefixIcon: Icon(Icons.search_rounded, size: 20),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        contentPadding:
+                            EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                       ),
                     ),
                   ),
@@ -155,7 +186,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 children: [
-                  Text('${pools.length} equbs', style: Theme.of(context).textTheme.bodySmall),
+                  Text('${pools.length} equbs',
+                      style: Theme.of(context).textTheme.bodySmall),
                   if (_hasActiveFilters) ...[
                     const SizedBox(width: 8),
                     GestureDetector(
@@ -164,17 +196,24 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                         _selectedSort = 'Newest';
                       }),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppTheme.secondaryColor.withValues(alpha: 0.12),
+                          color:
+                              AppTheme.secondaryColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Clear filters', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.secondaryColor)),
+                            Text('Clear filters',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.secondaryColor)),
                             SizedBox(width: 4),
-                            Icon(Icons.close_rounded, size: 13, color: AppTheme.secondaryColor),
+                            Icon(Icons.close_rounded,
+                                size: 13, color: AppTheme.secondaryColor),
                           ],
                         ),
                       ),
@@ -194,12 +233,41 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                               ? _buildEmptyWithRefresh(context, pool)
                               : RefreshIndicator(
                                   onRefresh: () => pool.loadPools(),
-                                  child: ListView.separated(
-                                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                                    itemCount: pools.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                                    itemBuilder: (_, i) => _buildEqubCard(context, pools[i]),
-                                  ),
+                                  child: desktop
+                                      ? LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final columns =
+                                                constraints.maxWidth >= 1280
+                                                    ? 3
+                                                    : 2;
+                                            return GridView.builder(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      20, 0, 20, 20),
+                                              gridDelegate:
+                                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                                crossAxisCount: columns,
+                                                crossAxisSpacing:
+                                                    AppTheme.desktopPanelGap,
+                                                mainAxisSpacing: 16,
+                                                mainAxisExtent: 250,
+                                              ),
+                                              itemCount: pools.length,
+                                              itemBuilder: (_, i) =>
+                                                  _buildEqubCard(
+                                                      context, pools[i]),
+                                            );
+                                          },
+                                        )
+                                      : ListView.separated(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              20, 0, 20, 20),
+                                          itemCount: pools.length,
+                                          separatorBuilder: (_, __) =>
+                                              const SizedBox(height: 12),
+                                          itemBuilder: (_, i) =>
+                                              _buildEqubCard(context, pools[i]),
+                                        ),
                                 ),
             ),
           ],
@@ -277,7 +345,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                   return GestureDetector(
                     onTap: () => setSheetState(() => onSelect(item)),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: selected
                             ? AppTheme.buttonColor(ctx)
@@ -306,7 +375,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             return Container(
               decoration: BoxDecoration(
                 color: AppTheme.cardColor(ctx),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: SafeArea(
                 top: false,
@@ -402,7 +472,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                             backgroundColor: AppTheme.buttonColor(ctx),
                             foregroundColor: AppTheme.buttonTextColor(ctx),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.buttonRadius),
                             ),
                           ),
                           child: const Row(
@@ -410,7 +481,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                             children: [
                               Text(
                                 'Show Equbs',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                               SizedBox(width: 8),
                               Icon(Icons.arrow_forward_rounded, size: 20),
@@ -433,39 +505,76 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     return Consumer2<PoolProvider, AuthProvider>(
       builder: (context, pool, auth, _) {
         final wallet = auth.walletAddress?.toLowerCase() ?? '';
+        final desktop = AppTheme.isDesktop(context);
         final myPools = pool.pools.where((p) {
           final membersList = p['members'] as List? ?? [];
           final memberAddresses = membersList.map((e) {
-            if (e is Map) return (e['walletAddress'] ?? '').toString().toLowerCase();
+            if (e is Map) {
+              return (e['walletAddress'] ?? '').toString().toLowerCase();
+            }
             return e.toString().toLowerCase();
           }).toList();
-          final createdBy = (p['createdBy'] ?? p['creator'] ?? '').toString().toLowerCase();
+          final createdBy =
+              (p['createdBy'] ?? p['creator'] ?? '').toString().toLowerCase();
           final treasury = (p['treasury'] ?? '').toString().toLowerCase();
-          return memberAddresses.contains(wallet) || createdBy == wallet || treasury == wallet;
+          return memberAddresses.contains(wallet) ||
+              createdBy == wallet ||
+              treasury == wallet;
         }).toList();
 
-        if (pool.isLoading) return const Center(child: CircularProgressIndicator());
-        if (myPools.isEmpty) return _buildEmpty(context, 'You haven\'t joined any equbs yet');
+        if (pool.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (myPools.isEmpty) {
+          return _buildEmpty(context, 'You haven\'t joined any equbs yet');
+        }
 
         return RefreshIndicator(
           onRefresh: () => pool.loadPools(),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: myPools.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, i) => _buildMyEqubCard(context, myPools[i]),
-          ),
+          child: desktop
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 1280 ? 2 : 1;
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(20),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: AppTheme.desktopPanelGap,
+                        mainAxisSpacing: 16,
+                        mainAxisExtent: 262,
+                      ),
+                      itemCount: myPools.length,
+                      itemBuilder: (_, i) =>
+                          _buildMyEqubCard(context, myPools[i]),
+                    );
+                  },
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: myPools.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) => _buildMyEqubCard(context, myPools[i]),
+                ),
         );
       },
     );
   }
 
   static const _categoryToEqubType = {
-    'Finance': 0, 'House': 1, 'Car': 2, 'Travel': 3, 'Special': 4,
-    'Workplace': 5, 'Education': 6, 'Wedding': 7, 'Emergency': 8,
+    'Finance': 0,
+    'House': 1,
+    'Car': 2,
+    'Travel': 3,
+    'Special': 4,
+    'Workplace': 5,
+    'Education': 6,
+    'Wedding': 7,
+    'Emergency': 8,
   };
   static const _frequencyToCode = {
-    'Daily': 0, 'Weekly': 1, 'Monthly': 3,
+    'Daily': 0,
+    'Weekly': 1,
+    'Monthly': 3,
   };
 
   List<Map<String, dynamic>> _filterPools(List<Map<String, dynamic>> pools) {
@@ -474,9 +583,12 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     if (query.isNotEmpty) {
       result = result.where((p) {
         final name = (p['name'] ?? '').toString().toLowerCase();
-        final createdBy = (p['createdBy'] ?? p['creator'] ?? '').toString().toLowerCase();
+        final createdBy =
+            (p['createdBy'] ?? p['creator'] ?? '').toString().toLowerCase();
         final onChainId = p['onChainPoolId']?.toString() ?? '';
-        return name.contains(query) || createdBy.contains(query) || onChainId.contains(query);
+        return name.contains(query) ||
+            createdBy.contains(query) ||
+            onChainId.contains(query);
       }).toList();
     }
     if (_selectedCategory != 'All') {
@@ -510,12 +622,21 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.buttonColor(context) : Theme.of(context).colorScheme.surface,
+                color: isSelected
+                    ? AppTheme.buttonColor(context)
+                    : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: isSelected ? null : Border.all(color: AppTheme.textHintColor(context)),
+                border: isSelected
+                    ? null
+                    : Border.all(color: AppTheme.textHintColor(context)),
               ),
-              child: Text(cat, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                  color: isSelected ? AppTheme.buttonTextColor(context) : AppTheme.textSecondaryColor(context))),
+              child: Text(cat,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? AppTheme.buttonTextColor(context)
+                          : AppTheme.textSecondaryColor(context))),
             ),
           );
         },
@@ -523,10 +644,23 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     );
   }
 
-
-  static const _equbTypeLabels = {0: 'Finance', 1: 'House', 2: 'Car', 3: 'Travel', 4: 'Special',
-    5: 'Workplace', 6: 'Education', 7: 'Wedding', 8: 'Emergency'};
-  static const _frequencyLabels = {0: 'Daily', 1: 'Weekly', 2: 'BiWeekly', 3: 'Monthly'};
+  static const _equbTypeLabels = {
+    0: 'Finance',
+    1: 'House',
+    2: 'Car',
+    3: 'Travel',
+    4: 'Special',
+    5: 'Workplace',
+    6: 'Education',
+    7: 'Wedding',
+    8: 'Emergency'
+  };
+  static const _frequencyLabels = {
+    0: 'Daily',
+    1: 'Weekly',
+    2: 'BiWeekly',
+    3: 'Monthly'
+  };
   static const _equbTypeIcons = <int, IconData>{
     0: Icons.account_balance_wallet_outlined,
     1: Icons.home_outlined,
@@ -539,10 +673,16 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     8: Icons.local_hospital_outlined,
   };
 
-  Widget _buildMemberAvatarStack(BuildContext context, List members, int maxMembers) {
+  Widget _buildMemberAvatarStack(
+      BuildContext context, List members, int maxMembers) {
     final count = members.length;
     final show = count > 3 ? 3 : count;
-    final colors = [AppTheme.accentYellow, AppTheme.positive, AppTheme.secondaryColor, AppTheme.primaryColor];
+    final colors = [
+      AppTheme.accentYellow,
+      AppTheme.positive,
+      AppTheme.secondaryColor,
+      AppTheme.primaryColor
+    ];
     return SizedBox(
       width: show * 22.0 + (count > 3 ? 22 : 0),
       height: 28,
@@ -552,27 +692,36 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             Positioned(
               left: i * 18.0,
               child: Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: colors[i % colors.length].withValues(alpha: 0.25),
-                  border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.surface, width: 2),
                 ),
-                child: Icon(Icons.person, size: 14, color: colors[i % colors.length]),
+                child: Icon(Icons.person,
+                    size: 14, color: colors[i % colors.length]),
               ),
             ),
           if (count > 3)
             Positioned(
               left: show * 18.0,
               child: Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppTheme.textHintColor(context).withValues(alpha: 0.3),
-                  border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.surface, width: 2),
                 ),
                 child: Center(
-                  child: Text('+${count - 3}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.textSecondaryColor(context))),
+                  child: Text('+${count - 3}',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textSecondaryColor(context))),
                 ),
               ),
             ),
@@ -585,11 +734,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     final onChainId = pool['onChainPoolId'];
     final poolId = pool['id']?.toString() ?? '';
     final name = pool['name']?.toString() ??
-        (onChainId != null ? 'Equb #$onChainId' : 'Equb ${poolId.length >= 6 ? poolId.substring(0, 6) : poolId}');
+        (onChainId != null
+            ? 'Equb #$onChainId'
+            : 'Equb ${poolId.length >= 6 ? poolId.substring(0, 6) : poolId}');
     final equbType = pool['equbType'] as int?;
     final type = _equbTypeLabels[equbType] ?? 'Finance';
     final freq = pool['frequency'];
-    final frequency = freq is int ? (_frequencyLabels[freq] ?? 'Monthly') : 'Monthly';
+    final frequency =
+        freq is int ? (_frequencyLabels[freq] ?? 'Monthly') : 'Monthly';
     final rawContribution = pool['contributionAmount']?.toString() ?? '0';
     final contribution = _formatContribution(rawContribution);
     final membersList = (pool['members'] as List?) ?? [];
@@ -599,7 +751,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     final status = pool['status']?.toString() ?? 'pending';
     final isActive = status == 'active';
     final isCompleted = status == 'completed';
-    final progress = maxMembers > 0 ? (currentRound / maxMembers).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        maxMembers > 0 ? (currentRound / maxMembers).clamp(0.0, 1.0) : 0.0;
     final typeColor = _typeColor(type, context);
     final typeIcon = _equbTypeIcons[equbType] ?? Icons.groups_rounded;
 
@@ -619,7 +772,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: typeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
@@ -628,13 +782,21 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                     children: [
                       Center(child: Icon(typeIcon, size: 26, color: typeColor)),
                       Positioned(
-                        top: 2, right: 2,
+                        top: 2,
+                        right: 2,
                         child: Container(
-                          width: 10, height: 10,
+                          width: 10,
+                          height: 10,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isActive ? AppTheme.positive : isCompleted ? AppTheme.accentYellow : AppTheme.textHintColor(context),
-                            border: Border.all(color: Theme.of(context).colorScheme.surface, width: 1.5),
+                            color: isActive
+                                ? AppTheme.positive
+                                : isCompleted
+                                    ? AppTheme.accentYellow
+                                    : AppTheme.textHintColor(context),
+                            border: Border.all(
+                                color: Theme.of(context).colorScheme.surface,
+                                width: 1.5),
                           ),
                         ),
                       ),
@@ -649,21 +811,37 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                       Row(
                         children: [
                           Expanded(
-                            child: Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            child: Text(name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.textHintColor(context)),
+                              border: Border.all(
+                                  color: AppTheme.textHintColor(context)),
                             ),
-                            child: Text(frequency, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor(context))),
+                            child: Text(frequency,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        AppTheme.textSecondaryColor(context))),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Contribution: $contribution', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor(context))),
+                      Text('Contribution: $contribution',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondaryColor(context))),
                     ],
                   ),
                 ),
@@ -676,7 +854,11 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                 const Spacer(),
                 Text(
                   contribution,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.accentYellow, letterSpacing: -0.3),
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.accentYellow,
+                      letterSpacing: -0.3),
                 ),
               ],
             ),
@@ -684,8 +866,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Cycle $currentRound of $maxMembers', style: TextStyle(fontSize: 11, color: AppTheme.textTertiaryColor(context))),
-                Text('$members/$maxMembers members', style: TextStyle(fontSize: 11, color: AppTheme.textTertiaryColor(context))),
+                Text('Cycle $currentRound of $maxMembers',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textTertiaryColor(context))),
+                Text('$members/$maxMembers members',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textTertiaryColor(context))),
               ],
             ),
             const SizedBox(height: 6),
@@ -693,8 +881,10 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progress,
-                backgroundColor: AppTheme.textHintColor(context).withValues(alpha: 0.25),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                backgroundColor:
+                    AppTheme.textHintColor(context).withValues(alpha: 0.25),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
                 minHeight: 6,
               ),
             ),
@@ -708,16 +898,20 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     final onChainId = pool['onChainPoolId'];
     final poolId = pool['id']?.toString() ?? '';
     final name = pool['name']?.toString() ??
-        (onChainId != null ? 'Equb #$onChainId' : 'Equb ${poolId.length >= 6 ? poolId.substring(0, 6) : poolId}');
+        (onChainId != null
+            ? 'Equb #$onChainId'
+            : 'Equb ${poolId.length >= 6 ? poolId.substring(0, 6) : poolId}');
     final equbType = pool['equbType'] as int?;
     final type = _equbTypeLabels[equbType] ?? 'Finance';
     final freq = pool['frequency'];
-    final frequency = freq is int ? (_frequencyLabels[freq] ?? 'Monthly') : 'Monthly';
+    final frequency =
+        freq is int ? (_frequencyLabels[freq] ?? 'Monthly') : 'Monthly';
     final currentRound = (pool['currentRound'] as num?)?.toInt() ?? 0;
     final maxMembers = (pool['maxMembers'] as num?)?.toInt() ?? 1;
     final membersList = (pool['members'] as List?) ?? [];
     final members = membersList.length;
-    final progress = maxMembers > 0 ? (currentRound / maxMembers).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        maxMembers > 0 ? (currentRound / maxMembers).clamp(0.0, 1.0) : 0.0;
     final status = pool['status']?.toString() ?? 'pending';
     final rawContribution = pool['contributionAmount']?.toString() ?? '0';
     final contribution = _formatContribution(rawContribution);
@@ -742,7 +936,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: typeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
@@ -751,13 +946,21 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                     children: [
                       Center(child: Icon(typeIcon, size: 26, color: typeColor)),
                       Positioned(
-                        top: 2, right: 2,
+                        top: 2,
+                        right: 2,
                         child: Container(
-                          width: 10, height: 10,
+                          width: 10,
+                          height: 10,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isActive ? AppTheme.positive : isCompleted ? AppTheme.accentYellow : AppTheme.textHintColor(context),
-                            border: Border.all(color: Theme.of(context).colorScheme.surface, width: 1.5),
+                            color: isActive
+                                ? AppTheme.positive
+                                : isCompleted
+                                    ? AppTheme.accentYellow
+                                    : AppTheme.textHintColor(context),
+                            border: Border.all(
+                                color: Theme.of(context).colorScheme.surface,
+                                width: 1.5),
                           ),
                         ),
                       ),
@@ -772,21 +975,37 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                       Row(
                         children: [
                           Expanded(
-                            child: Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            child: Text(name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.textHintColor(context)),
+                              border: Border.all(
+                                  color: AppTheme.textHintColor(context)),
                             ),
-                            child: Text(frequency, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor(context))),
+                            child: Text(frequency,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        AppTheme.textSecondaryColor(context))),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Contribution: $contribution', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor(context))),
+                      Text('Contribution: $contribution',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondaryColor(context))),
                     ],
                   ),
                 ),
@@ -799,7 +1018,11 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                 const Spacer(),
                 Text(
                   contribution,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.accentYellow, letterSpacing: -0.3),
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.accentYellow,
+                      letterSpacing: -0.3),
                 ),
               ],
             ),
@@ -807,8 +1030,14 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Cycle $currentRound of $maxMembers', style: TextStyle(fontSize: 11, color: AppTheme.textTertiaryColor(context))),
-                Text('$members/$maxMembers members', style: TextStyle(fontSize: 11, color: AppTheme.textTertiaryColor(context))),
+                Text('Cycle $currentRound of $maxMembers',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textTertiaryColor(context))),
+                Text('$members/$maxMembers members',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textTertiaryColor(context))),
               ],
             ),
             const SizedBox(height: 6),
@@ -816,8 +1045,10 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progress,
-                backgroundColor: AppTheme.textHintColor(context).withValues(alpha: 0.25),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                backgroundColor:
+                    AppTheme.textHintColor(context).withValues(alpha: 0.25),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
                 minHeight: 6,
               ),
             ),
@@ -840,8 +1071,12 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
     final n = double.tryParse(raw);
     if (n == null) return raw;
     if (n == n.truncateToDouble()) return '${n.toInt()} $sym';
-    if (n < 0.01) return '${n.toStringAsFixed(6).replaceAll(RegExp(r'0+$'), '')} $sym';
-    if (n < 1) return '${n.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '')} $sym';
+    if (n < 0.01) {
+      return '${n.toStringAsFixed(6).replaceAll(RegExp(r'0+$'), '')} $sym';
+    }
+    if (n < 1) {
+      return '${n.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '')} $sym';
+    }
     return '${n.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '')} $sym';
   }
 
@@ -850,7 +1085,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.groups_rounded, size: 48, color: AppTheme.textTertiaryColor(context)),
+          Icon(Icons.groups_rounded,
+              size: 48, color: AppTheme.textTertiaryColor(context)),
           const SizedBox(height: 12),
           Text(message, style: Theme.of(context).textTheme.bodyMedium),
         ],
@@ -863,14 +1099,18 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.groups_rounded, size: 48, color: AppTheme.textTertiaryColor(context)),
+          Icon(Icons.groups_rounded,
+              size: 48, color: AppTheme.textTertiaryColor(context)),
           const SizedBox(height: 12),
           Text('No equbs found', style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: pool.isLoading ? null : () => pool.loadPools(),
             icon: pool.isLoading
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.refresh_rounded, size: 18),
             label: Text(pool.isLoading ? 'Loading...' : 'Refresh'),
           ),
@@ -886,7 +1126,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.dangerColor),
+            const Icon(Icons.error_outline_rounded,
+                size: 48, color: AppTheme.dangerColor),
             const SizedBox(height: 12),
             Text(pool.errorMessage ?? 'Failed to load equbs',
                 style: Theme.of(context).textTheme.bodyMedium,
@@ -909,15 +1150,15 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
 
   Color _typeColor(String type, BuildContext context) {
     return switch (type.toLowerCase()) {
-      'finance' => const Color(0xFF22C55E),
-      'house' => const Color(0xFF6366F1),
-      'car' => const Color(0xFFF59E0B),
-      'travel' => const Color(0xFF06B6D4),
-      'special' => const Color(0xFFEC4899),
-      'workplace' => const Color(0xFF8B5CF6),
-      'education' => const Color(0xFF14B8A6),
-      'wedding' => const Color(0xFFF43F5E),
-      'emergency' => const Color(0xFFEF4444),
+      'finance' => AppTheme.positive,
+      'house' => AppTheme.secondaryColor,
+      'car' => AppTheme.accentYellowDark,
+      'travel' => AppTheme.primaryColor,
+      'special' => AppTheme.highlightRed,
+      'workplace' => AppTheme.primaryColor.withValues(alpha: 0.85),
+      'education' => AppTheme.secondaryColor.withValues(alpha: 0.82),
+      'wedding' => AppTheme.accentYellow,
+      'emergency' => AppTheme.negative,
       _ => AppTheme.textSecondaryColor(context),
     };
   }
@@ -971,7 +1212,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
     final pool = context.read<PoolProvider>();
     final walletService = context.read<WalletService>();
 
-    debugPrint('[CreateEqub] isConnected=${walletService.isConnected}, walletAddr=${walletService.walletAddress}, authAddr=${auth.walletAddress}');
+    debugPrint(
+        '[CreateEqub] isConnected=${walletService.isConnected}, walletAddr=${walletService.walletAddress}, authAddr=${auth.walletAddress}');
 
     // Ensure wallet is connected for signing
     if (!walletService.isConnected) {
@@ -979,10 +1221,12 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
       debugPrint('[CreateEqub] Connecting wallet...');
       final addr = await walletService.connect();
       if (!mounted) return;
-      debugPrint('[CreateEqub] Connect result: $addr, error: ${walletService.errorMessage}');
+      debugPrint(
+          '[CreateEqub] Connect result: $addr, error: ${walletService.errorMessage}');
       if (addr == null) {
         setState(() => _isSubmitting = false);
-        _showSnack(walletService.errorMessage ?? 'Connect MetaMask to sign the transaction');
+        _showSnack(walletService.errorMessage ??
+            'Connect MetaMask to sign the transaction');
         return;
       }
     }
@@ -999,7 +1243,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
     final weiBig = BigInt.from(ethValue * 1e18);
     final weiString = weiBig.toString();
 
-    debugPrint('[CreateEqub] Building TX: tier=$_selectedTier, amount=$weiString, treasury=$treasury');
+    debugPrint(
+        '[CreateEqub] Building TX: tier=$_selectedTier, amount=$weiString, treasury=$treasury');
 
     final txHash = await pool.buildAndSignCreatePool(
       tier: _selectedTier,
@@ -1009,7 +1254,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
       token: null,
     );
 
-    debugPrint('[CreateEqub] Result: txHash=$txHash, error=${pool.errorMessage}');
+    debugPrint(
+        '[CreateEqub] Result: txHash=$txHash, error=${pool.errorMessage}');
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -1024,8 +1270,7 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -1066,9 +1311,11 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
               _buildTierSelector(),
               const SizedBox(height: 20),
               _buildField(
-                label: 'Contribution Amount (${context.read<NetworkProvider>().nativeSymbol})',
+                label:
+                    'Contribution Amount (${context.read<NetworkProvider>().nativeSymbol})',
                 controller: _contributionCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Required';
                   final n = double.tryParse(v);
@@ -1100,7 +1347,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
                     disabledBackgroundColor:
                         AppTheme.textHintColor(context).withValues(alpha: 0.3),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.buttonRadius),
                     ),
                   ),
                   child: _isSubmitting
@@ -1212,7 +1460,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.accentYellowDark, width: 2),
+          borderSide:
+              const BorderSide(color: AppTheme.accentYellowDark, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

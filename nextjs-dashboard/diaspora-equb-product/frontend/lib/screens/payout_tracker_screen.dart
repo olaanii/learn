@@ -8,11 +8,18 @@ import '../providers/pool_provider.dart';
 import '../services/app_snackbar_service.dart';
 import '../services/wallet_service.dart';
 import '../services/socket_service.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/lottery_draw_modal.dart';
 
 class PayoutTrackerScreen extends StatefulWidget {
   final String poolId;
-  const PayoutTrackerScreen({super.key, required this.poolId});
+  final bool embeddedDesktop;
+
+  const PayoutTrackerScreen({
+    super.key,
+    required this.poolId,
+    this.embeddedDesktop = false,
+  });
 
   @override
   State<PayoutTrackerScreen> createState() => _PayoutTrackerScreenState();
@@ -437,36 +444,39 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
     final auth = context.watch<AuthProvider>();
     final wallet = context.watch<WalletService>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final embeddedDesktop = widget.embeddedDesktop && AppTheme.isDesktop(context);
 
     return Container(
       decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Lottery Payouts'),
-              Text(
-                'SMART CONTRACT VERIFIED',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.0,
-                  color: isDark ? AppTheme.darkSecondary : AppTheme.secondaryColor,
+        appBar: embeddedDesktop
+            ? null
+            : AppBar(
+                title: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Lottery Payouts'),
+                    Text(
+                      'SMART CONTRACT VERIFIED',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                        color: isDark ? AppTheme.darkSecondary : AppTheme.secondaryColor,
+                      ),
+                    ),
+                  ],
                 ),
+                actions: [
+                  IconButton(
+                    icon: Icon(Icons.casino_rounded,
+                        size: 22, color: AppTheme.textSecondaryColor(context)),
+                    onPressed: () =>
+                        context.read<PoolProvider>().loadPool(widget.poolId),
+                  ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: Icon(Icons.casino_rounded,
-                  size: 22, color: AppTheme.textSecondaryColor(context)),
-              onPressed: () =>
-                  context.read<PoolProvider>().loadPool(widget.poolId),
-            ),
-          ],
-        ),
         body: Consumer<PoolProvider>(
           builder: (context, poolProvider, _) {
             if (poolProvider.isLoading && poolProvider.selectedPool == null) {
@@ -531,6 +541,20 @@ class _PayoutTrackerScreenState extends State<PayoutTrackerScreen>
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     children: [
+                      if (embeddedDesktop) ...[
+                        DesktopSectionTitle(
+                          title: 'Lottery Payouts',
+                          subtitle: 'Draw status, payout history, and winner actions aligned for desktop.',
+                          trailing: IconButton(
+                            icon: Icon(Icons.casino_rounded,
+                                size: 22,
+                                color: AppTheme.textSecondaryColor(context)),
+                            onPressed: () =>
+                                context.read<PoolProvider>().loadPool(widget.poolId),
+                          ),
+                        ),
+                        const SizedBox(height: AppTheme.desktopSectionGap),
+                      ],
                       _buildHeroDrawingCard(
                         context,
                         currentRound: currentRound,

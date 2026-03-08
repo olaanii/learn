@@ -289,14 +289,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     n.body,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[700],
+                      color: AppTheme.textSecondaryColor(context),
                     ),
                   ),
                   trailing: Text(
                     _timeAgo(n.createdAt),
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey[500],
+                      color: AppTheme.textTertiaryColor(context),
                     ),
                   ),
                 );
@@ -362,7 +362,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey[600],
+          color: AppTheme.textSecondaryColor(context),
         ),
       ),
       trailing: Column(
@@ -402,7 +402,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 _timeAgo(n.createdAt),
                 style: TextStyle(
                   fontSize: 11,
-                  color: Colors.grey[500],
+                  color: AppTheme.textTertiaryColor(context),
                 ),
               ),
               if (!n.read) ...[
@@ -468,7 +468,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey[600],
+          color: AppTheme.textSecondaryColor(context),
         ),
       ),
       trailing: Column(
@@ -496,7 +496,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             _timeAgo(latest.createdAt),
             style: TextStyle(
               fontSize: 11,
-              color: Colors.grey[500],
+              color: AppTheme.textTertiaryColor(context),
             ),
           ),
           if (unreadCount > 0)
@@ -531,16 +531,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         appBar: AppBar(
           title: const Text('Notifications'),
           actions: [
-            TextButton(
-              onPressed: () =>
-                  context.read<NotificationProvider>().markAllRead(),
-              child: const Text('Mark all read'),
+            Consumer<NotificationProvider>(
+              builder: (context, provider, _) => TextButton(
+                onPressed: provider.notifications.isEmpty
+                    ? null
+                    : () => provider.markAllRead(),
+                child: const Text('Mark all read'),
+              ),
             ),
           ],
         ),
         body: Consumer<NotificationProvider>(
           builder: (context, provider, _) {
             final sections = provider.displaySections;
+            final unreadCount = provider.notifications
+                .where((notification) => !notification.read)
+                .length;
+            final criticalCount = provider.notifications
+                .where((notification) => notification.isCritical)
+                .length;
 
             if (provider.isLoading && provider.notifications.isEmpty) {
               return const Center(child: CircularProgressIndicator());
@@ -548,20 +557,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
             if (sections.isEmpty) {
               return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.notifications_none,
-                        size: 64, color: Colors.grey[400]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No notifications yet',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[500],
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor(context),
+                    borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                    boxShadow: AppTheme.subtleShadowFor(context),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.notifications_none_rounded,
+                        size: 56,
+                        color: AppTheme.textTertiaryColor(context),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      Text(
+                        'No notifications yet',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Pool milestones, payout updates, wallet events, and critical alerts will collect here once activity begins.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -571,6 +598,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: _buildInboxSummary(
+                      context,
+                      unreadCount: unreadCount,
+                      criticalCount: criticalCount,
+                    ),
+                  ),
                   if (sections.critical.isNotEmpty) ...[
                     _buildSectionHeader(context, 'Critical Alerts'),
                     for (final item in sections.critical) ...[
@@ -600,6 +635,58 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildInboxSummary(
+    BuildContext context, {
+    required int unreadCount,
+    required int criticalCount,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        boxShadow: AppTheme.subtleShadowFor(context),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.notifications_active_outlined,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Inbox overview',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  unreadCount == 0
+                      ? 'You are caught up. New app and wallet events will appear here.'
+                      : '$unreadCount unread updates${criticalCount > 0 ? ' including $criticalCount critical alerts' : ''}.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -16,12 +16,16 @@ import 'ethereum_provider_stub.dart'
 ///    and requests the connected wallet to sign & broadcast it.
 /// 3. [disconnect] - Ends the WalletConnect session.
 class WalletService extends ChangeNotifier {
+  static const _testnetChainId = 102031;
+  static const _mainnetChainId = 102030;
+
   ReownSignClient? _signClient;
   SessionData? _session;
   String? _walletAddress;
   String? _pairingUri;
   bool _isConnecting = false;
   String? _errorMessage;
+  int _chainId = AppConfig.chainId;
 
   // ─── Getters ────────────────────────────────────────────────────────────────
 
@@ -33,6 +37,7 @@ class WalletService extends ChangeNotifier {
   bool get isConnecting => _isConnecting;
   String? get errorMessage => _errorMessage;
   SessionData? get session => _session;
+  int get chainId => _chainId;
 
   // ─── Initialization ─────────────────────────────────────────────────────────
 
@@ -64,6 +69,29 @@ class WalletService extends ChangeNotifier {
     if (sessions.isNotEmpty) {
       _session = sessions.first;
       _extractWalletAddress();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setChainId(
+    int chainId, {
+    bool switchConnectedWallet = true,
+  }) async {
+    if (_chainId == chainId) return;
+
+    _chainId = chainId;
+    _extractWalletAddress();
+    notifyListeners();
+
+    if (!switchConnectedWallet || !isConnected) {
+      return;
+    }
+
+    try {
+      await _switchConnectedWalletChain();
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = 'Network switch failed: $e';
       notifyListeners();
     }
   }
@@ -121,20 +149,21 @@ class WalletService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      const chainId = 'eip155:${AppConfig.chainId}';
+      final activeChain = _reownChainId;
 
       debugPrint('[WalletService] Starting WalletConnect connection');
-      debugPrint('[WalletService] chainId: $chainId');
+      debugPrint('[WalletService] chainId: $activeChain');
 
       final connectResponse = await _signClient!.connect(
         optionalNamespaces: {
-          'eip155': const RequiredNamespace(
-            chains: [chainId],
+          'eip155': RequiredNamespace(
+            chains: [_chainToNamespace(_testnetChainId), _chainToNamespace(_mainnetChainId)],
             methods: [
               'eth_sendTransaction',
               'eth_signTransaction',
               'personal_sign',
               'eth_sign',
+              'wallet_switchEthereumChain',
             ],
             events: ['chainChanged', 'accountsChanged'],
           ),
@@ -188,7 +217,7 @@ class WalletService extends ChangeNotifier {
     final chainIdHex = chainIdRaw != null
         ? _toHex(
             chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
-        : _toHex(AppConfig.chainId.toString());
+      : _toHex(_chainId.toString());
 
     final valueHex = _toHex(unsignedTx['value'] ?? '0');
     final gasHex = _toHex(unsignedTx['estimatedGas'] ?? '300000');
@@ -239,7 +268,7 @@ class WalletService extends ChangeNotifier {
     }
 
     try {
-      const chainId = 'eip155:${AppConfig.chainId}';
+      final chainId = _reownChainId;
       await _tryOpenWallet(null);
 
       final result = await _signClient!.request(
@@ -318,7 +347,7 @@ class WalletService extends ChangeNotifier {
     }
 
     try {
-      const chainId = 'eip155:${AppConfig.chainId}';
+      final chainId = _reownChainId;
       final hexMessage =
           '0x${message.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join()}';
 
@@ -381,13 +410,72 @@ class WalletService extends ChangeNotifier {
 
     // Extract the first account from the session namespaces
     final accounts = _session!.namespaces['eip155']?.accounts ?? [];
-    if (accounts.isNotEmpty) {
-      // Account format: "eip155:102031:0xABC..."
-      final parts = accounts.first.split(':');
-      if (parts.length >= 3) {
-        _walletAddress = parts[2];
-      }
+    if (accounts.isEmpty) return;
+
+    final preferredPrefix = 'eip155:$_chainId:';
+    final selected = accounts.firstWhere(
+      (account) => account.startsWith(preferredPrefix),
+      orElse: () => accounts.first,
+    );
+
+    final parts = selected.split(':');
+    if (parts.length >= 3) {
+      _walletAddress = parts[2];
     }
+  }
+
+  String get _reownChainId => _chainToNamespace(_chainId);
+
+  String _chainToNamespace(int chainId) => 'eip155:$chainId';
+
+  Map<String, dynamic> _chainMetadata(int chainId) {
+    if (chainId == _mainnetChainId) {
+      return {
+        'name': 'Creditcoin Mainnet',
+        'rpcUrls': ['https://mainnet3.creditcoin.network'],
+        'symbol': 'CTC',
+        'explorerUrls': ['https://creditcoin.blockscout.com'],
+      };
+    }
+
+    return {
+      'name': 'Creditcoin Testnet',
+      'rpcUrls': ['https://rpc.cc3-testnet.creditcoin.network'],
+      'symbol': 'tCTC',
+      'explorerUrls': ['https://creditcoin-testnet.blockscout.com'],
+    };
+  }
+
+  Future<void> _switchConnectedWalletChain() async {
+    final metadata = _chainMetadata(_chainId);
+
+    if (kIsWeb && eth_provider.hasInjectedProvider) {
+      await eth_provider.switchInjectedChain(
+        chainId: _chainId,
+        chainName: metadata['name'] as String,
+        rpcUrls: (metadata['rpcUrls'] as List<dynamic>).cast<String>(),
+        symbol: metadata['symbol'] as String,
+        blockExplorerUrls:
+            (metadata['explorerUrls'] as List<dynamic>).cast<String>(),
+      );
+      return;
+    }
+
+    if (_signClient == null || _session == null) {
+      return;
+    }
+
+    await _tryOpenWallet(null);
+    await _signClient!.request(
+      topic: _session!.topic,
+      chainId: _reownChainId,
+      request: SessionRequestParams(
+        method: 'wallet_switchEthereumChain',
+        params: [
+          {'chainId': _toHex(_chainId.toString())}
+        ],
+      ),
+    );
   }
 
   /// Convert a decimal string to hex string with 0x prefix.

@@ -29,6 +29,11 @@ export const envValidationSchema = Joi.object({
   ).default(''),
   FAYDA_API_KEY: Joi.string().allow('').default(''),
 
+  // Firebase Auth (optional until configured)
+  FIREBASE_PROJECT_ID: Joi.string().allow('').default(''),
+  FIREBASE_CLIENT_EMAIL: Joi.string().allow('').default(''),
+  FIREBASE_PRIVATE_KEY: Joi.string().allow('').default(''),
+
   // Blockchain
   RPC_URL: Joi.string().uri().required(),
   CHAIN_ID: Joi.number().default(102031),

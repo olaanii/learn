@@ -10,6 +10,7 @@
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "deploy:creditcoin": "hardhat run scripts/deploy.ts --network creditcoin",
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.ts --network creditcoinTestnet",
+    "deploy:swap-router:testnet": "hardhat run scripts/deploy-swap-router.ts --network creditcoinTestnet",
     "deploy:test-tokens": "hardhat run scripts/deploy-test-tokens.ts --network creditcoinTestnet",
     "configure-tiers": "hardhat run scripts/configure-tiers.ts --network creditcoin",
     "configure-tiers:testnet": "hardhat run scripts/configure-tiers.ts --network creditcoinTestnet",

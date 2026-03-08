@@ -6,6 +6,9 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 export interface JwtPayload {
   sub: string; // identityHash
   walletAddress?: string;
+  firebaseUid?: string;
+  email?: string;
+  displayName?: string;
   iat?: number;
   exp?: number;
 }
@@ -27,6 +30,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       identityHash: payload.sub,
       walletAddress: payload.walletAddress,
+      firebaseUid: payload.firebaseUid,
+      email: payload.email,
+      displayName: payload.displayName,
     };
   }
 }

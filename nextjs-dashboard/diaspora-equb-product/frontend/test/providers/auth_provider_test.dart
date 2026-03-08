@@ -1,20 +1,49 @@
 import 'dart:convert';
 import 'package:diaspora_equb_frontend/providers/auth_provider.dart';
+import 'package:diaspora_equb_frontend/services/firebase_auth_service.dart';
+import 'package:diaspora_equb_frontend/services/profile_preferences_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/fake_api_client.dart';
 import '../helpers/fake_wallet_service.dart';
 
+class FakeFirebaseAuthService extends FirebaseAuthService {
+  @override
+  bool get isConfigured => false;
+
+  @override
+  Future<void> signOut() async {}
+}
+
+class FakeProfilePreferencesService extends ProfilePreferencesService {
+  StoredProfilePreferences stored = const StoredProfilePreferences();
+
+  @override
+  Future<StoredProfilePreferences> load() async => stored;
+
+  @override
+  Future<StoredProfilePreferences> save(
+    StoredProfilePreferences preferences,
+  ) async {
+    stored = preferences;
+    return stored;
+  }
+}
+
 void main() {
   group('AuthProvider', () {
     late FakeApiClient api;
     late FakeWalletService wallet;
+    late FakeFirebaseAuthService firebaseAuth;
+    late FakeProfilePreferencesService profilePreferences;
     late AuthProvider provider;
 
     setUp(() {
       api = FakeApiClient();
       wallet = FakeWalletService();
-      provider = AuthProvider(api, wallet);
+      firebaseAuth = FakeFirebaseAuthService();
+      profilePreferences = FakeProfilePreferencesService();
+      provider = AuthProvider(api, wallet, firebaseAuth, profilePreferences);
     });
 
     test('initial state is unauthenticated', () {

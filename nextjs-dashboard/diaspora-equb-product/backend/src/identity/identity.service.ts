@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ethers } from 'ethers';
@@ -20,16 +21,26 @@ export class IdentityService {
     private readonly identityRepo: Repository<Identity>,
     private readonly web3Service: Web3Service,
     private readonly notifications: NotificationsService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  async bindWallet(identityHash: string, walletAddress: string) {
+  async bindWallet(
+    identityHash: string,
+    walletAddress: string,
+    sessionContext?: {
+      firebaseUid?: string;
+      email?: string;
+      displayName?: string;
+    },
+  ) {
+    const normalizedWalletAddress = walletAddress.toLowerCase();
     this.logger.log(
-      `Binding wallet ${walletAddress} to identity ${identityHash}`,
+      `Binding wallet ${normalizedWalletAddress} to identity ${identityHash}`,
     );
 
     // Check if wallet is already bound to another identity
     const existingByWallet = await this.identityRepo.findOne({
-      where: { walletAddress },
+      where: { walletAddress: normalizedWalletAddress },
     });
     if (existingByWallet && existingByWallet.identityHash !== identityHash) {
       throw new ConflictException(
@@ -48,7 +59,7 @@ export class IdentityService {
     }
     if (
       existingByHash.walletAddress &&
-      existingByHash.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
+      existingByHash.walletAddress.toLowerCase() !== normalizedWalletAddress
     ) {
       throw new ConflictException(
         'Identity is already bound to another wallet',
@@ -56,32 +67,43 @@ export class IdentityService {
     }
 
     // Update the identity record
-    existingByHash.walletAddress = walletAddress;
+    existingByHash.walletAddress = normalizedWalletAddress;
     existingByHash.bindingStatus = 'bound';
     await this.identityRepo.save(existingByHash);
 
+    const accessToken = this.jwtService.sign({
+      sub: identityHash,
+      walletAddress: normalizedWalletAddress,
+      firebaseUid: sessionContext?.firebaseUid,
+      email: sessionContext?.email,
+      displayName: sessionContext?.displayName,
+    });
+
     this.notifications
       .create(
-        walletAddress,
+        normalizedWalletAddress,
         'wallet_bound',
         'Wallet Bound',
         'Your wallet has been successfully bound to your verified identity.',
         {
           identityHash,
-          walletAddress,
-          idempotencyKey: `wallet_bound:${walletAddress.toLowerCase()}:${identityHash.toLowerCase()}`,
+          walletAddress: normalizedWalletAddress,
+          idempotencyKey: `wallet_bound:${normalizedWalletAddress}:${identityHash.toLowerCase()}`,
         },
       )
       .catch((error) => {
         this.logger.warn(`Failed to emit wallet_bound notification: ${error?.message ?? error}`);
       });
 
-    this.logger.log(`Wallet ${walletAddress} bound to identity ${identityHash}`);
+    this.logger.log(
+      `Wallet ${normalizedWalletAddress} bound to identity ${identityHash}`,
+    );
 
     return {
       identityHash,
-      walletAddress,
+      walletAddress: normalizedWalletAddress,
       status: 'bound',
+      accessToken,
     };
   }
 
