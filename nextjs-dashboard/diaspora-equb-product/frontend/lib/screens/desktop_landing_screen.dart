@@ -192,8 +192,8 @@ class _LandingTopBar extends StatelessWidget {
             child: Image.asset(
               'assets/logo.png',
               fit: BoxFit.none,
-              width: 624,
-              height: 408,
+              width: 524,
+              height: 308,
             ),
           ),
         ),
