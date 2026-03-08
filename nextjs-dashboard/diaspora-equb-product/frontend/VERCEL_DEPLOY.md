@@ -14,7 +14,18 @@ In your **frontend** project: **Settings → Environment Variables**. Add for **
 | Name | Value |
 |------|--------|
 | `API_BASE_URL` | `https://equb-db.vercel.app/api` *(optional: already in vercel.json)* |
-| `WALLETCONNECT_PROJECT_ID` | Your project ID from [WalletConnect Cloud](https://cloud.walletconnect.com) (e.g. `10aaa86fb2c0d5a86ee20ce532834485`) |
+| `WALLETCONNECT_PROJECT_ID` | Your project ID from [WalletConnect Cloud](https://cloud.walletconnect.com) |
+| `FIREBASE_API_KEY` | Firebase web app API key |
+| `FIREBASE_APP_ID` | Firebase web app ID |
+| `FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
+| `FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_AUTH_DOMAIN` | Usually `your-project.firebaseapp.com` |
+| `FIREBASE_STORAGE_BUCKET` | Usually `your-project.firebasestorage.app` or `.appspot.com` |
+| `GOOGLE_WEB_CLIENT_ID` | Google web OAuth client ID used for sign-in |
+| `FIREBASE_MEASUREMENT_ID` | Optional |
+| `FIREBASE_ANDROID_CLIENT_ID` | Optional |
+| `FIREBASE_IOS_CLIENT_ID` | Optional |
+| `FIREBASE_IOS_BUNDLE_ID` | Optional |
 
 **2. Deploy**
 
@@ -26,7 +37,7 @@ In your **frontend** project: **Settings → Environment Variables**. Add for **
   ```
   If you hit the file-count limit: `npx vercel --prod --archive=tgz`
 
-**Result:** Flutter web build uses `https://equb-db.vercel.app/api` for all API calls and includes your WalletConnect project ID for wallet pairing.
+**Result:** Flutter web build uses `https://equb-db.vercel.app/api` for all API calls, includes your WalletConnect project ID for wallet pairing, and loads Firebase auth configuration securely from Vercel env variables passed into Flutter at build time.
 
 ---
 
@@ -114,8 +125,19 @@ In **Settings → Environment Variables**, add these for **Production** (and opt
 | `CHAIN_ID`                | From `.env`: `CHAIN_ID` → use `102031` (testnet) or `102030` (mainnet). |
 | `RPC_URL`                 | From `.env`: `RPC_URL` → e.g. `https://rpc.cc3-testnet.creditcoin.network`. |
 | `SENTRY_DSN`              | From `.env`: `SENTRY_DSN` (optional; leave empty to disable). |
+| `FIREBASE_API_KEY`        | From your Firebase web app config. Store only in Vercel env, not in git. |
+| `FIREBASE_APP_ID`         | From your Firebase web app config. |
+| `FIREBASE_MESSAGING_SENDER_ID` | From your Firebase web app config. |
+| `FIREBASE_PROJECT_ID`     | Firebase project ID. |
+| `FIREBASE_AUTH_DOMAIN`    | Usually `your-project.firebaseapp.com`. |
+| `FIREBASE_STORAGE_BUCKET` | Usually `your-project.firebasestorage.app` or `.appspot.com`. |
+| `GOOGLE_WEB_CLIENT_ID`    | Google web OAuth client ID for browser sign-in. |
+| `FIREBASE_MEASUREMENT_ID` | Optional. |
+| `FIREBASE_ANDROID_CLIENT_ID` | Optional. |
+| `FIREBASE_IOS_CLIENT_ID`  | Optional. |
+| `FIREBASE_IOS_BUNDLE_ID`  | Optional. |
 
-These are passed into the Flutter build via `--dart-define` in `vercel.json`.
+These are passed into the Flutter build by `scripts/vercel_build.sh` via `--dart-define` at deploy time. This keeps Firebase configuration env-backed and out of source control.
 
 ### How to set `API_BASE_URL`
 
@@ -144,6 +166,12 @@ From your project root `.env` you can use:
 - `CHAIN_ID` → same name in Vercel, same value (e.g. `102031`).
 - `RPC_URL` → same name in Vercel, same value (e.g. `https://rpc.cc3-testnet.creditcoin.network`).
 - `SENTRY_DSN` → same name in Vercel, same value or leave empty.
+
+For Firebase, do not rely on committing generated config or secrets. Instead:
+
+- Keep Firebase values in your local root `.env` for local development if needed.
+- Add the same Firebase values manually in the Vercel project Environment Variables UI for Production and Preview.
+- Let the Vercel build script inject them into Flutter as dart-defines during the build.
 
 `API_BASE_URL` is **not** in your backend `.env`; it’s the URL **of** the backend that the frontend calls, so you set it in Vercel to wherever that backend is hosted (see above).
 

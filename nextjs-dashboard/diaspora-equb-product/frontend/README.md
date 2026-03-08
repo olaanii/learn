@@ -10,6 +10,8 @@ Firebase config is env-only. Real Firebase values must not be committed.
 
 Keep real values in the repository root `.env` or your deployment secret store, then pass them into Flutter as dart-defines during build or run time.
 
+For Vercel specifically, keep Firebase values only in the Vercel Environment Variables UI. The web build script forwards those env vars into Flutter as dart-defines at build time; do not commit Firebase config files or raw Firebase credentials.
+
 Required dart-defines:
 
 - `FIREBASE_API_KEY`
@@ -57,6 +59,14 @@ flutter run -d chrome \
   --dart-define=WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id \
   --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
 ```
+
+Vercel deployment notes:
+
+- Add Firebase values in Vercel under `Settings -> Environment Variables`.
+- Required for Firebase auth on web: `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_PROJECT_ID`.
+- Usually needed for browser auth flows as well: `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `GOOGLE_WEB_CLIENT_ID`.
+- Optional extras: `FIREBASE_MEASUREMENT_ID`, `FIREBASE_ANDROID_CLIENT_ID`, `FIREBASE_IOS_CLIENT_ID`, `FIREBASE_IOS_BUNDLE_ID`.
+- The Vercel build uses `scripts/vercel_build.sh`, which now forwards these env vars into Flutter with `--dart-define`, so Firebase is configured without committing any sensitive content.
 
 Example Android run with explicit Firebase values:
 
