@@ -178,10 +178,10 @@ class _LandingTopBar extends StatelessWidget {
           height: 58,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppTheme.darkSurface.withValues(alpha: 0.52),
+            color: AppTheme.accentYellowDark.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: AppTheme.darkBorder.withValues(alpha: 0.9),
+              color: AppTheme.accentYellow.withValues(alpha: 0.72),
             ),
           ),
           child: Image.asset(
