@@ -180,7 +180,7 @@ class _LandingTopBar extends StatelessWidget {
         Container(
           width: 182,
           height: 74,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           decoration: BoxDecoration(
             color: logoCardColor,
             borderRadius: BorderRadius.circular(20),
