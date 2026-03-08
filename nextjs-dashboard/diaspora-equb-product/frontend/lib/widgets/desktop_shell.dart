@@ -89,7 +89,8 @@ class DesktopShellRouteFrame extends StatelessWidget {
         body: SafeArea(
           child: DesktopAppShell(
             activeSection: activeSection,
-            onSectionSelected: (section) => _handleSectionNavigation(context, section),
+            onSectionSelected: (section) =>
+                _handleSectionNavigation(context, section),
             child: child,
           ),
         ),
@@ -97,7 +98,8 @@ class DesktopShellRouteFrame extends StatelessWidget {
     );
   }
 
-  void _handleSectionNavigation(BuildContext context, DesktopShellSection section) {
+  void _handleSectionNavigation(
+      BuildContext context, DesktopShellSection section) {
     switch (section) {
       case DesktopShellSection.home:
         context.go('/dashboard');
@@ -137,55 +139,66 @@ class _DesktopSideNav extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: panelColor,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => context.go('/'),
               borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              boxShadow: AppTheme.subtleShadowFor(context),
-              border: AppTheme.borderFor(context, opacity: 0.04),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppTheme.buttonColor(context),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset(
-                    'assets/logo.png',
-                    fit: BoxFit.cover,
-                  ),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: panelColor,
+                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                  boxShadow: AppTheme.subtleShadowFor(context),
+                  border: AppTheme.borderFor(context, opacity: 0.04),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Diaspora Equb',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.buttonColor(context),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Desktop Workspace',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textTertiaryColor(context),
-                            ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/logo.png',
+                        fit: BoxFit.cover,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Diaspora Equb',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Desktop Workspace',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: AppTheme.textTertiaryColor(context),
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 32),

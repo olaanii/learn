@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/theme.dart';
 import '../widgets/desktop_layout.dart';
@@ -122,17 +123,21 @@ class _MainShellState extends State<MainShell> {
       padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
       child: Column(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppTheme.buttonColor(context),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Image.asset(
-              'assets/logo.png',
-              fit: BoxFit.cover,
+          GestureDetector(
+            onTap: () => context.go('/'),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppTheme.buttonColor(context),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.asset(
+                'assets/logo.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           const SizedBox(height: 28),

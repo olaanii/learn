@@ -45,7 +45,10 @@ GoRouter createRouter(AuthProvider authProvider) {
       final hasCompletedOnboarding = authProvider.hasCompletedOnboarding;
       final isDesktopViewport = _isDesktopViewport(context);
 
-      if (!hasCompletedOnboarding && !isDesktopViewport && !isEntryRoute && !isOnboarding) {
+      if (!hasCompletedOnboarding &&
+          !isDesktopViewport &&
+          !isEntryRoute &&
+          !isOnboarding) {
         return '/';
       }
 
@@ -53,11 +56,17 @@ GoRouter createRouter(AuthProvider authProvider) {
         return '/';
       }
 
-      if (hasCompletedOnboarding && !isAuthenticated && (isEntryRoute || isOnboarding)) {
+      if (hasCompletedOnboarding &&
+          !isAuthenticated &&
+          !isDesktopViewport &&
+          (isEntryRoute || isOnboarding)) {
         return '/auth';
       }
 
-      if (isAuthenticated && (isEntryRoute || isOnboarding || isAuthRoute)) {
+      if (isAuthenticated &&
+          (isOnboarding ||
+              isAuthRoute ||
+              (!isDesktopViewport && isEntryRoute))) {
         return '/dashboard';
       }
 
@@ -114,8 +123,7 @@ GoRouter createRouter(AuthProvider authProvider) {
       GoRoute(
         path: '/transactions',
         name: 'transactions',
-        builder: (context, state) =>
-            const TransactionsScreen(standalone: true),
+        builder: (context, state) => const TransactionsScreen(standalone: true),
       ),
       GoRoute(
         path: '/profile',
@@ -189,8 +197,7 @@ GoRouter createRouter(AuthProvider authProvider) {
       GoRoute(
         path: '/withdraw',
         name: 'withdraw',
-        builder: (context, state) =>
-            const WithdrawScreen(standalone: true),
+        builder: (context, state) => const WithdrawScreen(standalone: true),
       ),
       GoRoute(
         path: '/collateral',
