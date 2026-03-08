@@ -45,114 +45,112 @@ class _DesktopLandingScreenState extends State<DesktopLandingScreen> {
     final textTheme = Theme.of(context).textTheme;
 
     return DecoratedBox(
-      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
+      decoration: const BoxDecoration(
+        gradient: AppTheme.darkBackgroundGradient,
+      ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1360),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkBackground.withValues(alpha: 0.96),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: AppTheme.darkBorder.withValues(alpha: 0.92),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.darkBackground.withValues(alpha: 0.42),
-                        blurRadius: 42,
-                        offset: const Offset(0, 18),
-                      ),
-                    ],
+          child: LayoutBuilder(
+            builder: (context, viewportConstraints) {
+              return SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: viewportConstraints.maxHeight,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(26, 20, 26, 26),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final stacked = constraints.maxWidth < 1180;
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1360),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final stacked = constraints.maxWidth < 1180;
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _LandingTopBar(
-                              onFeaturesTap: () => _scrollTo(_featuresKey),
-                              onHowItWorksTap: () => _scrollTo(_insightsKey),
-                              onCompanyTap: () => _scrollTo(_heroKey),
-                            ),
-                            const SizedBox(height: 18),
-                            if (stacked)
-                              Column(
-                                children: [
-                                  _HeroCopyPanel(key: _heroKey),
-                                  const SizedBox(height: 14),
-                                  _HeroVisualPanel(
-                                    heroPreviewAsset: _heroPreviewAsset,
-                                  ),
-                                ],
-                              )
-                            else
-                              SizedBox(
-                                height: 560,
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    Expanded(
-                                      flex: 10,
-                                      child: _HeroCopyPanel(key: _heroKey),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      flex: 11,
-                                      child: _HeroVisualPanel(
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _LandingTopBar(
+                                  onFeaturesTap: () => _scrollTo(_featuresKey),
+                                  onHowItWorksTap: () =>
+                                      _scrollTo(_insightsKey),
+                                  onCompanyTap: () => _scrollTo(_heroKey),
+                                ),
+                                const SizedBox(height: 18),
+                                if (stacked)
+                                  Column(
+                                    children: [
+                                      _HeroCopyPanel(key: _heroKey),
+                                      const SizedBox(height: 14),
+                                      _HeroVisualPanel(
                                         heroPreviewAsset: _heroPreviewAsset,
                                       ),
+                                    ],
+                                  )
+                                else
+                                  SizedBox(
+                                    height: 560,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                          flex: 10,
+                                          child: _HeroCopyPanel(key: _heroKey),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          flex: 11,
+                                          child: _HeroVisualPanel(
+                                            heroPreviewAsset: _heroPreviewAsset,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 14),
-                            if (stacked)
-                              Column(
-                                children: [
-                                  _SecurityPanel(key: _featuresKey),
-                                  const SizedBox(height: 14),
-                                  _InsightsPanel(key: _insightsKey),
-                                ],
-                              )
-                            else
-                              IntrinsicHeight(
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    Expanded(
-                                      flex: 7,
-                                      child: _SecurityPanel(key: _featuresKey),
+                                  ),
+                                const SizedBox(height: 14),
+                                if (stacked)
+                                  Column(
+                                    children: [
+                                      _SecurityPanel(key: _featuresKey),
+                                      const SizedBox(height: 14),
+                                      _InsightsPanel(key: _insightsKey),
+                                    ],
+                                  )
+                                else
+                                  IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                          flex: 7,
+                                          child:
+                                              _SecurityPanel(key: _featuresKey),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          flex: 4,
+                                          child:
+                                              _InsightsPanel(key: _insightsKey),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      flex: 4,
-                                      child: _InsightsPanel(key: _insightsKey),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 14),
-                            _ValueStrip(textTheme: textTheme),
-                          ],
-                        );
-                      },
+                                  ),
+                                const SizedBox(height: 14),
+                                _ValueStrip(textTheme: textTheme),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -173,15 +171,22 @@ class _LandingTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Row(
       children: [
-        Text(
-          'diaspora.',
-          style: textTheme.headlineMedium?.copyWith(
-            color: AppTheme.darkTextPrimary,
-            fontWeight: FontWeight.w700,
+        Container(
+          width: 138,
+          height: 58,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.darkSurface.withValues(alpha: 0.52),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppTheme.darkBorder.withValues(alpha: 0.9),
+            ),
+          ),
+          child: Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.contain,
           ),
         ),
         const Spacer(),
@@ -339,8 +344,6 @@ class _MutedBrandLabel extends StatelessWidget {
 }
 
 class _HeroVisualPanel extends StatelessWidget {
-  static const String _heroLogoAsset = 'assets/logo.png';
-
   final String heroPreviewAsset;
 
   const _HeroVisualPanel({required this.heroPreviewAsset});
@@ -353,7 +356,7 @@ class _HeroVisualPanel extends StatelessWidget {
         padding: const EdgeInsets.all(0),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final logoWidth = math.min(constraints.maxWidth * 0.9, 720.0);
+            final imageWidth = math.min(constraints.maxWidth * 1.06, 760.0);
 
             return Stack(
               fit: StackFit.expand,
@@ -402,24 +405,17 @@ class _HeroVisualPanel extends StatelessWidget {
                   bottom: 0,
                   top: 0,
                   child: Align(
-                    alignment: Alignment.center,
+                    alignment: Alignment.bottomCenter,
                     child: Transform.translate(
-                      offset: const Offset(0, 8),
+                      offset: const Offset(0, 18),
                       child: SizedBox(
-                        width: logoWidth,
+                        width: imageWidth,
                         child: Image.asset(
-                          _heroLogoAsset,
+                          heroPreviewAsset,
                           fit: BoxFit.fitWidth,
-                          alignment: Alignment.center,
+                          alignment: Alignment.bottomCenter,
                           errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              heroPreviewAsset,
-                              fit: BoxFit.fitWidth,
-                              alignment: Alignment.center,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const _HeroDeviceFallback();
-                              },
-                            );
+                            return const _HeroDeviceFallback();
                           },
                         ),
                       ),

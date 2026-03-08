@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,6 @@ import '../providers/network_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/api_client.dart';
-import '../widgets/desktop_dashboard_panels.dart';
 import '../widgets/desktop_layout.dart';
 
 // Controls which desktop composition this screen should render.
@@ -410,171 +410,891 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildUnifiedDesktopContent(
       BuildContext context, WalletProvider wallet, AuthProvider auth) {
-    // This is the current desktop-first home experience: one scroll surface,
-    // one responsive grid, and no separate right rail.
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
+    final notifications = context.watch<NotificationProvider>().unreadCount;
+    final network = context.watch<NetworkProvider>();
+    final balanceNum = double.tryParse(wallet.balance) ?? 0.0;
+    final stats = _globalStats;
+    final activeEqubs = (stats?['activeEqubs'] as num?)?.toInt() ?? 0;
+    final memberCount = (stats?['totalMembers'] as num?)?.toInt() ?? 0;
+    final completionRate =
+        (((stats?['completionRate'] as num?)?.toDouble() ?? 0.0)
+                .clamp(0.0, 100.0))
+            .toDouble();
+    final totalTvl = (stats?['tvl'] as num?)?.toDouble() ?? 0.0;
+    final shortWallet = auth.walletAddress != null
+        ? '${auth.walletAddress!.substring(0, 6)}...${auth.walletAddress!.substring(auth.walletAddress!.length - 4)}'
+        : 'Guest wallet';
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = constraints.maxWidth < 1240;
+        final shellColor = AppTheme.cardColor(context).withValues(alpha: 0.96);
+        final mutedColor = AppTheme.textTertiaryColor(context);
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: shellColor,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: AppTheme.subtleShadowFor(context),
+              border: AppTheme.borderFor(context, opacity: 0.04),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 56,
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundLight,
+                          borderRadius: BorderRadius.circular(18),
+                          border: AppTheme.borderFor(context, opacity: 0.04),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.search_rounded,
+                              size: 20,
+                              color: AppTheme.textSecondaryColor(context),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Search pools, members, payouts',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cardColor(context),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Ctrl F',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    _buildDesktopToolbarIcon(
+                      context,
+                      icon: Icons.mail_outline_rounded,
+                    ),
+                    const SizedBox(width: 10),
+                    _buildDesktopToolbarIcon(
+                      context,
+                      icon: Icons.notifications_none_rounded,
+                      badgeText: notifications > 0 ? '$notifications' : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundLight,
+                        borderRadius: BorderRadius.circular(18),
+                        border: AppTheme.borderFor(context, opacity: 0.04),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  AppTheme.accentYellow.withValues(alpha: 0.25),
+                            ),
+                            child: const Icon(
+                              Icons.person_rounded,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Diaspora Member',
+                                style: Theme.of(context).textTheme.labelLarge,
+                              ),
+                              Text(
+                                shortWallet,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: mutedColor),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dashboard',
+                            style: Theme.of(context)
+                                .textTheme
+                                .displayMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Review Equb performance, wallet activity, and next actions with less switching.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: mutedColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/pools'),
+                      icon: const Icon(Icons.upload_rounded, size: 18),
+                      label: const Text('Import Pools'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => context.push('/pools'),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Create Equb'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                LayoutBuilder(
+                  builder: (context, statConstraints) {
+                    final useTwoColumns = statConstraints.maxWidth < 920;
+                    final statWidth = useTwoColumns
+                        ? (statConstraints.maxWidth - 12) / 2
+                        : (statConstraints.maxWidth - 36) / 4;
+
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _DesktopOverviewStatCard(
+                          width: statWidth,
+                          title: 'Active Equbs',
+                          value: '$activeEqubs',
+                          detail: 'Live on ${network.shortNetworkName}',
+                          accent: true,
+                          icon: Icons.groups_rounded,
+                        ),
+                        _DesktopOverviewStatCard(
+                          width: statWidth,
+                          title: 'Total Members',
+                          value: _formatNumber(memberCount),
+                          detail: 'Across tracked circles',
+                          icon: Icons.people_outline_rounded,
+                        ),
+                        _DesktopOverviewStatCard(
+                          width: statWidth,
+                          title: 'Wallet Balance',
+                          value: '\$${_formatBalance(balanceNum)}',
+                          detail: '${wallet.token} selected',
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                        _DesktopOverviewStatCard(
+                          width: statWidth,
+                          title: 'Unread Alerts',
+                          value: '$notifications',
+                          detail: notifications > 0
+                              ? 'Open notifications for updates'
+                              : 'No pending alerts',
+                          icon: Icons.notifications_none_rounded,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                if (stacked)
+                  Column(
+                    children: [
+                      _buildDesktopAnalyticsCard(context, totalTvl),
+                      const SizedBox(height: 16),
+                      _buildDesktopRemindersCard(context, notifications),
+                      const SizedBox(height: 16),
+                      _buildDesktopEqubListCard(context),
+                      const SizedBox(height: 16),
+                      _buildDesktopCollaborationCard(context, wallet),
+                      const SizedBox(height: 16),
+                      _buildDesktopProgressCard(context, completionRate),
+                      const SizedBox(height: 16),
+                      _buildDesktopAppCard(context),
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 9,
+                        child: Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 8,
+                                  child: _buildDesktopAnalyticsCard(
+                                    context,
+                                    totalTvl,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildDesktopRemindersCard(
+                                    context,
+                                    notifications,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 7,
+                                  child: _buildDesktopCollaborationCard(
+                                    context,
+                                    wallet,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildDesktopProgressCard(
+                                    context,
+                                    completionRate,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: 290,
+                        child: Column(
+                          children: [
+                            _buildDesktopEqubListCard(context),
+                            const SizedBox(height: 16),
+                            _buildDesktopAppCard(context),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopToolbarIcon(
+    BuildContext context, {
+    required IconData icon,
+    String? badgeText,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundLight,
+            shape: BoxShape.circle,
+            border: AppTheme.borderFor(context, opacity: 0.04),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: AppTheme.textPrimaryColor(context),
+          ),
+        ),
+        if (badgeText != null)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                badgeText,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopAnalyticsCard(BuildContext context, double totalTvl) {
+    final bars = _chartPoints.isEmpty
+        ? <double>[20, 34, 28, 42, 24, 31, 36]
+        : _dashboardBars(_chartPoints, 7);
+
+    return DesktopCardSection(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DesktopSectionTitle(
-            title: 'Dashboard Overview',
-            subtitle:
-                'Balance, actions, activity, and Equb momentum aligned in one desktop workspace grid.',
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Equb Analytics',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundLight,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  _selectedTimeRange.toUpperCase(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // The grid uses span-based sizing so important modules can take
-              // two columns on larger screens while still collapsing cleanly.
-              final columns = constraints.maxWidth >= 1320
-                  ? 3
-                  : constraints.maxWidth >= 920
-                      ? 2
-                      : 1;
-              final gap = AppTheme.desktopPanelGap;
-              final columnWidth =
-                  (constraints.maxWidth - ((columns - 1) * gap)) / columns;
+          const SizedBox(height: 4),
+          Text(
+            'TVL ${_formatTvl(totalTvl)} tracked over the selected window.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: AppTheme.textSecondaryColor(context)),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 150,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(bars.length, (index) {
+                final height = math.max(36.0, bars[index]);
+                final highlight = index == 1 || index == 3;
 
-              double spanWidth(int span) =>
-                  (columnWidth * span) + (gap * (span - 1));
-
-              final balanceModule = DesktopCardSection(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    _buildBalanceCard(context, wallet),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      child: _buildTokenSelector(context, wallet, auth),
-                    ),
-                  ],
-                ),
-              );
-
-              final actionsModule = DesktopCardSection(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Quick Actions',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Your most-used wallet and Equb shortcuts',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 18),
-                    _buildQuickActions(
-                      context,
-                      forceGrid: true,
-                      compactCards: true,
-                    ),
-                  ],
-                ),
-              );
-
-              final performanceModule = DesktopCardSection(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                        right: index == bars.length - 1 ? 0 : 10),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Global Equb Performance',
-                            style: Theme.of(context).textTheme.titleLarge,
+                        Container(
+                          height: height,
+                          decoration: BoxDecoration(
+                            gradient: highlight
+                                ? const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      AppTheme.secondaryColor,
+                                      AppTheme.primaryColor,
+                                    ],
+                                  )
+                                : null,
+                            color: highlight
+                                ? null
+                                : AppTheme.textHintColor(context)
+                                    .withValues(alpha: 0.45),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: () => context.push('/equb-insights'),
-                          child: Text(
-                            'See All',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.textTertiaryColor(context),
-                            ),
-                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          ['S', 'M', 'T', 'W', 'T', 'F', 'S'][index],
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: AppTheme.textTertiaryColor(context)),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    _buildTypeChips(context),
-                    const SizedBox(height: 16),
-                    _buildMetricsRow(context),
-                    const SizedBox(height: 16),
-                    _buildPerformanceChart(context),
-                  ],
-                ),
-              );
-
-              final trendsModule = DesktopCardSection(
-                child: _buildTrendingEqubs(context),
-              );
-
-              final leaderboardModule = DesktopCardSection(
-                child: _buildLeaderboard(context),
-              );
-
-              final transactionsModule = DesktopCardSection(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const DesktopSectionTitle(
-                      title: 'Transactions Overview',
-                      subtitle:
-                          'Settlement history and recent wallet movements',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildTransactionsSection(context, wallet),
-                  ],
-                ),
-              );
-
-              // Module order matters because `Wrap` flows left-to-right and
-              // top-to-bottom. The sequence below defines the dashboard story.
-              final items = <Widget>[
-                SizedBox(
-                  width: spanWidth(columns == 1 ? 1 : 2),
-                  child: balanceModule,
-                ),
-                SizedBox(width: spanWidth(1), child: actionsModule),
-                SizedBox(
-                    width: spanWidth(1),
-                    child: const DesktopWorkspaceStatusCard()),
-                SizedBox(
-                  width: spanWidth(columns == 1 ? 1 : 2),
-                  child: const DesktopQuickTransferCard(),
-                ),
-                SizedBox(
-                    width: spanWidth(1), child: const DesktopShortcutsCard()),
-                SizedBox(
-                  width: spanWidth(columns == 1 ? 1 : 2),
-                  child: performanceModule,
-                ),
-                SizedBox(width: spanWidth(1), child: leaderboardModule),
-                SizedBox(width: spanWidth(1), child: trendsModule),
-                SizedBox(
-                    width: spanWidth(1),
-                    child: const DesktopRecentActivityCard()),
-                SizedBox(
-                  width: spanWidth(columns == 1 ? 1 : 2),
-                  child: transactionsModule,
-                ),
-              ];
-
-              return Wrap(
-                spacing: gap,
-                runSpacing: AppTheme.desktopSectionGap,
-                children: items,
-              );
-            },
+                  ),
+                );
+              }),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  List<double> _dashboardBars(List<double> points, int count) {
+    final slice =
+        points.length <= count ? points : points.sublist(points.length - count);
+    if (slice.isEmpty) {
+      return List<double>.filled(count, 30);
+    }
+
+    final minValue = slice.reduce(math.min);
+    final maxValue = slice.reduce(math.max);
+    final range = maxValue - minValue;
+
+    return slice.map((value) {
+      if (range == 0) {
+        return 90.0;
+      }
+      return 48 + (((value - minValue) / range) * 86);
+    }).toList();
+  }
+
+  Widget _buildDesktopRemindersCard(BuildContext context, int notifications) {
+    final reminders = [
+      'Review payout tracker for active rounds',
+      'Confirm wallet and collateral readiness',
+      notifications > 0
+          ? 'Resolve $notifications unread notification updates'
+          : 'No unread alerts right now',
+    ];
+
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Reminders', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          Text(
+            reminders.first,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  height: 1.15,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Keep the next operational step visible before you jump into transactions or approvals.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: AppTheme.textSecondaryColor(context)),
+          ),
+          const SizedBox(height: 18),
+          ...reminders.skip(1).map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(top: 5),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.secondaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/notifications'),
+              icon: const Icon(Icons.video_call_rounded, size: 18),
+              label: const Text('Open Updates'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopEqubListCard(BuildContext context) {
+    final items = _leaderboard?.take(5).toList() ?? const [];
+
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Top Equbs',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push('/pools'),
+                child: const Text('Open'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_statsLoading && items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 30),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                'No ranked pools yet',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            ...List.generate(items.length, (index) {
+              final pool = items[index] as Map<String, dynamic>;
+              final poolId = pool['poolId']?.toString() ?? '';
+              final onChainId = pool['onChainPoolId'];
+              final memberCount = (pool['memberCount'] as num?)?.toInt() ?? 0;
+              final completionPct =
+                  (pool['completionPct'] as num?)?.toDouble() ?? 0.0;
+
+              return Padding(
+                padding:
+                    EdgeInsets.only(bottom: index == items.length - 1 ? 0 : 12),
+                child: InkWell(
+                  onTap: poolId.isEmpty
+                      ? null
+                      : () => context.push('/pools/$poolId'),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundLight.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.accentYellow.withValues(alpha: 0.2),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${index + 1}',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                onChainId != null
+                                    ? 'Pool #$onChainId'
+                                    : 'Equb Pool',
+                                style: Theme.of(context).textTheme.labelLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$memberCount members',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                        color: AppTheme.textTertiaryColor(
+                                            context)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${completionPct.toStringAsFixed(0)}%',
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: AppTheme.secondaryColor,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopCollaborationCard(
+    BuildContext context,
+    WalletProvider wallet,
+  ) {
+    final txList = wallet.transactions.take(4).toList();
+
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Recent Activity',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              OutlinedButton(
+                onPressed: () => context.push('/transactions'),
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (txList.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                wallet.isLoading
+                    ? 'Loading transactions...'
+                    : 'No transactions yet',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            ...List.generate(txList.length, (index) {
+              final tx = txList[index];
+              final type = tx['type']?.toString() ?? 'received';
+              final isSent = type == 'sent';
+              final amount =
+                  double.tryParse(tx['amount']?.toString() ?? '0') ?? 0.0;
+              final token = tx['token']?.toString() ?? wallet.token;
+
+              return Padding(
+                padding: EdgeInsets.only(
+                    bottom: index == txList.length - 1 ? 0 : 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundLight.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              (isSent ? AppTheme.negative : AppTheme.positive)
+                                  .withValues(alpha: 0.14),
+                        ),
+                        child: Icon(
+                          isSent
+                              ? Icons.north_east_rounded
+                              : Icons.south_west_rounded,
+                          size: 18,
+                          color: isSent ? AppTheme.negative : AppTheme.positive,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isSent ? 'Transfer sent' : 'Funds received',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              token,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${isSent ? '-' : '+'}${amount.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: isSent
+                                  ? AppTheme.negative
+                                  : AppTheme.positive,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopProgressCard(
+      BuildContext context, double completionRate) {
+    final normalizedProgress = (completionRate / 100).clamp(0.0, 1.0);
+
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Progress', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 220,
+            child: CustomPaint(
+              painter: _DesktopArcGaugePainter(progress: normalizedProgress),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${completionRate.toStringAsFixed(0)}%',
+                      style: Theme.of(context)
+                          .textTheme
+                          .displayMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Average completion',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textTertiaryColor(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _DesktopLegendDot(
+                color: AppTheme.secondaryColor,
+                label: 'Completed',
+              ),
+              _DesktopLegendDot(
+                color: AppTheme.primaryColor,
+                label: 'In progress',
+              ),
+              _DesktopLegendDot(
+                color: AppTheme.textHint,
+                label: 'Pending',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopAppCard(BuildContext context) {
+    return DesktopCardSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primaryColor,
+                  AppTheme.secondaryColor,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset('assets/logo.png', fit: BoxFit.cover),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Open the mobile app',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Keep payouts and wallet checks visible even when you leave the desktop workspace.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        height: 1.55,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => context.go('/'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppTheme.primaryColor,
+                    ),
+                    child: const Text('Open Landing'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildQuickActions(context, forceGrid: true, compactCards: true),
         ],
       ),
     );
@@ -2240,4 +2960,170 @@ class _HomeActionData {
     required this.label,
     required this.onTap,
   });
+}
+
+class _DesktopOverviewStatCard extends StatelessWidget {
+  final double width;
+  final String title;
+  final String value;
+  final String detail;
+  final IconData icon;
+  final bool accent;
+
+  const _DesktopOverviewStatCard({
+    required this.width,
+    required this.title,
+    required this.value,
+    required this.detail,
+    required this.icon,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = accent
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppTheme.secondaryColor, AppTheme.primaryColor],
+          )
+        : null;
+
+    return SizedBox(
+      width: width,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: accent ? null : AppTheme.cardColor(context),
+          gradient: background,
+          borderRadius: BorderRadius.circular(22),
+          border: accent ? null : AppTheme.borderFor(context, opacity: 0.04),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: accent
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : AppTheme.textPrimaryColor(context),
+                        ),
+                  ),
+                ),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: accent
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : AppTheme.backgroundLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: accent
+                        ? Colors.white
+                        : AppTheme.textPrimaryColor(context),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: accent
+                        ? Colors.white
+                        : AppTheme.textPrimaryColor(context),
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              detail,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: accent
+                        ? Colors.white.withValues(alpha: 0.82)
+                        : AppTheme.textTertiaryColor(context),
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _DesktopLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopArcGaugePainter extends CustomPainter {
+  final double progress;
+
+  const _DesktopArcGaugePainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = 26.0;
+    final rect = Rect.fromCircle(
+      center: Offset(size.width / 2, size.height / 2),
+      radius: math.min(size.width, size.height) / 2 - stroke / 2,
+    );
+
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = AppTheme.textHint.withValues(alpha: 0.45);
+
+    final progressPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..shader = const LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [AppTheme.secondaryColor, AppTheme.primaryColor],
+      ).createShader(rect);
+
+    const startAngle = math.pi * 0.78;
+    const sweepAngle = math.pi * 1.44;
+
+    canvas.drawArc(rect, startAngle, sweepAngle, false, basePaint);
+    canvas.drawArc(
+        rect, startAngle, sweepAngle * progress, false, progressPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DesktopArcGaugePainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
 }
