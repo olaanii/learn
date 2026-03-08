@@ -339,6 +339,8 @@ class _MutedBrandLabel extends StatelessWidget {
 }
 
 class _HeroVisualPanel extends StatelessWidget {
+  static const String _heroLogoAsset = 'assets/logo.png';
+
   final String heroPreviewAsset;
 
   const _HeroVisualPanel({required this.heroPreviewAsset});
@@ -351,7 +353,7 @@ class _HeroVisualPanel extends StatelessWidget {
         padding: const EdgeInsets.all(0),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final imageWidth = math.min(constraints.maxWidth * 1.08, 660.0);
+            final logoWidth = math.min(constraints.maxWidth * 0.9, 720.0);
 
             return Stack(
               fit: StackFit.expand,
@@ -400,17 +402,24 @@ class _HeroVisualPanel extends StatelessWidget {
                   bottom: 0,
                   top: 0,
                   child: Align(
-                    alignment: Alignment.bottomCenter,
+                    alignment: Alignment.center,
                     child: Transform.translate(
-                      offset: const Offset(0, 18),
+                      offset: const Offset(0, 8),
                       child: SizedBox(
-                        width: imageWidth,
+                        width: logoWidth,
                         child: Image.asset(
-                          heroPreviewAsset,
+                          _heroLogoAsset,
                           fit: BoxFit.fitWidth,
-                          alignment: Alignment.bottomCenter,
+                          alignment: Alignment.center,
                           errorBuilder: (context, error, stackTrace) {
-                            return const _HeroDeviceFallback();
+                            return Image.asset(
+                              heroPreviewAsset,
+                              fit: BoxFit.fitWidth,
+                              alignment: Alignment.center,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const _HeroDeviceFallback();
+                              },
+                            );
                           },
                         ),
                       ),
