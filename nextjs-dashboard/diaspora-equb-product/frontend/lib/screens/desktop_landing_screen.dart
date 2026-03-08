@@ -183,15 +183,15 @@ class _LandingTopBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           decoration: BoxDecoration(
             color: logoCardColor,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(30),
             border: Border.all(
-              color: AppTheme.accentYellow.withValues(alpha: 0.34),
+              color: AppTheme.accentYellow.withValues(alpha: 0.4),
             ),
           ),
           child: Center(
             child: Image.asset(
               'assets/logo.png',
-              fit: BoxFit.contain,
+              fit: BoxFit.fill,
               width: 1224,
               height: 816,
             ),
