@@ -172,7 +172,8 @@ class _LandingTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseGold = HSLColor.fromColor(AppTheme.accentYellow);
-    final logoCardColor = baseGold.withSaturation(baseGold.saturation * 0.2).toColor();
+    final logoCardColor =
+        baseGold.withSaturation(baseGold.saturation * 0.2).toColor();
 
     return Row(
       children: [
@@ -191,8 +192,8 @@ class _LandingTopBar extends StatelessWidget {
             child: Image.asset(
               'assets/logo.png',
               fit: BoxFit.contain,
-              width: 174,
-              height: 66,
+              width: 374,
+              height: 166,
             ),
           ),
         ),
