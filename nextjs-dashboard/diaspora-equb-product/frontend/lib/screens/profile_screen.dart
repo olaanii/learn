@@ -2112,7 +2112,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
   }
 
   Future<void> _handleCancel() async {
-    if (widget.walletService.isConnecting && !widget.walletService.isConnected) {
+    if (widget.walletService.isConnecting &&
+        !widget.walletService.isConnected) {
       await widget.walletService.disconnect();
     }
     if (!mounted) {
@@ -2133,8 +2134,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
           final enabled = _isOptionEnabled(selectedOption);
           final pairingUri = widget.walletService.pairingUri;
           final hasPairingUri = pairingUri != null && pairingUri.isNotEmpty;
-          final errorText = widget.walletService.errorMessage ??
-              widget.auth.errorMessage;
+          final errorText =
+              widget.walletService.errorMessage ?? widget.auth.errorMessage;
 
           return ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
@@ -2168,8 +2169,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor
-                                  .withValues(alpha: 0.12),
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -2213,7 +2214,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                   final detailPanel = Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppTheme.cardColor(context).withValues(alpha: 0.58),
+                      color:
+                          AppTheme.cardColor(context).withValues(alpha: 0.58),
                       borderRadius: BorderRadius.circular(18),
                       border: AppTheme.borderFor(context, opacity: 0.06),
                     ),
@@ -2255,7 +2257,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: AppTheme.textTertiaryColor(context),
+                                        color:
+                                            AppTheme.textTertiaryColor(context),
                                       ),
                                     ),
                                 ],
@@ -2281,7 +2284,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                                 : AppTheme.textTertiaryColor(context),
                           ),
                         ),
-                        if (hasPairingUri && selectedOption.usesWalletConnect) ...[
+                        if (hasPairingUri &&
+                            selectedOption.usesWalletConnect) ...[
                           const SizedBox(height: 18),
                           Text(
                             'Scan this QR code with ${selectedOption.title}, or copy the pairing URI into a compatible wallet.',
@@ -2297,7 +2301,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                               decoration: BoxDecoration(
                                 color: AppTheme.cardColor(context),
                                 borderRadius: BorderRadius.circular(14),
-                                border: AppTheme.borderFor(context, opacity: 0.06),
+                                border:
+                                    AppTheme.borderFor(context, opacity: 0.06),
                               ),
                               child: QrImageView(
                                 data: pairingUri,
@@ -2357,7 +2362,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                                       size: 18,
                                     ),
                               label: Text(
-                                hasPairingUri && selectedOption.usesWalletConnect
+                                hasPairingUri &&
+                                        selectedOption.usesWalletConnect
                                     ? 'Awaiting wallet approval'
                                     : 'Continue',
                               ),
@@ -2376,7 +2382,11 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                       ? SingleChildScrollView(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [walletList, const SizedBox(height: 18), detailPanel],
+                            children: [
+                              walletList,
+                              const SizedBox(height: 18),
+                              detailPanel
+                            ],
                           ),
                         )
                       : Row(
@@ -2487,7 +2497,9 @@ class _WalletPickerOptionTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    enabled ? option.description : 'Unavailable in this session.',
+                    enabled
+                        ? option.description
+                        : 'Unavailable in this session.',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppTheme.textSecondaryColor(context),

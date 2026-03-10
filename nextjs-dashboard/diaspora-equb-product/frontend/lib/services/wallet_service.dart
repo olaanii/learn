@@ -38,8 +38,7 @@ class WalletService extends ChangeNotifier {
   bool get isConnected =>
       _walletAddress != null &&
       (kIsWeb ? eth_provider.hasInjectedProvider : _session != null);
-  bool get canUseInjectedProvider =>
-      kIsWeb && eth_provider.hasInjectedProvider;
+  bool get canUseInjectedProvider => kIsWeb && eth_provider.hasInjectedProvider;
   bool get hasWalletConnectProjectId =>
       AppConfig.walletConnectProjectId.trim().isNotEmpty;
   String? get walletAddress => _walletAddress;
@@ -253,7 +252,7 @@ class WalletService extends ChangeNotifier {
     final chainIdHex = chainIdRaw != null
         ? _toHex(
             chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
-      : _toHex(_chainId.toString());
+        : _toHex(_chainId.toString());
 
     final valueHex = _toHex(unsignedTx['value'] ?? '0');
     final gasHex = _toHex(unsignedTx['estimatedGas'] ?? '300000');
