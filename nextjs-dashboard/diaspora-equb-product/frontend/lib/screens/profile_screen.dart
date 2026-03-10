@@ -77,9 +77,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _WalletPickerOption option,
   ) async {
     final previousBoundAddress = auth.walletAddress;
-    final method = option.kind == _WalletPickerKind.metaMask && !kIsWeb
-        ? WalletConnectionMethod.metaMaskApp
-        : option.connectionMethod;
+    final method = option.resolveConnectionMethod(walletService);
 
     await auth.connectWallet(method: method);
     if (!mounted) {
@@ -1977,6 +1975,7 @@ class _WalletPickerOption {
     required this.connectionMethod,
     this.badge,
     this.usesWalletConnect = false,
+    this.prefersInjectedOnWeb = false,
   });
 
   final _WalletPickerKind kind;
@@ -1986,6 +1985,19 @@ class _WalletPickerOption {
   final WalletConnectionMethod connectionMethod;
   final String? badge;
   final bool usesWalletConnect;
+  final bool prefersInjectedOnWeb;
+
+  WalletConnectionMethod resolveConnectionMethod(WalletService walletService) {
+    if (kIsWeb && prefersInjectedOnWeb && walletService.canUseInjectedProvider) {
+      return WalletConnectionMethod.injected;
+    }
+
+    if (!kIsWeb && kind == _WalletPickerKind.metaMask) {
+      return WalletConnectionMethod.metaMaskApp;
+    }
+
+    return connectionMethod;
+  }
 }
 
 const List<_WalletPickerOption> _walletPickerOptions = [
@@ -1996,6 +2008,7 @@ const List<_WalletPickerOption> _walletPickerOptions = [
         'Use the installed MetaMask extension on web, or the MetaMask app path where supported.',
     icon: Icons.account_balance_wallet_outlined,
     connectionMethod: WalletConnectionMethod.injected,
+    prefersInjectedOnWeb: true,
   ),
   _WalletPickerOption(
     kind: _WalletPickerKind.walletConnect,
@@ -2011,31 +2024,34 @@ const List<_WalletPickerOption> _walletPickerOptions = [
     kind: _WalletPickerKind.okx,
     title: 'OKX Wallet',
     description:
-        'Uses the real WalletConnect pairing flow and then signs on Creditcoin Testnet.',
+        'Uses the browser extension on web when available, otherwise falls back to the real WalletConnect pairing flow.',
     icon: Icons.account_balance_wallet_rounded,
     connectionMethod: WalletConnectionMethod.walletConnect,
     badge: 'WalletConnect',
     usesWalletConnect: true,
+    prefersInjectedOnWeb: true,
   ),
   _WalletPickerOption(
     kind: _WalletPickerKind.binance,
     title: 'Binance Wallet',
     description:
-        'Uses the real WalletConnect pairing flow and then signs on Creditcoin Testnet.',
+        'Uses the browser extension on web when available, otherwise falls back to the real WalletConnect pairing flow.',
     icon: Icons.currency_exchange_rounded,
     connectionMethod: WalletConnectionMethod.walletConnect,
     badge: 'WalletConnect',
     usesWalletConnect: true,
+    prefersInjectedOnWeb: true,
   ),
   _WalletPickerOption(
     kind: _WalletPickerKind.creditcoin,
     title: 'Creditcoin Wallet',
     description:
-        'Presented as a WalletConnect-powered Creditcoin path until a dedicated wallet integration exists.',
+        'Uses the browser extension on web when available, otherwise falls back to WalletConnect until a dedicated wallet integration exists.',
     icon: Icons.shield_outlined,
     connectionMethod: WalletConnectionMethod.walletConnect,
     badge: 'WalletConnect',
     usesWalletConnect: true,
+    prefersInjectedOnWeb: true,
   ),
 ];
 
@@ -2065,6 +2081,11 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
       );
 
   bool _isOptionEnabled(_WalletPickerOption option) {
+    if (kIsWeb && option.prefersInjectedOnWeb) {
+      return widget.walletService.canUseInjectedProvider ||
+          widget.walletService.hasWalletConnectProjectId;
+    }
+
     if (option.kind == _WalletPickerKind.metaMask) {
       if (kIsWeb) {
         return widget.walletService.canUseInjectedProvider;
@@ -2076,6 +2097,18 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
   }
 
   String _optionAvailabilityText(_WalletPickerOption option) {
+    if (kIsWeb && option.prefersInjectedOnWeb) {
+      if (widget.walletService.canUseInjectedProvider) {
+        return 'This browser session already has an injected EVM wallet extension, so ${option.title} will try the extension path first instead of showing QR.';
+      }
+
+      if (widget.walletService.hasWalletConnectProjectId) {
+        return 'No injected browser wallet was detected, so ${option.title} will fall back to WalletConnect pairing.';
+      }
+
+      return 'This option needs either a browser wallet extension or WalletConnect project configuration.';
+    }
+
     if (option.kind == _WalletPickerKind.metaMask) {
       if (kIsWeb) {
         return widget.walletService.canUseInjectedProvider
@@ -2185,7 +2218,7 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Choose a real wallet path. Branded options below use WalletConnect unless a native integration exists.',
+                              'Choose a real wallet path. On web, branded wallets use the installed browser extension when available. On app flows, the wallet opens directly when a supported redirect exists.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: AppTheme.textSecondaryColor(context),
@@ -2285,7 +2318,10 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                           ),
                         ),
                         if (hasPairingUri &&
-                            selectedOption.usesWalletConnect) ...[
+                            selectedOption.usesWalletConnect &&
+                            !(kIsWeb &&
+                                selectedOption.prefersInjectedOnWeb &&
+                                widget.walletService.canUseInjectedProvider)) ...[
                           const SizedBox(height: 18),
                           Text(
                             'Scan this QR code with ${selectedOption.title}, or copy the pairing URI into a compatible wallet.',
@@ -2363,7 +2399,10 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                                     ),
                               label: Text(
                                 hasPairingUri &&
-                                        selectedOption.usesWalletConnect
+                                        selectedOption.usesWalletConnect &&
+                                        !(kIsWeb &&
+                                            selectedOption.prefersInjectedOnWeb &&
+                                            widget.walletService.canUseInjectedProvider)
                                     ? 'Awaiting wallet approval'
                                     : 'Continue',
                               ),
