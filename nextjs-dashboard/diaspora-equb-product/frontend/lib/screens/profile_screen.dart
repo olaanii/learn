@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -9,10 +10,10 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/credit_provider.dart';
 import '../providers/network_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../services/app_snackbar_service.dart';
-import '../services/profile_preferences_service.dart';
 import '../services/wallet_service.dart';
 import '../widgets/desktop_layout.dart';
 
@@ -230,12 +231,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    return Consumer5<AuthProvider, CreditProvider, WalletProvider,
-        WalletService, NetworkProvider>(
-      builder: (context, auth, credit, wallet, walletService, network, _) {
+    return Consumer6<AuthProvider, CreditProvider, WalletProvider,
+        WalletService, NetworkProvider, NotificationProvider>(
+      builder: (context, auth, credit, wallet, walletService, network,
+          notifications, _) {
         final walletAddr = auth.walletAddress;
         final shortAddr = _shortenAddress(walletAddr);
-        final balance = wallet.balance;
         if (walletAddr != null && walletAddr != _lastLoadedWallet) {
           _lastLoadedWallet = walletAddr;
           WidgetsBinding.instance
@@ -267,7 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
-                            _buildBalanceCard(context, balance, wallet.token),
+                            _buildBalanceCard(context, wallet, network),
                             const SizedBox(height: AppTheme.desktopSectionGap),
                             _buildCreditCard(context, auth, credit, network),
                           ],
@@ -278,9 +279,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         flex: 4,
                         child: Column(
                           children: [
-                            _buildAccountSection(context),
+                            _buildAccountSection(
+                              context,
+                              auth: auth,
+                              credit: credit,
+                              wallet: wallet,
+                              notifications: notifications,
+                              network: network,
+                            ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
-                            _buildPreferencesSection(context),
+                            _buildPreferencesSection(
+                              context,
+                              auth: auth,
+                              notifications: notifications,
+                              network: network,
+                            ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
                             _buildWalletConnectCard(
                               context,
@@ -289,18 +302,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               network,
                             ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
-                            _buildLogOutButton(context),
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Version 1.0.0 (Build 1)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textTertiaryColor(context),
-                                ),
-                              ),
+                            _buildRuntimeStatusCard(
+                              context,
+                              auth: auth,
+                              wallet: wallet,
+                              walletService: walletService,
+                              network: network,
+                              notifications: notifications,
                             ),
+                            const SizedBox(height: AppTheme.desktopSectionGap),
+                            _buildLogOutButton(context),
                           ],
                         ),
                       ),
@@ -324,22 +335,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 shortAddr: shortAddr,
               ),
               const SizedBox(height: 24),
-              _buildBalanceCard(context, balance, wallet.token),
+              _buildBalanceCard(context, wallet, network),
               const SizedBox(height: 28),
-              _buildAccountSection(context),
+              _buildAccountSection(
+                context,
+                auth: auth,
+                credit: credit,
+                wallet: wallet,
+                notifications: notifications,
+                network: network,
+              ),
               const SizedBox(height: 24),
-              _buildPreferencesSection(context),
+              _buildPreferencesSection(
+                context,
+                auth: auth,
+                notifications: notifications,
+                network: network,
+              ),
               const SizedBox(height: 20),
               _buildWalletConnectCard(context, auth, walletService, network),
               const SizedBox(height: 20),
               _buildCreditCard(context, auth, credit, network),
+              const SizedBox(height: 20),
+              _buildRuntimeStatusCard(
+                context,
+                auth: auth,
+                wallet: wallet,
+                walletService: walletService,
+                network: network,
+                notifications: notifications,
+              ),
               const SizedBox(height: 28),
               _buildLogOutButton(context),
-              const SizedBox(height: 16),
-              Text('Version 1.0.0 (Build 1)',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textTertiaryColor(context))),
             ],
           ),
         );
@@ -468,6 +495,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     NetworkProvider network,
   ) {
     final hasProjectId = AppConfig.walletConnectProjectId.isNotEmpty;
+    final hasInjectedWallet = walletService.canUseInjectedProvider;
     final connected = walletService.isConnected;
     final wcAddress = walletService.walletAddress;
     final boundAddress = auth.walletAddress;
@@ -569,35 +597,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
             runSpacing: 10,
             children: [
               FilledButton.tonalIcon(
-                onPressed: walletService.isConnecting
+                onPressed: (!hasInjectedWallet || walletService.isConnecting)
                     ? null
                     : () async {
-                        await auth.connectWallet();
+                        await auth.connectWallet(
+                          method: WalletConnectionMethod.injected,
+                        );
                       },
                 icon:
                     const Icon(Icons.account_balance_wallet_outlined, size: 18),
-                label: const Text('MetaMask / Browser Wallet'),
+                label: const Text('Browser Wallet'),
               ),
               FilledButton.tonalIcon(
                 onPressed: (!hasProjectId || walletService.isConnecting)
                     ? null
                     : () async {
-                        await auth.connectWallet();
+                        await auth.connectWallet(
+                          method: WalletConnectionMethod.walletConnect,
+                        );
                       },
                 icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-                label: const Text('WalletConnect / Trust Wallet'),
+                label: const Text('WalletConnect QR / Any Wallet'),
               ),
               FilledButton.tonalIcon(
-                onPressed: (!hasProjectId || walletService.isConnecting)
+                onPressed: (kIsWeb || !hasProjectId || walletService.isConnecting)
                     ? null
                     : () async {
-                        await auth.connectWallet();
+                        await auth.connectWallet(
+                          method: WalletConnectionMethod.metaMaskApp,
+                        );
                       },
-                icon: const Icon(Icons.currency_exchange_rounded, size: 18),
-                label: const Text('Creditcoin-Compatible Wallet'),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text('Open MetaMask App'),
               ),
             ],
           ),
+          if (!hasInjectedWallet || kIsWeb == false) ...[
+            const SizedBox(height: 10),
+            Text(
+              hasInjectedWallet
+                  ? 'Browser wallet is available in this session.'
+                  : 'Browser wallet requires an injected extension. Use WalletConnect QR to connect any supported mobile wallet.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.textTertiaryColor(context),
+              ),
+            ),
+          ],
           if (!hasProjectId) ...[
             const SizedBox(height: 10),
             Text(
@@ -759,6 +805,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (walletService.pairingUri != null &&
               walletService.pairingUri!.isNotEmpty) ...[
             const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Scan this QR code with any WalletConnect-compatible wallet, or copy the pairing URI into a wallet that supports manual WalletConnect pairing.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondaryColor(context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: walletService.pairingUri!),
+                    );
+                    AppSnackbarService.instance.info(
+                      message: 'WalletConnect pairing URI copied',
+                      dedupeKey: 'profile_pairing_uri_copied',
+                      duration: const Duration(seconds: 2),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('Copy URI'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Center(
               child: Container(
                 padding: const EdgeInsets.all(12),
@@ -1019,8 +1094,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildBalanceCard(BuildContext context, String balance, String token) {
+  Widget _buildBalanceCard(
+    BuildContext context,
+    WalletProvider wallet,
+    NetworkProvider network,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final txCount = wallet.transactions.length;
+    final lastTx = txCount > 0 ? wallet.transactions.first : null;
+    final lastToken = lastTx?['token']?.toString() ?? wallet.token;
+    final lastType = lastTx?['type']?.toString();
+    final activitySummary = wallet.isLoading
+        ? 'Refreshing balances and wallet activity on ${network.shortNetworkName}.'
+        : txCount == 0
+            ? 'No recent wallet movements have been loaded yet.'
+            : '$txCount recent wallet movements loaded. Latest ${lastType ?? 'activity'} uses $lastToken.';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -1052,23 +1141,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('\$$balance',
+          Text('\$${wallet.balance}',
               style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
                   color: AppTheme.textPrimaryColor(context),
                   letterSpacing: -1)),
           const SizedBox(height: 6),
-          const Row(
+          Row(
             children: [
-              Icon(Icons.trending_up_rounded,
-                  size: 16, color: AppTheme.positive),
-              SizedBox(width: 4),
-              Text('+\$0.00 (0%)',
+              Icon(
+                txCount > 0 ? Icons.sync_rounded : Icons.info_outline_rounded,
+                size: 16,
+                color: txCount > 0
+                    ? AppTheme.positive
+                    : AppTheme.textTertiaryColor(context),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  activitySummary,
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.positive)),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: txCount > 0
+                        ? AppTheme.positive
+                        : AppTheme.textSecondaryColor(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildWalletTag(context, wallet.token, AppTheme.primaryColor),
+              _buildWalletTag(
+                context,
+                network.shortNetworkName,
+                AppTheme.secondaryColor,
+              ),
+              _buildWalletTag(
+                context,
+                txCount == 0 ? 'No recent tx' : '$txCount tx loaded',
+                txCount == 0 ? AppTheme.textTertiaryColor(context) : AppTheme.positive,
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -1119,7 +1238,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAccountSection(BuildContext context) {
+  Widget _buildAccountSection(
+    BuildContext context, {
+    required AuthProvider auth,
+    required CreditProvider credit,
+    required WalletProvider wallet,
+    required NotificationProvider notifications,
+    required NetworkProvider network,
+  }) {
+    final profileSubtitle = auth.email ??
+        (auth.phoneNumber?.isNotEmpty == true
+            ? auth.phoneNumber!
+            : 'Update your name, avatar, and phone number');
+    final activitySubtitle = wallet.transactions.isEmpty
+        ? 'Open your circles, payouts, and contribution routes'
+        : '${wallet.transactions.length} wallet transactions loaded for review';
+    final securitySubtitle = auth.hasBoundWallet
+        ? 'Bound to ${_shortenAddress(auth.walletAddress)}'
+        : 'Bind a wallet to unlock signed actions and secure flows';
+    final creditSubtitle = credit.isLoading
+        ? 'Loading live tier eligibility'
+        : 'Score ${credit.score} • Tier ${credit.eligibleTier} on ${network.shortNetworkName}';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1145,7 +1285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icons.person_outline_rounded,
                   AppTheme.secondaryColor,
                   'Personal Info',
-                  'Name, email, phone',
+                  profileSubtitle,
                   onTap: () => context.push('/profile/edit')),
               Divider(
                   height: 1,
@@ -1153,7 +1293,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color:
                       AppTheme.textHintColor(context).withValues(alpha: 0.3)),
               _buildAccountRow(context, Icons.groups_outlined,
-                  AppTheme.primaryColor, 'Equb Groups', 'Manage your circles',
+                  AppTheme.primaryColor, 'Equb Workspace', activitySubtitle,
                   onTap: () => context.push('/pools')),
               Divider(
                   height: 1,
@@ -1161,7 +1301,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color:
                       AppTheme.textHintColor(context).withValues(alpha: 0.3)),
               _buildAccountRow(context, Icons.shield_outlined,
-                  AppTheme.positive, 'Security', 'Password, 2FA, FaceID',
+                  AppTheme.positive, 'Security', securitySubtitle,
                   onTap: () => context.push('/profile/security')),
               Divider(
                   height: 1,
@@ -1170,11 +1310,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       AppTheme.textHintColor(context).withValues(alpha: 0.3)),
               _buildAccountRow(
                   context,
-                  Icons.videogame_asset_outlined,
+                  notifications.unreadCount > 0
+                      ? Icons.notifications_active_outlined
+                      : Icons.videogame_asset_outlined,
                   AppTheme.accentYellow,
-                  'Credit Score',
-                  'Tier progress and perks',
-                  onTap: () => context.push('/credit')),
+                  notifications.unreadCount > 0
+                      ? 'Notifications'
+                      : 'Credit Score',
+                  notifications.unreadCount > 0
+                      ? '${notifications.unreadCount} unread updates waiting for review'
+                      : creditSubtitle,
+                  onTap: () => context.push(
+                      notifications.unreadCount > 0 ? '/notifications' : '/credit')),
             ],
           ),
         ),
@@ -1225,10 +1372,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPreferencesSection(BuildContext context) {
+  Widget _buildPreferencesSection(
+    BuildContext context, {
+    required AuthProvider auth,
+    required NotificationProvider notifications,
+    required NetworkProvider network,
+  }) {
     final themeProvider = context.watch<ThemeProvider>();
-    final networkProvider = context.watch<NetworkProvider>();
-    final auth = context.watch<AuthProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1253,13 +1403,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 context,
                 Icons.notifications_none_rounded,
                 AppTheme.accentYellow,
-                'Notifications',
-                trailing: Switch.adaptive(
-                  value: false,
-                  onChanged: (_) {},
-                  activeThumbColor: AppTheme.positive,
-                  activeTrackColor: AppTheme.positive.withValues(alpha: 0.45),
+                notifications.unreadCount == 0
+                    ? 'Notifications are clear'
+                    : '${notifications.unreadCount} unread notifications',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (notifications.unreadCount > 0)
+                      _buildWalletTag(
+                        context,
+                        '${notifications.unreadCount} unread',
+                        AppTheme.accentYellow,
+                      ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 22, color: AppTheme.textTertiaryColor(context)),
+                  ],
                 ),
+                onTap: () => context.push('/notifications'),
               ),
               Divider(
                   height: 1,
@@ -1282,10 +1443,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 context,
                 Icons.hub_outlined,
                 AppTheme.primaryColor,
-                'Creditcoin ${networkProvider.shortNetworkName}',
+                'Creditcoin ${network.shortNetworkName}',
                 trailing: Switch.adaptive(
-                  value: networkProvider.isMainnet,
-                  onChanged: (value) => networkProvider.setTestnet(!value),
+                  value: network.isMainnet,
+                  onChanged: (value) => network.setTestnet(!value),
                   activeThumbColor: AppTheme.primaryColor,
                   activeTrackColor: AppTheme.secondaryColor,
                 ),
@@ -1321,6 +1482,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRuntimeStatusCard(
+    BuildContext context, {
+    required AuthProvider auth,
+    required WalletProvider wallet,
+    required WalletService walletService,
+    required NetworkProvider network,
+    required NotificationProvider notifications,
+  }) {
+    final apiBase = Uri.tryParse(AppConfig.apiBaseUrl);
+    final apiHost = apiBase?.host.isNotEmpty == true
+        ? apiBase!.host
+        : AppConfig.apiBaseUrl;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        boxShadow: AppTheme.subtleShadowFor(context),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Live App Status',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Real session and runtime state for this device. No placeholder metrics.',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textSecondaryColor(context),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildInfoRow(context, 'App auth state',
+              auth.isAuthenticated ? 'Authenticated' : 'Guest'),
+          const Divider(height: 20),
+          _buildInfoRow(
+              context,
+              'Connected wallet',
+              walletService.walletAddress == null
+                  ? 'Not connected'
+                  : _shortenAddress(walletService.walletAddress)),
+          const Divider(height: 20),
+          _buildInfoRow(
+              context,
+              'Bound wallet',
+              auth.walletAddress == null
+                  ? 'Not bound'
+                  : _shortenAddress(auth.walletAddress)),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'Network',
+              '${network.networkName} (${network.chainId})'),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'API', apiHost),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'WalletConnect',
+              walletService.hasWalletConnectProjectId ? 'Configured' : 'Missing project ID'),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'Unread notifications',
+              '${notifications.unreadCount}'),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'Loaded transactions',
+              '${wallet.transactions.length}'),
+        ],
+      ),
     );
   }
 
@@ -1446,21 +1682,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          LinearProgressIndicator(
-            value: _creditProgressValue(
-              credit.maxPoolSize,
-              credit.nextTier,
-              credit.scoreForNextTier,
+          if (credit.isLoading)
+            const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            LinearProgressIndicator(
+              value: _creditProgressValue(
+                credit.score,
+                credit.nextTier,
+                credit.scoreForNextTier,
+              ),
+              minHeight: 10,
+              borderRadius: BorderRadius.circular(999),
+              backgroundColor:
+                  AppTheme.textHintColor(context).withValues(alpha: 0.22),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppTheme.positive),
             ),
-            minHeight: 10,
-            borderRadius: BorderRadius.circular(999),
-            backgroundColor:
-                AppTheme.textHintColor(context).withValues(alpha: 0.22),
-            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.positive),
-          ),
           const SizedBox(height: 18),
           _buildInfoRow(
               context, 'Identity', _shortenAddress(auth.identityHash)),
+          const Divider(height: 20),
+          _buildInfoRow(context, 'Credit Score', '${credit.score}'),
           const Divider(height: 20),
           _buildInfoRow(
               context, 'Eligible Tier', 'Tier ${credit.eligibleTier}'),
@@ -1485,7 +1727,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   double _creditProgressValue(
-    String maxPoolSize,
+    int score,
     int? nextTier,
     int? scoreForNextTier,
   ) {
@@ -1493,11 +1735,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 1;
     }
     if (scoreForNextTier == null || scoreForNextTier == 0) {
-      return 0.35;
+      return 0;
     }
 
-    final numericPoolSize = int.tryParse(maxPoolSize) ?? 0;
-    return ((numericPoolSize % 100) / 100).clamp(0.15, 0.95);
+    return (score / scoreForNextTier).clamp(0.0, 1.0);
   }
 
   Widget _buildInfoRow(BuildContext context, String label, String value) {

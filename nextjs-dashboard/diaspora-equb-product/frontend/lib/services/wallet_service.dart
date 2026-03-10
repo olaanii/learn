@@ -7,6 +7,13 @@ import '../config/app_config.dart';
 import 'ethereum_provider_stub.dart'
     if (dart.library.js_interop) 'ethereum_provider_web.dart' as eth_provider;
 
+enum WalletConnectionMethod {
+  auto,
+  injected,
+  walletConnect,
+  metaMaskApp,
+}
+
 /// Service that manages WalletConnect v2 sessions for client-side TX signing.
 ///
 /// Flow:
@@ -32,6 +39,9 @@ class WalletService extends ChangeNotifier {
   bool get isConnected =>
       _walletAddress != null &&
       (kIsWeb ? eth_provider.hasInjectedProvider : _session != null);
+    bool get canUseInjectedProvider => kIsWeb && eth_provider.hasInjectedProvider;
+    bool get hasWalletConnectProjectId =>
+      AppConfig.walletConnectProjectId.trim().isNotEmpty;
   String? get walletAddress => _walletAddress;
   String? get pairingUri => _pairingUri;
   bool get isConnecting => _isConnecting;
@@ -101,17 +111,38 @@ class WalletService extends ChangeNotifier {
   /// Connect to a wallet.
   /// On web: uses the injected MetaMask browser extension (window.ethereum).
   /// On mobile: uses WalletConnect v2 with deep-link to MetaMask.
-  Future<String?> connect() async {
-    // On web, prefer the injected MetaMask extension
-    if (kIsWeb && eth_provider.hasInjectedProvider) {
-      return _connectViaInjected();
+  Future<String?> connect({
+    WalletConnectionMethod method = WalletConnectionMethod.auto,
+  }) async {
+    switch (method) {
+      case WalletConnectionMethod.injected:
+        return _connectViaInjected();
+      case WalletConnectionMethod.walletConnect:
+        return _connectViaWalletConnect(
+          launchMethod: WalletConnectionMethod.walletConnect,
+        );
+      case WalletConnectionMethod.metaMaskApp:
+        return _connectViaWalletConnect(
+          launchMethod: WalletConnectionMethod.metaMaskApp,
+        );
+      case WalletConnectionMethod.auto:
+        if (kIsWeb && eth_provider.hasInjectedProvider) {
+          return _connectViaInjected();
+        }
+        return _connectViaWalletConnect(
+          launchMethod: WalletConnectionMethod.metaMaskApp,
+        );
     }
-
-    // Mobile: use WalletConnect
-    return _connectViaWalletConnect();
   }
 
   Future<String?> _connectViaInjected() async {
+    if (!(kIsWeb && eth_provider.hasInjectedProvider)) {
+      _errorMessage =
+          'No injected browser wallet detected. Install MetaMask or use WalletConnect.';
+      notifyListeners();
+      return null;
+    }
+
     _isConnecting = true;
     _errorMessage = null;
     notifyListeners();
@@ -136,7 +167,9 @@ class WalletService extends ChangeNotifier {
     return null;
   }
 
-  Future<String?> _connectViaWalletConnect() async {
+  Future<String?> _connectViaWalletConnect({
+    required WalletConnectionMethod launchMethod,
+  }) async {
     if (_signClient == null) await init();
     if (_signClient == null) {
       _errorMessage = 'WalletConnect not initialized. Check project ID.';
@@ -175,7 +208,10 @@ class WalletService extends ChangeNotifier {
       notifyListeners();
 
       if (_pairingUri != null) {
-        await _tryOpenWallet(_pairingUri!);
+        await _launchWalletConnectPairing(
+          _pairingUri!,
+          method: launchMethod,
+        );
       }
 
       debugPrint('[WalletService] Waiting for session...');
@@ -528,6 +564,35 @@ class WalletService extends ChangeNotifier {
       }
     } catch (_) {
       // Deep link not available; user can scan QR code or open wallet manually
+    }
+  }
+
+  Future<void> _launchWalletConnectPairing(
+    String uri, {
+    required WalletConnectionMethod method,
+  }) async {
+    if (kIsWeb) return;
+
+    switch (method) {
+      case WalletConnectionMethod.walletConnect:
+        try {
+          final launched = await launchUrl(
+            Uri.parse(uri),
+            mode: LaunchMode.externalApplication,
+          );
+          if (launched) {
+            return;
+          }
+        } catch (_) {
+          // Fall back to the in-app QR code when the OS has no WC handler.
+        }
+        return;
+      case WalletConnectionMethod.metaMaskApp:
+      case WalletConnectionMethod.auto:
+        await _tryOpenWallet(uri);
+        return;
+      case WalletConnectionMethod.injected:
+        return;
     }
   }
 }

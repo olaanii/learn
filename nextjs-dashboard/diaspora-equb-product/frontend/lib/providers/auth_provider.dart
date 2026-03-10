@@ -348,14 +348,16 @@ class AuthProvider extends ChangeNotifier {
 
   /// Wallet-only login using Sign-In with Ethereum:
   /// Step 1: Connect MetaMask → get wallet address
-  Future<void> connectWallet() async {
+  Future<void> connectWallet({
+    WalletConnectionMethod method = WalletConnectionMethod.auto,
+  }) async {
     final previousStatus = _status;
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final address = await _walletService.connect();
+      final address = await _walletService.connect(method: method);
       if (address == null) {
         _errorMessage =
             _walletService.errorMessage ?? 'Wallet connection failed';
