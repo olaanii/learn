@@ -12,6 +12,8 @@ enum WalletConnectionMethod {
   injected,
   walletConnect,
   metaMaskApp,
+  okxApp,
+  binanceApp,
 }
 
 /// Service that manages WalletConnect v2 sessions for client-side TX signing.
@@ -123,6 +125,14 @@ class WalletService extends ChangeNotifier {
       case WalletConnectionMethod.metaMaskApp:
         return _connectViaWalletConnect(
           launchMethod: WalletConnectionMethod.metaMaskApp,
+        );
+      case WalletConnectionMethod.okxApp:
+        return _connectViaWalletConnect(
+          launchMethod: WalletConnectionMethod.okxApp,
+        );
+      case WalletConnectionMethod.binanceApp:
+        return _connectViaWalletConnect(
+          launchMethod: WalletConnectionMethod.binanceApp,
         );
       case WalletConnectionMethod.auto:
         if (kIsWeb && eth_provider.hasInjectedProvider) {
@@ -566,6 +576,45 @@ class WalletService extends ChangeNotifier {
     }
   }
 
+  Future<void> _tryOpenWalletCandidates(List<Uri> candidates) async {
+    if (kIsWeb) return;
+
+    for (final candidate in candidates) {
+      try {
+        final launched = await launchUrl(
+          candidate,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          return;
+        }
+      } catch (_) {
+        // Try the next candidate and fall back to QR if none work.
+      }
+    }
+  }
+
+  List<Uri> _okxWalletCandidates(String uri) {
+    final encodedUri = Uri.encodeComponent(uri);
+    return [
+      Uri.parse('okx://wc?uri=$encodedUri'),
+      Uri.parse('okx://wallet/wc?uri=$encodedUri'),
+      Uri.parse(
+        'https://www.okx.com/download?deeplink=okx%3A%2F%2Fwc%3Furi%3D$encodedUri',
+      ),
+    ];
+  }
+
+  List<Uri> _binanceWalletCandidates(String uri) {
+    final encodedUri = Uri.encodeComponent(uri);
+    return [
+      Uri.parse('binance://wc?uri=$encodedUri'),
+      Uri.parse(
+        'https://www.binance.com/en/download?deeplink=binance%3A%2F%2Fwc%3Furi%3D$encodedUri',
+      ),
+    ];
+  }
+
   Future<void> _launchWalletConnectPairing(
     String uri, {
     required WalletConnectionMethod method,
@@ -589,6 +638,12 @@ class WalletService extends ChangeNotifier {
       case WalletConnectionMethod.metaMaskApp:
       case WalletConnectionMethod.auto:
         await _tryOpenWallet(uri);
+        return;
+      case WalletConnectionMethod.okxApp:
+        await _tryOpenWalletCandidates(_okxWalletCandidates(uri));
+        return;
+      case WalletConnectionMethod.binanceApp:
+        await _tryOpenWalletCandidates(_binanceWalletCandidates(uri));
         return;
       case WalletConnectionMethod.injected:
         return;

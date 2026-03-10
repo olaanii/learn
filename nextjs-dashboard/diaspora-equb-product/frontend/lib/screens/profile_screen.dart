@@ -1988,12 +1988,24 @@ class _WalletPickerOption {
   final bool prefersInjectedOnWeb;
 
   WalletConnectionMethod resolveConnectionMethod(WalletService walletService) {
-    if (kIsWeb && prefersInjectedOnWeb && walletService.canUseInjectedProvider) {
+    if (kIsWeb &&
+        prefersInjectedOnWeb &&
+        walletService.canUseInjectedProvider) {
       return WalletConnectionMethod.injected;
     }
 
-    if (!kIsWeb && kind == _WalletPickerKind.metaMask) {
-      return WalletConnectionMethod.metaMaskApp;
+    if (!kIsWeb) {
+      switch (kind) {
+        case _WalletPickerKind.metaMask:
+          return WalletConnectionMethod.metaMaskApp;
+        case _WalletPickerKind.okx:
+          return WalletConnectionMethod.okxApp;
+        case _WalletPickerKind.binance:
+          return WalletConnectionMethod.binanceApp;
+        case _WalletPickerKind.walletConnect:
+        case _WalletPickerKind.creditcoin:
+          break;
+      }
     }
 
     return connectionMethod;
@@ -2024,7 +2036,7 @@ const List<_WalletPickerOption> _walletPickerOptions = [
     kind: _WalletPickerKind.okx,
     title: 'OKX Wallet',
     description:
-        'Uses the browser extension on web when available, otherwise falls back to the real WalletConnect pairing flow.',
+        'Uses the browser extension on web when available, and attempts to open the OKX app directly on native before falling back to WalletConnect pairing.',
     icon: Icons.account_balance_wallet_rounded,
     connectionMethod: WalletConnectionMethod.walletConnect,
     badge: 'WalletConnect',
@@ -2035,7 +2047,7 @@ const List<_WalletPickerOption> _walletPickerOptions = [
     kind: _WalletPickerKind.binance,
     title: 'Binance Wallet',
     description:
-        'Uses the browser extension on web when available, otherwise falls back to the real WalletConnect pairing flow.',
+        'Uses the browser extension on web when available, and attempts to open the Binance app directly on native before falling back to WalletConnect pairing.',
     icon: Icons.currency_exchange_rounded,
     connectionMethod: WalletConnectionMethod.walletConnect,
     badge: 'WalletConnect',
@@ -2107,6 +2119,18 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
       }
 
       return 'This option needs either a browser wallet extension or WalletConnect project configuration.';
+    }
+
+    if (!kIsWeb && option.kind == _WalletPickerKind.okx) {
+      return widget.walletService.hasWalletConnectProjectId
+          ? 'The app will try to hand off the WalletConnect pairing directly to OKX Wallet first. If that handoff is unavailable on this device, the QR pairing remains available.'
+          : 'WalletConnect project configuration is required for the OKX app handoff.';
+    }
+
+    if (!kIsWeb && option.kind == _WalletPickerKind.binance) {
+      return widget.walletService.hasWalletConnectProjectId
+          ? 'The app will try to hand off the WalletConnect pairing directly to Binance Wallet first. If that handoff is unavailable on this device, the QR pairing remains available.'
+          : 'WalletConnect project configuration is required for the Binance app handoff.';
     }
 
     if (option.kind == _WalletPickerKind.metaMask) {
@@ -2321,7 +2345,8 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                             selectedOption.usesWalletConnect &&
                             !(kIsWeb &&
                                 selectedOption.prefersInjectedOnWeb &&
-                                widget.walletService.canUseInjectedProvider)) ...[
+                                widget
+                                    .walletService.canUseInjectedProvider)) ...[
                           const SizedBox(height: 18),
                           Text(
                             'Scan this QR code with ${selectedOption.title}, or copy the pairing URI into a compatible wallet.',
@@ -2401,8 +2426,10 @@ class _WalletPickerDialogState extends State<_WalletPickerDialog> {
                                 hasPairingUri &&
                                         selectedOption.usesWalletConnect &&
                                         !(kIsWeb &&
-                                            selectedOption.prefersInjectedOnWeb &&
-                                            widget.walletService.canUseInjectedProvider)
+                                            selectedOption
+                                                .prefersInjectedOnWeb &&
+                                            widget.walletService
+                                                .canUseInjectedProvider)
                                     ? 'Awaiting wallet approval'
                                     : 'Continue',
                               ),

@@ -21,7 +21,9 @@ class FakeWalletService extends WalletService {
   Future<void> init() async {}
 
   @override
-  Future<String?> connect({WalletConnectionMethod? method}) async {
+  Future<String?> connect({
+    WalletConnectionMethod method = WalletConnectionMethod.auto,
+  }) async {
     if (connectShouldFail) return null;
     fakeWalletAddress = '0xFakeWallet';
     notifyListeners();
