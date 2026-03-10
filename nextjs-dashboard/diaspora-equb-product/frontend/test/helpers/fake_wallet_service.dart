@@ -21,7 +21,7 @@ class FakeWalletService extends WalletService {
   Future<void> init() async {}
 
   @override
-  Future<String?> connect() async {
+  Future<String?> connect({WalletConnectionMethod? method}) async {
     if (connectShouldFail) return null;
     fakeWalletAddress = '0xFakeWallet';
     notifyListeners();
@@ -35,7 +35,8 @@ class FakeWalletService extends WalletService {
   }
 
   @override
-  Future<String?> signAndSendTransaction(Map<String, dynamic> unsignedTx) async {
+  Future<String?> signAndSendTransaction(
+      Map<String, dynamic> unsignedTx) async {
     if (signShouldFail) return null;
     return fakeTxHash;
   }

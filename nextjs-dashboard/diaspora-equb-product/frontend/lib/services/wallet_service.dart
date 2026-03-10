@@ -23,7 +23,6 @@ enum WalletConnectionMethod {
 ///    and requests the connected wallet to sign & broadcast it.
 /// 3. [disconnect] - Ends the WalletConnect session.
 class WalletService extends ChangeNotifier {
-  static const _testnetChainId = 102031;
   static const _mainnetChainId = 102030;
 
   ReownSignClient? _signClient;
@@ -39,8 +38,9 @@ class WalletService extends ChangeNotifier {
   bool get isConnected =>
       _walletAddress != null &&
       (kIsWeb ? eth_provider.hasInjectedProvider : _session != null);
-    bool get canUseInjectedProvider => kIsWeb && eth_provider.hasInjectedProvider;
-    bool get hasWalletConnectProjectId =>
+  bool get canUseInjectedProvider =>
+      kIsWeb && eth_provider.hasInjectedProvider;
+  bool get hasWalletConnectProjectId =>
       AppConfig.walletConnectProjectId.trim().isNotEmpty;
   String? get walletAddress => _walletAddress;
   String? get pairingUri => _pairingUri;
@@ -190,7 +190,7 @@ class WalletService extends ChangeNotifier {
       final connectResponse = await _signClient!.connect(
         optionalNamespaces: {
           'eip155': RequiredNamespace(
-            chains: [_chainToNamespace(_testnetChainId), _chainToNamespace(_mainnetChainId)],
+            chains: [activeChain],
             methods: [
               'eth_sendTransaction',
               'eth_signTransaction',
