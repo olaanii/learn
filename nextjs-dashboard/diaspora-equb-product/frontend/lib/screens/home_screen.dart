@@ -746,9 +746,8 @@ class _HomeScreenState extends State<HomeScreen> {
     required int notifications,
   }) {
     final mutedColor = AppTheme.textTertiaryColor(context);
-    final heroBalance = _balanceVisible
-        ? '\$${_formatBalance(balanceNum)}'
-        : '••••••';
+    final heroBalance =
+        _balanceVisible ? '\$${_formatBalance(balanceNum)}' : '••••••';
 
     return DesktopCardSection(
       padding: EdgeInsets.zero,
@@ -842,10 +841,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 10),
                     Text(
                       heroBalance,
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayLarge
-                          ?.copyWith(
+                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -1.2,
@@ -1012,7 +1008,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (stackSummary) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [summary, const SizedBox(height: 20), sideSummary],
+                    children: [
+                      summary,
+                      const SizedBox(height: 20),
+                      sideSummary
+                    ],
                   );
                 }
 

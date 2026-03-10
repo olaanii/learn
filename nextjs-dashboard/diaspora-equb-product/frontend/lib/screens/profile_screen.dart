@@ -9,6 +9,7 @@ import '../config/app_config.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/credit_provider.dart';
+import '../providers/equb_insights_provider.dart';
 import '../providers/network_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/theme_provider.dart';
@@ -41,10 +42,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final credit = context.read<CreditProvider>();
+    final insights = context.read<EqubInsightsProvider>();
     final wallet = context.read<WalletProvider>();
     final walletAddress = auth.walletAddress;
     if (walletAddress != null) {
       credit.loadTierEligibility(walletAddress);
+      insights.initializeForWallet(walletAddress);
       final network = context.read<NetworkProvider>();
       wallet.loadAll(walletAddress, nativeSymbol: network.nativeSymbol);
     }
@@ -231,10 +234,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    return Consumer6<AuthProvider, CreditProvider, WalletProvider,
-        WalletService, NetworkProvider, NotificationProvider>(
+    return Consumer7<AuthProvider, CreditProvider, WalletProvider,
+        WalletService, NetworkProvider, NotificationProvider,
+        EqubInsightsProvider>(
       builder: (context, auth, credit, wallet, walletService, network,
-          notifications, _) {
+          notifications, insights, _) {
         final walletAddr = auth.walletAddress;
         final shortAddr = _shortenAddress(walletAddr);
         if (walletAddr != null && walletAddr != _lastLoadedWallet) {
@@ -279,13 +283,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         flex: 4,
                         child: Column(
                           children: [
-                            _buildAccountSection(
+                            _buildOperationsSection(
                               context,
-                              auth: auth,
-                              credit: credit,
-                              wallet: wallet,
+                              walletAddress: walletAddr,
                               notifications: notifications,
-                              network: network,
+                              insights: insights,
                             ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
                             _buildPreferencesSection(
@@ -337,13 +339,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
               _buildBalanceCard(context, wallet, network),
               const SizedBox(height: 28),
-              _buildAccountSection(
+              _buildOperationsSection(
                 context,
-                auth: auth,
-                credit: credit,
-                wallet: wallet,
+                walletAddress: walletAddr,
                 notifications: notifications,
-                network: network,
+                insights: insights,
               ),
               const SizedBox(height: 24),
               _buildPreferencesSection(
@@ -1238,34 +1238,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAccountSection(
+  Widget _buildOperationsSection(
     BuildContext context, {
-    required AuthProvider auth,
-    required CreditProvider credit,
-    required WalletProvider wallet,
+    required String? walletAddress,
     required NotificationProvider notifications,
-    required NetworkProvider network,
+    required EqubInsightsProvider insights,
   }) {
-    final profileSubtitle = auth.email ??
-        (auth.phoneNumber?.isNotEmpty == true
-            ? auth.phoneNumber!
-            : 'Update your name, avatar, and phone number');
-    final activitySubtitle = wallet.transactions.isEmpty
-        ? 'Open your circles, payouts, and contribution routes'
-        : '${wallet.transactions.length} wallet transactions loaded for review';
-    final securitySubtitle = auth.hasBoundWallet
-        ? 'Bound to ${_shortenAddress(auth.walletAddress)}'
-        : 'Bind a wallet to unlock signed actions and secure flows';
-    final creditSubtitle = credit.isLoading
-        ? 'Loading live tier eligibility'
-        : 'Score ${credit.score} • Tier ${credit.eligibleTier} on ${network.shortNetworkName}';
+    final joinedPools = insights.joinedPools;
+    final summary = insights.summary;
+    final activePools = (summary['activePools'] as num?)?.toInt() ?? 0;
+    final endingSoon = (summary['endingSoon'] as num?)?.toInt() ?? 0;
+    final winnerPending = (summary['winnerPending'] as num?)?.toInt() ?? 0;
+    final waitingOnUser = joinedPools.where((pool) {
+      final completion = (pool['completionPct'] as num?)?.toDouble() ?? 0.0;
+      final status = pool['status']?.toString().toLowerCase() ?? '';
+      return status == 'active' && completion < 100;
+    }).length;
+    final desktop = AppTheme.isDesktop(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text('ACCOUNT',
+          child: Text('OPERATIONS',
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -1273,58 +1269,399 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: AppTheme.textTertiaryColor(context))),
         ),
         Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: AppTheme.cardColor(context),
-            borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
             boxShadow: AppTheme.subtleShadowFor(context),
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAccountRow(
+              Text(
+                'Your live Equb workload',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                walletAddress == null
+                    ? 'Bind a wallet to load joined pool progress, payout pressure, and action queues.'
+                    : 'Track joined pools, payout pressure, and action queues from your current app wallet.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondaryColor(context),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (walletAddress == null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundLight,
+                    borderRadius: BorderRadius.circular(16),
+                    border: AppTheme.borderFor(context, opacity: 0.05),
+                  ),
+                  child: Text(
+                    'No wallet bound yet. The operations panel will fill with joined pools and payout metrics after wallet binding.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondaryColor(context),
+                    ),
+                  ),
+                )
+              else ...[
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final stackSummary = constraints.maxWidth < 520;
+                    final summaryCards = [
+                      _buildOpsSummaryBox(
+                        context,
+                        title: 'Active Pools',
+                        value: '$activePools',
+                        accent: AppTheme.primaryColor,
+                        icon: Icons.groups_rounded,
+                      ),
+                      _buildOpsSummaryBox(
+                        context,
+                        title: 'Ending Soon',
+                        value: '$endingSoon',
+                        accent: AppTheme.warningColor,
+                        icon: Icons.schedule_rounded,
+                      ),
+                      _buildOpsSummaryBox(
+                        context,
+                        title: 'Winner Pending',
+                        value: '$winnerPending',
+                        accent: AppTheme.secondaryColor,
+                        icon: Icons.emoji_events_outlined,
+                      ),
+                      _buildOpsSummaryBox(
+                        context,
+                        title: 'Unread Alerts',
+                        value: '${notifications.unreadCount}',
+                        accent: AppTheme.accentYellow,
+                        icon: Icons.notifications_active_outlined,
+                      ),
+                    ];
+
+                    if (stackSummary) {
+                      return Column(
+                        children: [
+                          for (int i = 0; i < summaryCards.length; i++) ...[
+                            summaryCards[i],
+                            if (i != summaryCards.length - 1)
+                              const SizedBox(height: 10),
+                          ],
+                        ],
+                      );
+                    }
+
+                    return GridView.count(
+                      crossAxisCount: desktop ? 2 : 2,
+                      childAspectRatio: desktop ? 1.7 : 1.5,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: summaryCards,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildOpsActionStrip(
                   context,
-                  Icons.person_outline_rounded,
-                  AppTheme.secondaryColor,
-                  'Personal Info',
-                  profileSubtitle,
-                  onTap: () => context.push('/profile/edit')),
-              Divider(
-                  height: 1,
-                  indent: 60,
-                  color:
-                      AppTheme.textHintColor(context).withValues(alpha: 0.3)),
-              _buildAccountRow(context, Icons.groups_outlined,
-                  AppTheme.primaryColor, 'Equb Workspace', activitySubtitle,
-                  onTap: () => context.push('/pools')),
-              Divider(
-                  height: 1,
-                  indent: 60,
-                  color:
-                      AppTheme.textHintColor(context).withValues(alpha: 0.3)),
-              _buildAccountRow(context, Icons.shield_outlined,
-                  AppTheme.positive, 'Security', securitySubtitle,
-                  onTap: () => context.push('/profile/security')),
-              Divider(
-                  height: 1,
-                  indent: 60,
-                  color:
-                      AppTheme.textHintColor(context).withValues(alpha: 0.3)),
-              _buildAccountRow(
-                  context,
-                  notifications.unreadCount > 0
-                      ? Icons.notifications_active_outlined
-                      : Icons.videogame_asset_outlined,
-                  AppTheme.accentYellow,
-                  notifications.unreadCount > 0
-                      ? 'Notifications'
-                      : 'Credit Score',
-                  notifications.unreadCount > 0
-                      ? '${notifications.unreadCount} unread updates waiting for review'
-                      : creditSubtitle,
-                  onTap: () => context.push(
-                      notifications.unreadCount > 0 ? '/notifications' : '/credit')),
+                  waitingOnUser: waitingOnUser,
+                  notifications: notifications.unreadCount,
+                  winnerPending: winnerPending,
+                ),
+                const SizedBox(height: 16),
+                if (insights.summaryLoading || insights.joinedLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (insights.summaryError != null || insights.joinedError != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor(context).withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(14),
+                      border: AppTheme.borderFor(context, opacity: 0.05),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          insights.summaryError ?? insights.joinedError ?? 'Failed to load operations data.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.negative,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => insights.refresh(walletAddress),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Retry operations data'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _buildJoinedPoolsOperationsList(
+                    context,
+                    pools: joinedPools,
+                    notifications: notifications.unreadCount,
+                  ),
+              ],
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildOpsSummaryBox(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required Color accent,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: accent),
+          const Spacer(),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimaryColor(context),
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.textSecondaryColor(context),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOpsActionStrip(
+    BuildContext context, {
+    required int waitingOnUser,
+    required int notifications,
+    required int winnerPending,
+  }) {
+    final headline = winnerPending > 0
+        ? '$winnerPending payout decisions are waiting.'
+        : waitingOnUser > 0
+            ? '$waitingOnUser active pools still need contributions or review.'
+            : notifications > 0
+                ? '$notifications unread notifications need review.'
+                : 'Your pool operations are currently clear.';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryColor.withValues(alpha: 0.96),
+            AppTheme.secondaryColor.withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Operations focus',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            headline,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.86),
+                  height: 1.45,
+                ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => context.push('/equb-insights'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.primaryColor,
+                ),
+                icon: const Icon(Icons.insights_rounded, size: 18),
+                label: const Text('Open Insights'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => context.push(
+                    winnerPending > 0 ? '/notifications' : '/pools'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+                ),
+                icon: Icon(
+                  winnerPending > 0
+                      ? Icons.notifications_active_outlined
+                      : Icons.groups_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  winnerPending > 0 ? 'Review Alerts' : 'Open Equbs',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJoinedPoolsOperationsList(
+    BuildContext context, {
+    required List<Map<String, dynamic>> pools,
+    required int notifications,
+  }) {
+    if (pools.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.backgroundLight,
+          borderRadius: BorderRadius.circular(16),
+          border: AppTheme.borderFor(context, opacity: 0.05),
+        ),
+        child: Text(
+          notifications > 0
+              ? 'No joined pool progress is available for the active filters yet, but you still have unread notifications to review.'
+              : 'No joined pool progress is available for the active filters yet.',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppTheme.textSecondaryColor(context),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Joined pool queue',
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 10),
+        ...List.generate(math.min(pools.length, 3), (index) {
+          final pool = pools[index];
+          final poolId = pool['poolId']?.toString() ?? '';
+          final poolName = pool['poolName']?.toString() ??
+              (pool['onChainPoolId'] != null
+                  ? 'Pool #${pool['onChainPoolId']}'
+                  : 'Equb Pool');
+          final completion = (pool['completionPct'] as num?)?.toDouble() ?? 0.0;
+          final roundsDone = (pool['roundsDone'] as num?)?.toInt() ?? 0;
+          final roundsTotal = (pool['roundsTotal'] as num?)?.toInt() ?? 0;
+          final status = pool['status']?.toString().toLowerCase() ?? 'active';
+          final needsAttention = status == 'active' && completion < 100;
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == math.min(pools.length, 3) - 1 ? 0 : 10),
+            child: InkWell(
+              onTap: poolId.isEmpty ? null : () => context.push('/pools/$poolId'),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.cardColor(context).withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(16),
+                  border: AppTheme.borderFor(context, opacity: 0.05),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            poolName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        _buildWalletTag(
+                          context,
+                          needsAttention ? 'Needs action' : status,
+                          needsAttention
+                              ? AppTheme.warningColor
+                              : AppTheme.secondaryColor,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Completion ${completion.toStringAsFixed(0)}% • Rounds $roundsDone/${roundsTotal == 0 ? '-' : roundsTotal}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textSecondaryColor(context),
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: (completion / 100).clamp(0.0, 1.0),
+                        minHeight: 8,
+                        backgroundColor:
+                            AppTheme.textHintColor(context).withValues(alpha: 0.2),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          needsAttention
+                              ? AppTheme.warningColor
+                              : AppTheme.positive,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
       ],
     );
   }
