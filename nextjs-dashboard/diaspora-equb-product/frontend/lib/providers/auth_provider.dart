@@ -66,7 +66,7 @@ class AuthProvider extends ChangeNotifier {
       _status == AuthStatus.emailVerificationRequired;
   bool get isFirebaseConfigured => _firebaseAuthService.isConfigured;
   bool get requireTransactionConfirmation => _requireTransactionConfirmation;
-    List<StoredWalletSlot> get rememberedWallets =>
+  List<StoredWalletSlot> get rememberedWallets =>
       List.unmodifiable(_rememberedWallets);
   bool get hasBoundWallet =>
       _walletAddress != null && _walletAddress!.trim().isNotEmpty;
@@ -263,7 +263,8 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> renameRememberedWallet(String walletAddress, String label) async {
+  Future<void> renameRememberedWallet(
+      String walletAddress, String label) async {
     final normalized = walletAddress.trim().toLowerCase();
     if (normalized.isEmpty) {
       return;
@@ -724,9 +725,8 @@ class AuthProvider extends ChangeNotifier {
   String _localFirebaseIdentityHash(User user) {
     final source = 'firebase:${user.uid}';
     final bytes = utf8.encode(source);
-    final hex = bytes
-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final hex =
+        bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
     final normalized = hex.length >= 64
         ? hex.substring(0, 64)
         : (hex + '0' * (64 - hex.length));
@@ -780,7 +780,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _persistStoredProfile() async {
-    final saved = await _profilePreferencesService.save(_currentStoredProfile());
+    final saved =
+        await _profilePreferencesService.save(_currentStoredProfile());
     _applyStoredProfile(saved);
   }
 
