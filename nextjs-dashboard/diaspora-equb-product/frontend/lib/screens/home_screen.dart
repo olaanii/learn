@@ -10,6 +10,7 @@ import '../providers/network_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/api_client.dart';
+import '../widgets/desktop_dashboard_panels.dart';
 import '../widgets/desktop_layout.dart';
 
 // Controls which desktop composition this screen should render.
@@ -427,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 1240;
+        final stackRail = constraints.maxWidth < 1380;
         final shellColor = AppTheme.cardColor(context).withValues(alpha: 0.96);
         final mutedColor = AppTheme.textTertiaryColor(context);
         return SingleChildScrollView(
@@ -582,68 +583,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                LayoutBuilder(
-                  builder: (context, statConstraints) {
-                    final useTwoColumns = statConstraints.maxWidth < 920;
-                    final statWidth = useTwoColumns
-                        ? (statConstraints.maxWidth - 12) / 2
-                        : (statConstraints.maxWidth - 36) / 4;
-
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        _DesktopOverviewStatCard(
-                          width: statWidth,
-                          title: 'Active Equbs',
-                          value: '$activeEqubs',
-                          detail: 'Live on ${network.shortNetworkName}',
-                          accent: true,
-                          icon: Icons.groups_rounded,
-                        ),
-                        _DesktopOverviewStatCard(
-                          width: statWidth,
-                          title: 'Total Members',
-                          value: _formatNumber(memberCount),
-                          detail: 'Across tracked circles',
-                          icon: Icons.people_outline_rounded,
-                        ),
-                        _DesktopOverviewStatCard(
-                          width: statWidth,
-                          title: 'Wallet Balance',
-                          value: '\$${_formatBalance(balanceNum)}',
-                          detail: '${wallet.token} selected',
-                          icon: Icons.account_balance_wallet_outlined,
-                        ),
-                        _DesktopOverviewStatCard(
-                          width: statWidth,
-                          title: 'Unread Alerts',
-                          value: '$notifications',
-                          detail: notifications > 0
-                              ? 'Open notifications for updates'
-                              : 'No pending alerts',
-                          icon: Icons.notifications_none_rounded,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                if (stacked)
+                const SizedBox(height: 24),
+                if (stackRail)
                   Column(
                     children: [
-                      _buildDesktopAnalyticsCard(context, totalTvl),
-                      const SizedBox(height: 16),
-                      _buildDesktopRemindersCard(context, notifications),
-                      const SizedBox(height: 16),
-                      _buildDesktopEqubListCard(context),
-                      const SizedBox(height: 16),
-                      _buildDesktopCollaborationCard(context, wallet),
-                      const SizedBox(height: 16),
-                      _buildDesktopProgressCard(context, completionRate),
-                      const SizedBox(height: 16),
-                      _buildDesktopAppCard(context),
+                      _buildDesktopHeroBand(
+                        context,
+                        wallet: wallet,
+                        auth: auth,
+                        networkLabel: network.shortNetworkName,
+                        shortWallet: shortWallet,
+                        activeEqubs: activeEqubs,
+                        memberCount: memberCount,
+                        totalTvl: totalTvl,
+                        completionRate: completionRate,
+                        balanceNum: balanceNum,
+                        notifications: notifications,
+                      ),
+                      const SizedBox(height: 18),
+                      _buildDesktopInsightBand(
+                        context,
+                        wallet: wallet,
+                        totalTvl: totalTvl,
+                        completionRate: completionRate,
+                      ),
+                      const SizedBox(height: 18),
+                      _buildDesktopSupportColumn(context),
                     ],
                   )
                 else
@@ -651,63 +616,35 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        flex: 9,
                         child: Column(
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 8,
-                                  child: _buildDesktopAnalyticsCard(
-                                    context,
-                                    totalTvl,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 5,
-                                  child: _buildDesktopRemindersCard(
-                                    context,
-                                    notifications,
-                                  ),
-                                ),
-                              ],
+                            _buildDesktopHeroBand(
+                              context,
+                              wallet: wallet,
+                              auth: auth,
+                              networkLabel: network.shortNetworkName,
+                              shortWallet: shortWallet,
+                              activeEqubs: activeEqubs,
+                              memberCount: memberCount,
+                              totalTvl: totalTvl,
+                              completionRate: completionRate,
+                              balanceNum: balanceNum,
+                              notifications: notifications,
                             ),
-                            const SizedBox(height: 16),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 7,
-                                  child: _buildDesktopCollaborationCard(
-                                    context,
-                                    wallet,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 5,
-                                  child: _buildDesktopProgressCard(
-                                    context,
-                                    completionRate,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 18),
+                            _buildDesktopInsightBand(
+                              context,
+                              wallet: wallet,
+                              totalTvl: totalTvl,
+                              completionRate: completionRate,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 18),
                       SizedBox(
-                        width: 290,
-                        child: Column(
-                          children: [
-                            _buildDesktopEqubListCard(context),
-                            const SizedBox(height: 16),
-                            _buildDesktopAppCard(context),
-                          ],
-                        ),
+                        width: 300,
+                        child: _buildDesktopSupportColumn(context),
                       ),
                     ],
                   ),
@@ -716,6 +653,463 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDesktopHeroBand(
+    BuildContext context, {
+    required WalletProvider wallet,
+    required AuthProvider auth,
+    required String networkLabel,
+    required String shortWallet,
+    required int activeEqubs,
+    required int memberCount,
+    required double totalTvl,
+    required double completionRate,
+    required double balanceNum,
+    required int notifications,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackActionColumn = constraints.maxWidth < 1080;
+        final actionColumn = Column(
+          children: [
+            const DesktopQuickTransferCard(),
+            const SizedBox(height: 16),
+            _buildDesktopRemindersCard(context, notifications),
+          ],
+        );
+
+        if (stackActionColumn) {
+          return Column(
+            children: [
+              _buildDesktopHeroCard(
+                context,
+                wallet: wallet,
+                auth: auth,
+                networkLabel: networkLabel,
+                shortWallet: shortWallet,
+                activeEqubs: activeEqubs,
+                memberCount: memberCount,
+                totalTvl: totalTvl,
+                completionRate: completionRate,
+                balanceNum: balanceNum,
+                notifications: notifications,
+              ),
+              const SizedBox(height: 16),
+              actionColumn,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 8,
+              child: _buildDesktopHeroCard(
+                context,
+                wallet: wallet,
+                auth: auth,
+                networkLabel: networkLabel,
+                shortWallet: shortWallet,
+                activeEqubs: activeEqubs,
+                memberCount: memberCount,
+                totalTvl: totalTvl,
+                completionRate: completionRate,
+                balanceNum: balanceNum,
+                notifications: notifications,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 4,
+              child: actionColumn,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopHeroCard(
+    BuildContext context, {
+    required WalletProvider wallet,
+    required AuthProvider auth,
+    required String networkLabel,
+    required String shortWallet,
+    required int activeEqubs,
+    required int memberCount,
+    required double totalTvl,
+    required double completionRate,
+    required double balanceNum,
+    required int notifications,
+  }) {
+    final mutedColor = AppTheme.textTertiaryColor(context);
+    final heroBalance = _balanceVisible
+        ? '\$${_formatBalance(balanceNum)}'
+        : '••••••';
+
+    return DesktopCardSection(
+      padding: EdgeInsets.zero,
+      child: Container(
+        padding: const EdgeInsets.all(26),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryColor.withValues(alpha: 0.98),
+              AppTheme.secondaryColor.withValues(alpha: 0.94),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Desktop Workspace',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    networkLabel.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (auth.walletAddress != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      shortWallet,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stackSummary = constraints.maxWidth < 760;
+                final summary = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Diaspora dashboard',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.82),
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      heroBalance,
+                      style: Theme.of(context)
+                          .textTheme
+                          .displayLarge
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1.2,
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Review wallet health, track Equb performance, and move funds without leaving the desktop canvas.',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.82),
+                            height: 1.5,
+                          ),
+                    ),
+                    const SizedBox(height: 18),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => context.push('/transactions'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppTheme.primaryColor,
+                          ),
+                          icon: const Icon(Icons.sync_rounded, size: 18),
+                          label: const Text('Open Transactions'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => context.push('/pools'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          icon: const Icon(Icons.travel_explore_rounded,
+                              size: 18),
+                          label: const Text('Browse Equbs'),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+
+                final sideSummary = Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Session Snapshot',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DesktopHeroMetricTile(
+                              title: 'Active Equbs',
+                              value: '$activeEqubs',
+                              detail: 'Live now',
+                              icon: Icons.groups_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _DesktopHeroMetricTile(
+                              title: 'Members',
+                              value: _formatNumber(memberCount),
+                              detail: 'Across circles',
+                              icon: Icons.people_outline_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DesktopHeroMetricTile(
+                              title: 'TVL',
+                              value: _formatTvl(totalTvl),
+                              detail: 'Selected window',
+                              icon: Icons.stacked_line_chart_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _DesktopHeroMetricTile(
+                              title: 'Alerts',
+                              value: '$notifications',
+                              detail: notifications > 0
+                                  ? 'Need review'
+                                  : 'All clear',
+                              icon: Icons.notifications_none_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(
+                                Icons.monitor_heart_outlined,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${completionRate.toStringAsFixed(0)}% completion',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(color: Colors.white),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${wallet.token} selected for the active wallet session.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.74),
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (stackSummary) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [summary, const SizedBox(height: 20), sideSummary],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 6, child: summary),
+                    const SizedBox(width: 18),
+                    Expanded(flex: 5, child: sideSummary),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopInsightBand(
+    BuildContext context, {
+    required WalletProvider wallet,
+    required double totalTvl,
+    required double completionRate,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackAll = constraints.maxWidth < 1080;
+        final stackTrailing = constraints.maxWidth < 1320;
+
+        if (stackAll) {
+          return Column(
+            children: [
+              _buildDesktopAnalyticsCard(context, totalTvl),
+              const SizedBox(height: 16),
+              _buildDesktopCollaborationCard(context, wallet),
+              const SizedBox(height: 16),
+              _buildDesktopProgressCard(context, completionRate),
+            ],
+          );
+        }
+
+        if (stackTrailing) {
+          return Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 6,
+                    child: _buildDesktopAnalyticsCard(context, totalTvl),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 5,
+                    child: _buildDesktopCollaborationCard(context, wallet),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildDesktopProgressCard(context, completionRate),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 6,
+              child: _buildDesktopAnalyticsCard(context, totalTvl),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 5,
+              child: _buildDesktopCollaborationCard(context, wallet),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 4,
+              child: _buildDesktopProgressCard(context, completionRate),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopSupportColumn(BuildContext context) {
+    return Column(
+      children: [
+        const DesktopWorkspaceStatusCard(),
+        const SizedBox(height: 16),
+        const DesktopShortcutsCard(),
+        const SizedBox(height: 16),
+        _buildDesktopEqubListCard(context),
+      ],
     );
   }
 
@@ -3054,6 +3448,69 @@ class _DesktopOverviewStatCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DesktopHeroMetricTile extends StatelessWidget {
+  final String title;
+  final String value;
+  final String detail;
+  final IconData icon;
+
+  const _DesktopHeroMetricTile({
+    required this.title,
+    required this.value,
+    required this.detail,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.76),
+                      ),
+                ),
+              ),
+              Icon(
+                icon,
+                size: 18,
+                color: Colors.white.withValues(alpha: 0.88),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            detail,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.68),
+                ),
+          ),
+        ],
       ),
     );
   }
