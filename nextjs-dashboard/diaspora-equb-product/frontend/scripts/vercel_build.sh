@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Run from frontend root. Vercel injects env vars at build time and this script
 # forwards them into Flutter via dart-defines so no Firebase secrets or config
 # files need to be committed.
+
+readonly flutter_bin="./.flutter/bin/flutter"
+readonly dart_bin="./.flutter/bin/dart"
+readonly landing_dir="seo_landing"
+readonly landing_asset_dir="$landing_dir/web/assets"
+readonly flutter_output_dir="build/web"
+readonly deploy_output_dir="build/site"
+readonly flutter_mount_dir="$deploy_output_dir/app"
 
 readonly firebase_api_key="${FIREBASE_API_KEY:-}"
 readonly firebase_app_id="${FIREBASE_APP_ID:-}"
@@ -17,10 +25,24 @@ if [[ -n "$firebase_api_key" || -n "$firebase_app_id" || -n "$firebase_sender_id
   fi
 fi
 
+rm -rf "$deploy_output_dir"
+mkdir -p "$landing_asset_dir"
+
+cp assets/logo.png "$landing_asset_dir/logo.png"
+cp assets/landing-mobile-preview.png "$landing_asset_dir/landing-mobile-preview.png"
+
+pushd "$landing_dir" >/dev/null
+../.flutter/bin/dart pub get
+../.flutter/bin/dart pub global run jaspr_cli:jaspr build --verbose \
+  --sitemap-domain="${SITE_URL:-https://e-equb.vercel.app}"
+popd >/dev/null
+
 # --web-renderer was removed in Flutter 3.22+; default is used
-./.flutter/bin/flutter build web --release \
+"$flutter_bin" build web --release \
+  --base-href /app/ \
   --dart-define=API_BASE_URL="${API_BASE_URL:-https://equb-db.netlify.app/api}" \
-  --dart-define=WALLETCONNECT_PROJECT_ID="${WALLETCONNECT_PROJECT_ID:-}" \
+  --dart-define=PRIVY_APP_ID="${PRIVY_APP_ID:-}" \
+  --dart-define=PRIVY_APP_CLIENT_ID="${PRIVY_APP_CLIENT_ID:-}" \
   --dart-define=CHAIN_ID="${CHAIN_ID:-102031}" \
   --dart-define=RPC_URL="${RPC_URL:-https://rpc.cc3-testnet.creditcoin.network}" \
   --dart-define=SENTRY_DSN="${SENTRY_DSN:-}" \
@@ -37,7 +59,13 @@ fi
   --dart-define=GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}" \
   --dart-define=DEV_BYPASS_FAYDA=false
 
-# Copy public assets (e.g. app-release.apk for Android download) into the web output
+mkdir -p "$deploy_output_dir"
+cp -a "$landing_dir/build/jaspr/." "$deploy_output_dir/"
+
+mkdir -p "$flutter_mount_dir"
+cp -a "$flutter_output_dir/." "$flutter_mount_dir/"
+
+# Copy public assets (e.g. app-release.apk for Android download) into the final deploy output.
 if [ -d public ] && [ "$(ls -A public 2>/dev/null)" ]; then
-  cp -a public/. build/web/
+  cp -a public/. "$deploy_output_dir/"
 fi

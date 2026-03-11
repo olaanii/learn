@@ -6,13 +6,13 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'crypto';
 import { ethers } from 'ethers';
 import { Identity } from '../entities/identity.entity';
+import { WalletChallenge } from '../entities/wallet-challenge.entity';
 import { FaydaService } from './fayda.service';
 import { FirebaseAdminService } from './firebase-admin.service';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly challengeStore = new Map<string, { nonce: string; message: string; expiresAt: number }>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -21,6 +21,8 @@ export class AuthService {
     private readonly firebaseAdminService: FirebaseAdminService,
     @InjectRepository(Identity)
     private readonly identityRepo: Repository<Identity>,
+    @InjectRepository(WalletChallenge)
+    private readonly walletChallengeRepo: Repository<WalletChallenge>,
   ) {}
 
   getFirebaseStatus() {
@@ -161,45 +163,99 @@ export class AuthService {
 
   // ── Wallet-based Authentication (Sign-In with Ethereum) ─────────────
 
+  private async issueChallenge(
+    challengeKey: string,
+    purpose: 'login' | 'bind',
+    walletAddress: string,
+    message: string,
+    nonce: string,
+    identityHash?: string,
+  ) {
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await this.walletChallengeRepo.delete({ challengeKey });
+
+    const challenge = this.walletChallengeRepo.create({
+      challengeKey,
+      purpose,
+      walletAddress,
+      identityHash: identityHash ?? null,
+      nonce,
+      message,
+      expiresAt,
+      consumedAt: null,
+    });
+
+    await this.walletChallengeRepo.save(challenge);
+    return { message, nonce };
+  }
+
+  private async loadAndConsumeChallenge(
+    challengeKey: string,
+    message: string,
+    expiredErrorMessage: string,
+    noChallengeMessage: string,
+    mismatchMessage: string,
+  ) {
+    const stored = await this.walletChallengeRepo.findOne({
+      where: { challengeKey },
+    });
+
+    if (!stored || stored.consumedAt) {
+      throw new UnauthorizedException(noChallengeMessage);
+    }
+    if (stored.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException(expiredErrorMessage);
+    }
+    if (stored.message !== message) {
+      throw new UnauthorizedException(mismatchMessage);
+    }
+
+    const consumeResult = await this.walletChallengeRepo
+      .createQueryBuilder()
+      .update(WalletChallenge)
+      .set({ consumedAt: new Date() })
+      .where('id = :id', { id: stored.id })
+      .andWhere('"consumedAt" IS NULL')
+      .execute();
+
+    if (!consumeResult.affected) {
+      throw new UnauthorizedException(noChallengeMessage);
+    }
+  }
+
   async walletChallenge(walletAddress: string) {
+    const normalizedWalletAddress = walletAddress.toLowerCase();
     const nonce = randomBytes(16).toString('hex');
     const timestamp = new Date().toISOString();
     const message =
       `Sign this message to log in to Diaspora Equb.\n\n` +
-      `Wallet: ${walletAddress}\n` +
+      `Wallet: ${normalizedWalletAddress}\n` +
       `Nonce: ${nonce}\n` +
       `Timestamp: ${timestamp}`;
 
-    this.challengeStore.set(walletAddress.toLowerCase(), {
-      nonce,
+    return this.issueChallenge(
+      `login:${normalizedWalletAddress}`,
+      'login',
+      normalizedWalletAddress,
       message,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-    });
-
-    return { message, nonce };
+      nonce,
+    );
   }
 
   async walletVerify(walletAddress: string, signature: string, message: string) {
     const key = walletAddress.toLowerCase();
-    const stored = this.challengeStore.get(key);
-
-    if (!stored) {
-      throw new UnauthorizedException('No challenge found. Request a new one.');
-    }
-    if (stored.expiresAt < Date.now()) {
-      this.challengeStore.delete(key);
-      throw new UnauthorizedException('Challenge expired. Request a new one.');
-    }
-    if (stored.message !== message) {
-      throw new UnauthorizedException('Challenge message mismatch.');
-    }
+    await this.loadAndConsumeChallenge(
+      `login:${key}`,
+      message,
+      'Challenge expired. Request a new one.',
+      'No challenge found. Request a new one.',
+      'Challenge message mismatch.',
+    );
 
     const recoveredAddress = ethers.verifyMessage(message, signature);
     if (recoveredAddress.toLowerCase() !== key) {
       throw new UnauthorizedException('Signature verification failed.');
     }
-
-    this.challengeStore.delete(key);
     this.logger.log(`Wallet signature verified for ${walletAddress}`);
 
     const identityHash = `0x${createHash('sha256').update(key).digest('hex')}`;
@@ -231,6 +287,52 @@ export class AuthService {
       walletAddress,
       walletBindingStatus: 'bound',
     };
+  }
+
+  async walletBindChallenge(identityHash: string, walletAddress: string) {
+    const normalizedIdentityHash = identityHash.toLowerCase();
+    const normalizedWalletAddress = walletAddress.toLowerCase();
+    const nonce = randomBytes(16).toString('hex');
+    const timestamp = new Date().toISOString();
+    const message =
+      `Sign this message to bind your wallet to your verified identity in Diaspora Equb.\n\n` +
+      `Identity: ${normalizedIdentityHash}\n` +
+      `Wallet: ${normalizedWalletAddress}\n` +
+      `Nonce: ${nonce}\n` +
+      `Timestamp: ${timestamp}`;
+
+    return this.issueChallenge(
+      `${normalizedIdentityHash}:${normalizedWalletAddress}`,
+      'bind',
+      normalizedWalletAddress,
+      message,
+      nonce,
+      normalizedIdentityHash,
+    );
+  }
+
+  async walletBindVerify(
+    identityHash: string,
+    walletAddress: string,
+    signature: string,
+    message: string,
+  ) {
+    const normalizedIdentityHash = identityHash.toLowerCase();
+    const normalizedWalletAddress = walletAddress.toLowerCase();
+    const key = `${normalizedIdentityHash}:${normalizedWalletAddress}`;
+    await this.loadAndConsumeChallenge(
+      key,
+      message,
+      'Bind challenge expired. Request a new one.',
+      'No bind challenge found. Request a new one.',
+      'Bind challenge message mismatch.',
+    );
+
+    const recoveredAddress = ethers.verifyMessage(message, signature);
+    if (recoveredAddress.toLowerCase() !== normalizedWalletAddress) {
+      throw new UnauthorizedException('Wallet bind signature verification failed.');
+    }
+    return { walletAddress: normalizedWalletAddress };
   }
 
   async validateToken(token: string) {

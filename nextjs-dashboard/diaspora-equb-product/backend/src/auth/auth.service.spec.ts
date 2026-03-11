@@ -4,7 +4,9 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { FaydaService } from './fayda.service';
+import { FirebaseAdminService } from './firebase-admin.service';
 import { Identity } from '../entities/identity.entity';
+import { WalletChallenge } from '../entities/wallet-challenge.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -15,6 +17,20 @@ describe('AuthService', () => {
     findOne: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+  };
+
+  const mockWalletChallengeRepo = {
+    findOne: jest.fn(),
+    create: jest.fn((dto) => dto),
+    save: jest.fn(async (entity) => ({ ...entity, id: entity.id ?? 'challenge-id' })),
+    delete: jest.fn(),
+    createQueryBuilder: jest.fn().mockReturnValue({
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    }),
   };
 
   const mockJwtService = {
@@ -30,6 +46,16 @@ describe('AuthService', () => {
     isRealIntegration: false,
   };
 
+  const mockFirebaseAdminService = {
+    isConfigured: true,
+    verifyIdToken: jest.fn().mockResolvedValue({
+      uid: 'firebase-uid',
+      email: 'user@example.com',
+      name: 'Test User',
+      email_verified: true,
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -37,7 +63,12 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: FaydaService, useValue: mockFaydaService },
+        { provide: FirebaseAdminService, useValue: mockFirebaseAdminService },
         { provide: getRepositoryToken(Identity), useValue: mockIdentityRepo },
+        {
+          provide: getRepositoryToken(WalletChallenge),
+          useValue: mockWalletChallengeRepo,
+        },
       ],
     }).compile();
 
@@ -93,33 +124,42 @@ describe('AuthService', () => {
     it('should return a message and nonce', async () => {
       const result = await service.walletChallenge('0xWalletAddress');
       expect(result.message).toContain('Sign this message');
-      expect(result.message).toContain('0xWalletAddress');
+      expect(result.message).toContain('0xwalletaddress');
       expect(result.nonce).toBeDefined();
       expect(result.nonce.length).toBeGreaterThan(0);
+      expect(mockWalletChallengeRepo.save).toHaveBeenCalled();
     });
   });
 
   describe('walletVerify', () => {
     it('should reject when no challenge exists', async () => {
+      mockWalletChallengeRepo.findOne.mockResolvedValueOnce(null);
       await expect(
         service.walletVerify('0xUnknown', '0xSig', 'some message'),
       ).rejects.toThrow('No challenge found');
     });
 
     it('should reject expired challenge', async () => {
-      // Issue a challenge then expire it
-      await service.walletChallenge('0xwallet');
-      const store = (service as any).challengeStore;
-      const entry = store.get('0xwallet');
-      entry.expiresAt = Date.now() - 1000;
+      mockWalletChallengeRepo.findOne.mockResolvedValueOnce({
+        id: 'challenge-id',
+        consumedAt: null,
+        expiresAt: new Date(Date.now() - 1000),
+        message: 'challenge',
+      });
 
       await expect(
-        service.walletVerify('0xWallet', '0xSig', entry.message),
+        service.walletVerify('0xWallet', '0xSig', 'challenge'),
       ).rejects.toThrow('Challenge expired');
     });
 
     it('should reject message mismatch', async () => {
-      await service.walletChallenge('0xwallet');
+      mockWalletChallengeRepo.findOne.mockResolvedValueOnce({
+        id: 'challenge-id',
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        message: 'expected message',
+      });
+
       await expect(
         service.walletVerify('0xWallet', '0xSig', 'wrong message'),
       ).rejects.toThrow('Challenge message mismatch');

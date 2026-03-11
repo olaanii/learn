@@ -1,0 +1,16 @@
+name: diaspora_equb_landing
+description: SEO-friendly Jaspr landing page for Diaspora Equb
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  jaspr: ^0.22.3
+
+dev_dependencies:
+  jaspr_builder: ^0.22.3
+  jaspr_lints: ^0.6.0
+
+jaspr:
+  mode: static

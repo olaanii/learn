@@ -94,7 +94,7 @@ export class CollateralService {
   /**
    * Build unsigned TX to deposit USDC/USDT as collateral.
    * Transfers tokens from the user to the deployer address (acts as vault).
-   * The user signs this via MetaMask; balance is deducted on-chain.
+    * The user signs this with their wallet; balance is deducted on-chain.
    */
   async buildDepositToken(
     amount: string,

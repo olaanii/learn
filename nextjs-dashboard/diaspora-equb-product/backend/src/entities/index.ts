@@ -19,3 +19,4 @@ export { ReferralCode } from './referral-code.entity';
 export { Referral } from './referral.entity';
 export { Commission } from './commission.entity';
 export { BadgeEntity } from './badge.entity';
+export { WalletChallenge } from './wallet-challenge.entity';

@@ -14,7 +14,7 @@
 | npm            | 9+               | `npm -v`             |
 | Docker Desktop | Free / CE        | `docker -v`          |
 | Flutter        | 3.22+            | `flutter --version`  |
-| MetaMask       | Latest           | Browser extension    |
+| EVM wallet     | Latest           | Browser extension or mobile wallet app |
 | Git            | 2.x              | `git --version`      |
 
 ---
@@ -156,12 +156,12 @@ Note the ngrok URL (e.g., `https://abc123.ngrok-free.app`).
 **Debug mode (emulator or device):**
 ```bash
 cd frontend
-flutter run --dart-define=API_BASE_URL=http://localhost:3001/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=WALLETCONNECT_PROJECT_ID=10aaa86fb2c0d5a86ee20ce532834485
+flutter run --dart-define=API_BASE_URL=http://localhost:3001/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=PRIVY_APP_ID=your_privy_app_id --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id
 ```
 
 **With ngrok (real device):**
 ```bash
-flutter run --dart-define=API_BASE_URL=https://your-ngrok-url.ngrok-free.app/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=WALLETCONNECT_PROJECT_ID=10aaa86fb2c0d5a86ee20ce532834485
+flutter run --dart-define=API_BASE_URL=https://your-ngrok-url.ngrok-free.app/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=PRIVY_APP_ID=your_privy_app_id --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id
 ```
 
 ---
@@ -170,7 +170,7 @@ flutter run --dart-define=API_BASE_URL=https://your-ngrok-url.ngrok-free.app/api
 
 ```bash
 cd frontend
-flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/debug-info --dart-define=API_BASE_URL=https://your-ngrok-url.ngrok-free.app/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=WALLETCONNECT_PROJECT_ID=10aaa86fb2c0d5a86ee20ce532834485 --dart-define=CHAIN_ID=102031 --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network --dart-define=TEST_USDC_ADDRESS=0xE7737c6152917b14eC82C81De4cA1C8851B995d1 --dart-define=TEST_USDT_ADDRESS=0xF8F273671D2CeBF9d2B5cF130c5aCFF1943826d7
+flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/debug-info --dart-define=API_BASE_URL=https://your-ngrok-url.ngrok-free.app/api --dart-define=DEV_BYPASS_FAYDA=true --dart-define=PRIVY_APP_ID=your_privy_app_id --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id --dart-define=CHAIN_ID=102031 --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network --dart-define=TEST_USDC_ADDRESS=0xE7737c6152917b14eC82C81De4cA1C8851B995d1 --dart-define=TEST_USDT_ADDRESS=0xF8F273671D2CeBF9d2B5cF130c5aCFF1943826d7
 ```
 
 APK location: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` (~25-30 MB)
@@ -186,7 +186,7 @@ Run through this manually on the device/emulator:
 | 1 | Open app                         | Onboarding screen appears                | [ ]   |
 | 2 | Dev-login (or Fayda tab)         | Logged in, redirected to home            | [ ]   |
 | 3 | Home screen loads                | Balance shows, TESTNET badge visible     | [ ]   |
-| 4 | Connect wallet (WalletConnect)   | MetaMask opens, connects                 | [ ]   |
+| 4 | Connect wallet                    | Wallet opens, connects                   | [ ]   |
 | 5 | Request test USDC from faucet    | Balance increases                        | [ ]   |
 | 6 | View token transactions          | Transaction list populated               | [ ]   |
 | 7 | Navigate to Collateral screen    | Shows collateral options                 | [ ]   |
@@ -214,8 +214,8 @@ Run through this manually on the device/emulator:
 - If using ngrok, check the tunnel is active
 - Check CORS: in development mode, all origins are allowed
 
-### MetaMask not connecting
-- Ensure MetaMask is on Creditcoin Testnet (Chain ID: 102031)
+### Wallet not connecting
+- Ensure your wallet is on Creditcoin Testnet (Chain ID: 102031)
 - Add network manually: RPC URL `https://rpc.cc3-testnet.creditcoin.network`, Symbol: `CTC`
 - Get testnet CTC from Discord faucet
 

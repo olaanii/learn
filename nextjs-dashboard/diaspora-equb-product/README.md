@@ -22,7 +22,7 @@ This app digitizes that model on Creditcoin: **create or join pools**, **contrib
 4. **Payout**: the winner receives the round pot (streamed via the PayoutStream contract when applicable). Contributions for the next round continue.
 5. **Governance**: members can propose and vote on rule changes (e.g. frequency, grace period); the EqubGovernor contract executes approved proposals.
 
-The **backend** (NestJS) indexes chain and pool state, serves pool list/detail, builds transaction payloads (e.g. approve, contribute, selectWinner), and handles auth (JWT after wallet sign-in). It does **not** hold private keys or custody funds. The **frontend** (Flutter) connects wallets via WalletConnect, signs transactions in the user’s wallet, and talks to the backend for data and tx building.
+The **backend** (NestJS) indexes chain and pool state, serves pool list/detail, builds transaction payloads (e.g. approve, contribute, selectWinner), and handles auth (JWT after wallet sign-in). It does **not** hold private keys or custody funds. The **frontend** (Flutter) connects wallets via Privy, signs transactions in the user’s wallet, and talks to the backend for data and tx building.
 
 ### Tech stack
 
@@ -31,7 +31,7 @@ The **backend** (NestJS) indexes chain and pool state, serves pool list/detail, 
 | **Chain**   | Creditcoin (EVM), Solidity ^0.8.20, Hardhat |
 | **Contracts** | EqubPool, CollateralVault, PayoutStream, CreditRegistry, IdentityRegistry, TierRegistry, EqubGovernor, AchievementBadge, SwapRouter |
 | **Backend** | NestJS, TypeORM, PostgreSQL, optional Redis |
-| **Frontend**| Flutter (Dart), WalletConnect v2 (Reown), go_router, Provider |
+| **Frontend**| Flutter (Dart), Privy, go_router, Provider |
 
 ---
 
@@ -98,13 +98,13 @@ diaspora-equb-product/
    flutter pub get
    flutter run -d chrome
    ```
-   Set backend URL in app config or `.env` (e.g. `API_BASE_URL=http://localhost:3001/api`). For wallet connect you need a WalletConnect project ID (e.g. from [cloud.walletconnect.com](https://cloud.walletconnect.com)).
+   Set backend URL in app config or `.env` (e.g. `API_BASE_URL=http://localhost:3001/api`). For wallet auth you need `PRIVY_APP_ID` and `PRIVY_APP_CLIENT_ID` from your Privy dashboard.
 
 ---
 
 ## Learning path for developers
 
-This repo is a good reference for building a **DeFi app on an EVM chain** (here, Creditcoin): smart contracts, indexer-style backend, and a mobile-first frontend that uses WalletConnect and never sends private keys off-device.
+This repo is a good reference for building a **DeFi app on an EVM chain** (here, Creditcoin): smart contracts, indexer-style backend, and a mobile-first frontend that uses Privy-backed wallet auth and never sends private keys off-device.
 
 ### 1. Smart contracts (`contracts/`)
 
@@ -129,9 +129,9 @@ Start with `backend/src/pools/pools.service.ts` and `backend/src/web3/` to see h
 ### 3. Frontend (`frontend/`)
 
 - **Flutter**: one codebase for **web** and **Android**.
-- **WalletConnect**: Reown Sign (WalletConnect v2); connect and sign in `lib/providers/auth_provider.dart` and `lib/services/wallet_service.dart`.
+- **Wallet auth**: Privy custom auth + embedded wallet signing; connect and sign in `lib/providers/auth_provider.dart` and `lib/services/wallet_service.dart`.
 - **Screens**: home, pool browser, pool status, contribute, payout tracker (pick winner), collateral, governance, rules, swap, referrals, badges, profile.
-- **Config**: `lib/config/app_config.dart` — API base URL, chain ID, RPC, WalletConnect project ID (compile-time or env).
+- **Config**: `lib/config/app_config.dart` — API base URL, chain ID, RPC, `PRIVY_APP_ID`, `PRIVY_APP_CLIENT_ID` (compile-time or env).
 
 Good entry points: `lib/providers/pool_provider.dart`, `lib/screens/pool_status_screen.dart`, and `lib/screens/payout_tracker_screen.dart` (lottery flow).
 

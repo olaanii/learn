@@ -1225,8 +1225,8 @@ class _CreateEqubSheetState extends State<_CreateEqubSheet> {
           '[CreateEqub] Connect result: $addr, error: ${walletService.errorMessage}');
       if (addr == null) {
         setState(() => _isSubmitting = false);
-        _showSnack(walletService.errorMessage ??
-            'Connect MetaMask to sign the transaction');
+        _showSnack(
+            walletService.errorMessage ?? 'Connect your wallet to sign.');
         return;
       }
     }

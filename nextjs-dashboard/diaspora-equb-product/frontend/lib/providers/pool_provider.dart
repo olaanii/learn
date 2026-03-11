@@ -81,9 +81,9 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── On-Chain TX Builder Methods (WalletConnect signing) ────────────────────
+  // ─── On-Chain TX Builder Methods (wallet signing) ───────────────────────────
 
-  /// Build a create-pool TX from the backend, then sign & send via WalletConnect.
+  /// Build a create-pool TX from the backend, then sign & send via wallet.
   ///
   /// [token] - Optional ERC-20 token address for contributions.
   ///           Pass null or zero address for native CTC pools.
@@ -109,7 +109,7 @@ class PoolProvider extends ChangeNotifier {
         token: token,
       );
 
-      // 2. Sign and send via WalletConnect
+      // 2. Sign and send via wallet
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
@@ -238,7 +238,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a join-pool TX from the backend, then sign & send via WalletConnect.
+  /// Build a join-pool TX from the backend, then sign & send via wallet.
   /// Refreshes pool list on success so UI updates in real time.
   Future<String?> buildAndSignJoinPool(
     int onChainPoolId, {
@@ -277,7 +277,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a contribute TX from the backend, then sign & send via WalletConnect.
+  /// Build a contribute TX from the backend, then sign & send via wallet.
   ///
   /// For ERC-20 pools, pass [tokenAddress] so the backend returns value=0.
   /// The caller should ensure approval is done first via [buildAndSignApproveToken].
@@ -325,7 +325,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build an ERC-20 approve TX and sign via WalletConnect.
+  /// Build an ERC-20 approve TX and sign via wallet.
   /// Must be signed BEFORE contributing to an ERC-20 pool.
   Future<String?> buildAndSignApproveToken({
     required String tokenAddress,
@@ -381,7 +381,7 @@ class PoolProvider extends ChangeNotifier {
     );
   }
 
-  /// Build a close-round TX from the backend, then sign & send via WalletConnect.
+  /// Build a close-round TX from the backend, then sign & send via wallet.
   Future<String?> buildAndSignCloseRound(int onChainPoolId) async {
     _isLoading = true;
     _errorMessage = null;
@@ -408,7 +408,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a schedule-stream TX from the backend, then sign & send via WalletConnect.
+  /// Build a schedule-stream TX from the backend, then sign & send via wallet.
   Future<String?> buildAndSignScheduleStream({
     required int onChainPoolId,
     required String beneficiary,
@@ -657,7 +657,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  // ─── Legacy DB Methods (kept for dev/test without WalletConnect) ────────────
+  // ─── Legacy DB Methods (kept for dev/test without wallet signing) ───────────
 
   Future<bool> joinPool(String poolId, String walletAddress) async {
     try {

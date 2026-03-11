@@ -1,6 +1,15 @@
 # diaspora_equb_frontend
 
-Flutter mobile app for Diaspora Equb (DeFi).
+Flutter app for Diaspora Equb plus a Jaspr-rendered SEO landing page for Vercel deployments.
+
+## Web deployment split
+
+Production web deploys now serve two surfaces from the same Vercel project:
+
+- `/` serves a statically prerendered Jaspr landing page for SEO.
+- `/app` serves the existing Flutter web application.
+
+The Vercel build script assembles both outputs into a single deploy directory, and copies the shared marketing assets from `assets/` into the Jaspr landing build.
 
 ## Firebase auth setup
 
@@ -47,7 +56,8 @@ Example run using the root `.env` file:
 flutter run -d chrome \
   --dart-define-from-file=../.env \
   --dart-define=API_BASE_URL=http://localhost:3001/api \
-  --dart-define=WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
+  --dart-define=PRIVY_APP_ID=your_privy_app_id \
+  --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id
 ```
 
 Example web run with explicit Firebase values:
@@ -56,7 +66,8 @@ Example web run with explicit Firebase values:
 flutter run -d chrome \
   --dart-define-from-file=../.env \
   --dart-define=API_BASE_URL=http://10.0.2.2:3001/api \
-  --dart-define=WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id \
+  --dart-define=PRIVY_APP_ID=your_privy_app_id \
+  --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id \
   --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
 ```
 
@@ -73,7 +84,8 @@ Example Android run with explicit Firebase values:
 ```bash
 flutter run -d android \
   --dart-define=API_BASE_URL=http://localhost:3001/api \
-  --dart-define=WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id \
+  --dart-define=PRIVY_APP_ID=your_privy_app_id \
+  --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id \
   --dart-define=FIREBASE_API_KEY=your_api_key \
   --dart-define=FIREBASE_API_KEY=your_api_key \
   --dart-define=FIREBASE_APP_ID=your_android_app_id \
@@ -94,7 +106,8 @@ flutter run -d android \
 ```bash
 flutter run -d android \
   --dart-define=API_BASE_URL=http://10.0.2.2:3001/api \
-  --dart-define=WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id \
+  --dart-define=PRIVY_APP_ID=your_privy_app_id \
+  --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id \
   --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network \
   --dart-define=GOOGLE_WEB_CLIENT_ID=608960233059-mhrm5pcc4o7bhqvtuvn3n5dd0tn7c08b.apps.googleusercontent.com
 ```

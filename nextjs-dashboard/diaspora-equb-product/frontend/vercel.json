@@ -1,10 +1,11 @@
 {
-  "installCommand": "if [ ! -d .flutter ]; then git clone https://github.com/flutter/flutter.git --depth 1 -b stable .flutter; fi && .flutter/bin/flutter config --enable-web && .flutter/bin/flutter pub get",
+  "installCommand": "bash scripts/vercel_install.sh",
   "buildCommand": "bash scripts/vercel_build.sh",
-  "outputDirectory": "build/web",
+  "outputDirectory": "build/site",
   "framework": null,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/app", "destination": "/app/index.html" },
+    { "source": "/app/(.*)", "destination": "/app/index.html" }
   ],
   "headers": [
     {
@@ -24,19 +25,25 @@
       ]
     },
     {
-      "source": "/flutter_service_worker.js",
+      "source": "/app/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     },
     {
-      "source": "/flutter_bootstrap.js",
+      "source": "/app/flutter_service_worker.js",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     },
     {
-      "source": "/main.dart.js",
+      "source": "/app/flutter_bootstrap.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/app/main.dart.js",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]

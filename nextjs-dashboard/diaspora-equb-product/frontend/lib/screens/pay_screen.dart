@@ -92,8 +92,8 @@ class _PayScreenState extends State<PayScreen> {
     setState(() => _isSending = true);
 
     AppSnackbarService.instance.info(
-      message: 'Opening MetaMask to confirm...',
-      dedupeKey: 'pay_metamask_opening',
+      message: 'Opening wallet to confirm...',
+      dedupeKey: 'pay_wallet_opening',
       duration: const Duration(seconds: 2),
     );
 

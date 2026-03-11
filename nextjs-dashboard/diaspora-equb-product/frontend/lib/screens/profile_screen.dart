@@ -2,10 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../config/app_config.dart';
 import '../config/theme.dart';
@@ -134,6 +132,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
       dedupeKey: 'profile_privy_wallet_connected',
       duration: const Duration(seconds: 2),
     );
+  }
+
+  Future<String?> _promptWalletAddress(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        String? validationMessage;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Bind wallet address'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Wallet address',
+                      hintText: '0x...',
+                      errorText: validationMessage,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Use an EVM address that you control. This does not create a Privy session on web/desktop.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondaryColor(context),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final candidate = controller.text.trim();
+                    final isValid =
+                        RegExp(r'^0x[a-fA-F0-9]{40}$').hasMatch(candidate);
+                    if (!isValid) {
+                      setDialogState(() {
+                        validationMessage = 'Enter a valid EVM wallet address';
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(candidate);
+                  },
+                  child: const Text('Bind'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _promptAndBindManualWallet(
+    BuildContext context,
+    AuthProvider auth,
+  ) async {
+    final walletAddress = await _promptWalletAddress(context);
+    if (!mounted || walletAddress == null) {
+      return;
+    }
+
+    await _bindWalletAddress(context, auth, walletAddress);
+    if (!mounted || auth.errorMessage != null) {
+      return;
+    }
+
+    await auth.saveRememberedWallet(walletAddress);
+    _loadProfileData();
   }
 
   Future<String?> _promptWalletSlotLabel(
@@ -358,7 +436,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           network: network,
                         ),
                         const SizedBox(height: AppTheme.desktopSectionGap),
-                        _buildWalletConnectCard(
+                        _buildWalletCard(
                           context,
                           auth,
                           walletService,
@@ -414,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             network: network,
           ),
           const SizedBox(height: 20),
-          _buildWalletConnectCard(context, auth, walletService, network),
+          _buildWalletCard(context, auth, walletService, network),
           const SizedBox(height: 20),
           _buildCreditCard(context, auth, credit, network),
           const SizedBox(height: 20),
@@ -547,7 +625,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildWalletConnectCard(
+  Widget _buildWalletCard(
     BuildContext context,
     AuthProvider auth,
     WalletService walletService,
@@ -721,6 +799,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: () => _saveWalletSlot(context, auth, boundAddress),
                   icon: const Icon(Icons.inventory_2_outlined, size: 18),
                   label: const Text('Name bound wallet'),
+                ),
+              if (!isSupportedPlatform || !hasPrivyConfig)
+                OutlinedButton.icon(
+                  onPressed: () => _promptAndBindManualWallet(context, auth),
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text('Bind address manually'),
                 ),
             ],
           ),
@@ -1741,12 +1825,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Divider(height: 20),
           _buildInfoRow(context, 'API', apiHost),
           const Divider(height: 20),
-          _buildInfoRow(
-              context,
-              'WalletConnect',
-              walletService.hasWalletConnectProjectId
-                  ? 'Configured'
-                  : 'Missing project ID'),
+          _buildInfoRow(context, 'Privy config',
+              walletService.hasPrivyConfiguration ? 'Configured' : 'Missing'),
           const Divider(height: 20),
           _buildInfoRow(
               context, 'Unread notifications', '${notifications.unreadCount}'),
@@ -1964,629 +2044,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
-    );
-  }
-}
-
-enum _WalletPickerKind {
-  metaMask,
-  walletConnect,
-  okx,
-  binance,
-  creditcoin,
-}
-
-class _WalletPickerOption {
-  const _WalletPickerOption({
-    required this.kind,
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.connectionMethod,
-    this.badge,
-    this.usesWalletConnect = false,
-    this.prefersInjectedOnWeb = false,
-  });
-
-  final _WalletPickerKind kind;
-  final String title;
-  final String description;
-  final IconData icon;
-  final WalletConnectionMethod connectionMethod;
-  final String? badge;
-  final bool usesWalletConnect;
-  final bool prefersInjectedOnWeb;
-
-  WalletConnectionMethod resolveConnectionMethod(WalletService walletService) {
-    if (kIsWeb &&
-        prefersInjectedOnWeb &&
-        walletService.canUseInjectedProvider) {
-      return WalletConnectionMethod.injected;
-    }
-
-    if (!kIsWeb) {
-      switch (kind) {
-        case _WalletPickerKind.metaMask:
-          return WalletConnectionMethod.metaMaskApp;
-        case _WalletPickerKind.okx:
-          return WalletConnectionMethod.okxApp;
-        case _WalletPickerKind.binance:
-          return WalletConnectionMethod.binanceApp;
-        case _WalletPickerKind.walletConnect:
-        case _WalletPickerKind.creditcoin:
-          break;
-      }
-    }
-
-    return connectionMethod;
-  }
-}
-
-const List<_WalletPickerOption> _walletPickerOptions = [
-  _WalletPickerOption(
-    kind: _WalletPickerKind.metaMask,
-    title: 'MetaMask',
-    description:
-        'Use the installed MetaMask extension on web, or the MetaMask app path where supported.',
-    icon: Icons.account_balance_wallet_outlined,
-    connectionMethod: WalletConnectionMethod.injected,
-    prefersInjectedOnWeb: true,
-  ),
-  _WalletPickerOption(
-    kind: _WalletPickerKind.walletConnect,
-    title: 'WalletConnect',
-    description:
-        'Open a generic WalletConnect pairing and scan it with any compatible wallet.',
-    icon: Icons.qr_code_2_rounded,
-    connectionMethod: WalletConnectionMethod.walletConnect,
-    badge: 'WalletConnect',
-    usesWalletConnect: true,
-  ),
-  _WalletPickerOption(
-    kind: _WalletPickerKind.okx,
-    title: 'OKX Wallet',
-    description:
-        'Uses the browser extension on web when available, and attempts to open the OKX app directly on native before falling back to WalletConnect pairing.',
-    icon: Icons.account_balance_wallet_rounded,
-    connectionMethod: WalletConnectionMethod.walletConnect,
-    badge: 'WalletConnect',
-    usesWalletConnect: true,
-    prefersInjectedOnWeb: true,
-  ),
-  _WalletPickerOption(
-    kind: _WalletPickerKind.binance,
-    title: 'Binance Wallet',
-    description:
-        'Uses the browser extension on web when available, and attempts to open the Binance app directly on native before falling back to WalletConnect pairing.',
-    icon: Icons.currency_exchange_rounded,
-    connectionMethod: WalletConnectionMethod.walletConnect,
-    badge: 'WalletConnect',
-    usesWalletConnect: true,
-    prefersInjectedOnWeb: true,
-  ),
-  _WalletPickerOption(
-    kind: _WalletPickerKind.creditcoin,
-    title: 'Creditcoin Wallet',
-    description:
-        'Uses the browser extension on web when available, otherwise falls back to WalletConnect until a dedicated wallet integration exists.',
-    icon: Icons.shield_outlined,
-    connectionMethod: WalletConnectionMethod.walletConnect,
-    badge: 'WalletConnect',
-    usesWalletConnect: true,
-    prefersInjectedOnWeb: true,
-  ),
-];
-
-class _WalletPickerDialog extends StatefulWidget {
-  const _WalletPickerDialog({
-    required this.auth,
-    required this.walletService,
-    required this.network,
-    required this.onConnect,
-  });
-
-  final AuthProvider auth;
-  final WalletService walletService;
-  final NetworkProvider network;
-  final Future<bool> Function(_WalletPickerOption option) onConnect;
-
-  @override
-  State<_WalletPickerDialog> createState() => _WalletPickerDialogState();
-}
-
-class _WalletPickerDialogState extends State<_WalletPickerDialog> {
-  _WalletPickerKind _selectedKind = _WalletPickerKind.metaMask;
-  bool _isSubmitting = false;
-
-  _WalletPickerOption get _selectedOption => _walletPickerOptions.firstWhere(
-        (option) => option.kind == _selectedKind,
-      );
-
-  bool _isOptionEnabled(_WalletPickerOption option) {
-    if (kIsWeb && option.prefersInjectedOnWeb) {
-      return widget.walletService.canUseInjectedProvider ||
-          widget.walletService.hasWalletConnectProjectId;
-    }
-
-    if (option.kind == _WalletPickerKind.metaMask) {
-      if (kIsWeb) {
-        return widget.walletService.canUseInjectedProvider;
-      }
-      return widget.walletService.hasWalletConnectProjectId;
-    }
-
-    return widget.walletService.hasWalletConnectProjectId;
-  }
-
-  String _optionAvailabilityText(_WalletPickerOption option) {
-    if (kIsWeb && option.prefersInjectedOnWeb) {
-      if (widget.walletService.canUseInjectedProvider) {
-        return 'This browser session already has an injected EVM wallet extension, so ${option.title} will try the extension path first instead of showing QR.';
-      }
-
-      if (widget.walletService.hasWalletConnectProjectId) {
-        return 'No injected browser wallet was detected, so ${option.title} will fall back to WalletConnect pairing.';
-      }
-
-      return 'This option needs either a browser wallet extension or WalletConnect project configuration.';
-    }
-
-    if (!kIsWeb && option.kind == _WalletPickerKind.okx) {
-      return widget.walletService.hasWalletConnectProjectId
-          ? 'The app will try to hand off the WalletConnect pairing directly to OKX Wallet first. If that handoff is unavailable on this device, the QR pairing remains available.'
-          : 'WalletConnect project configuration is required for the OKX app handoff.';
-    }
-
-    if (!kIsWeb && option.kind == _WalletPickerKind.binance) {
-      return widget.walletService.hasWalletConnectProjectId
-          ? 'The app will try to hand off the WalletConnect pairing directly to Binance Wallet first. If that handoff is unavailable on this device, the QR pairing remains available.'
-          : 'WalletConnect project configuration is required for the Binance app handoff.';
-    }
-
-    if (option.kind == _WalletPickerKind.metaMask) {
-      if (kIsWeb) {
-        return widget.walletService.canUseInjectedProvider
-            ? 'Detected browser wallet extension. This will connect directly in the current web session.'
-            : 'MetaMask extension was not detected in this browser session.';
-      }
-
-      return widget.walletService.hasWalletConnectProjectId
-          ? 'Uses the MetaMask mobile app path backed by WalletConnect pairing.'
-          : 'WalletConnect project configuration is required for the MetaMask app path.';
-    }
-
-    return widget.walletService.hasWalletConnectProjectId
-        ? 'This choice launches the same real WalletConnect pairing flow for ${widget.network.shortNetworkName}.'
-        : 'WalletConnect project configuration is required before this choice can be used.';
-  }
-
-  Future<void> _handleConnect() async {
-    final option = _selectedOption;
-    if (_isSubmitting || !_isOptionEnabled(option)) {
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-    final success = await widget.onConnect(option);
-    if (!mounted) {
-      return;
-    }
-
-    setState(() => _isSubmitting = false);
-    if (success) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  Future<void> _handleCancel() async {
-    if (widget.walletService.isConnecting &&
-        !widget.walletService.isConnected) {
-      await widget.walletService.disconnect();
-    }
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      backgroundColor: Colors.transparent,
-      child: AnimatedBuilder(
-        animation: widget.walletService,
-        builder: (context, _) {
-          final selectedOption = _selectedOption;
-          final enabled = _isOptionEnabled(selectedOption);
-          final pairingUri = widget.walletService.pairingUri;
-          final hasPairingUri = pairingUri != null && pairingUri.isNotEmpty;
-          final errorText =
-              widget.walletService.errorMessage ?? widget.auth.errorMessage;
-
-          return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.cardColor(context),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: AppTheme.cardShadowFor(context),
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 640;
-                  final walletList = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Connect Wallet',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimaryColor(context),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppTheme.primaryColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              widget.network.networkName,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Choose a real wallet path. On web, branded wallets use the installed browser extension when available. On app flows, the wallet opens directly when a supported redirect exists.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textSecondaryColor(context),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      ..._walletPickerOptions.map(
-                        (option) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _WalletPickerOptionTile(
-                            option: option,
-                            selected: option.kind == _selectedKind,
-                            enabled: _isOptionEnabled(option),
-                            onTap: () {
-                              setState(() => _selectedKind = option.kind);
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-
-                  final detailPanel = Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color:
-                          AppTheme.cardColor(context).withValues(alpha: 0.58),
-                      borderRadius: BorderRadius.circular(18),
-                      border: AppTheme.borderFor(context, opacity: 0.06),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryColor
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                selectedOption.icon,
-                                size: 20,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    selectedOption.title,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.textPrimaryColor(context),
-                                    ),
-                                  ),
-                                  if (selectedOption.badge != null)
-                                    Text(
-                                      selectedOption.badge!,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color:
-                                            AppTheme.textTertiaryColor(context),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          selectedOption.description,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.textSecondaryColor(context),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _optionAvailabilityText(selectedOption),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: enabled
-                                ? AppTheme.textPrimaryColor(context)
-                                : AppTheme.textTertiaryColor(context),
-                          ),
-                        ),
-                        if (hasPairingUri &&
-                            selectedOption.usesWalletConnect &&
-                            !(kIsWeb &&
-                                selectedOption.prefersInjectedOnWeb &&
-                                widget
-                                    .walletService.canUseInjectedProvider)) ...[
-                          const SizedBox(height: 18),
-                          Text(
-                            'Scan this QR code with ${selectedOption.title}, or copy the pairing URI into a compatible wallet.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondaryColor(context),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppTheme.cardColor(context),
-                                borderRadius: BorderRadius.circular(14),
-                                border:
-                                    AppTheme.borderFor(context, opacity: 0.06),
-                              ),
-                              child: QrImageView(
-                                data: pairingUri,
-                                version: QrVersions.auto,
-                                size: compact ? 180 : 210,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: pairingUri),
-                                );
-                                AppSnackbarService.instance.info(
-                                  message: 'WalletConnect pairing URI copied',
-                                  dedupeKey: 'profile_pairing_uri_copied',
-                                  duration: const Duration(seconds: 2),
-                                );
-                              },
-                              icon: const Icon(Icons.copy_rounded, size: 16),
-                              label: const Text('Copy URI'),
-                            ),
-                          ),
-                        ],
-                        if (errorText != null && errorText.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            errorText,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.negative,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 18),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            FilledButton.icon(
-                              onPressed: enabled && !_isSubmitting
-                                  ? _handleConnect
-                                  : null,
-                              icon: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.arrow_forward_rounded,
-                                      size: 18,
-                                    ),
-                              label: Text(
-                                hasPairingUri &&
-                                        selectedOption.usesWalletConnect &&
-                                        !(kIsWeb &&
-                                            selectedOption
-                                                .prefersInjectedOnWeb &&
-                                            widget.walletService
-                                                .canUseInjectedProvider)
-                                    ? 'Awaiting wallet approval'
-                                    : 'Continue',
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _handleCancel,
-                              child: const Text('Cancel'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-
-                  return compact
-                      ? SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              walletList,
-                              const SizedBox(height: 18),
-                              detailPanel
-                            ],
-                          ),
-                        )
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: walletList),
-                            const SizedBox(width: 18),
-                            Expanded(child: detailPanel),
-                          ],
-                        );
-                },
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _WalletPickerOptionTile extends StatelessWidget {
-  const _WalletPickerOptionTile({
-    required this.option,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final _WalletPickerOption option;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = selected
-        ? AppTheme.primaryColor.withValues(alpha: 0.4)
-        : AppTheme.textHintColor(context).withValues(alpha: 0.15);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.primaryColor.withValues(alpha: 0.08)
-              : AppTheme.cardColor(context).withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppTheme.cardColor(context),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                option.icon,
-                size: 20,
-                color: enabled
-                    ? AppTheme.textPrimaryColor(context)
-                    : AppTheme.textTertiaryColor(context),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          option.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: enabled
-                                ? AppTheme.textPrimaryColor(context)
-                                : AppTheme.textTertiaryColor(context),
-                          ),
-                        ),
-                      ),
-                      if (option.badge != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.cardColor(context),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            option.badge!,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textSecondaryColor(context),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    enabled
-                        ? option.description
-                        : 'Unavailable in this session.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondaryColor(context),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -171,11 +171,26 @@ class ApiClient {
   }
 
   // ── Identity ──────────────────────────────────
-  Future<Map<String, dynamic>> bindWallet(
+  Future<Map<String, dynamic>> bindWalletChallenge(
       String identityHash, String walletAddress) async {
-    final response = await _dio.post('wallet/bind', data: {
+    final response = await _dio.post('wallet/bind/challenge', data: {
       'identityHash': identityHash,
       'walletAddress': walletAddress,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> bindWalletVerify({
+    required String identityHash,
+    required String walletAddress,
+    required String message,
+    required String signature,
+  }) async {
+    final response = await _dio.post('wallet/bind/verify', data: {
+      'identityHash': identityHash,
+      'walletAddress': walletAddress,
+      'message': message,
+      'signature': signature,
     });
     return response.data;
   }

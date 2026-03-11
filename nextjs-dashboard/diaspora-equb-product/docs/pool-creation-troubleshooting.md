@@ -10,9 +10,9 @@ Possible causes:
 
 | Symptom | Cause | What to do |
 |--------|--------|------------|
-| No wallet popup after clicking Create & Sign | Wallet not connected or WalletConnect session expired | Connect wallet (MetaMask / WalletConnect) and try again. |
-| User rejects the transaction | User clicked Reject in MetaMask | Click Create again and approve the transaction. |
-| "Transaction failed" or "rejected" in the app | Wrong network, insufficient gas, or RPC error | Switch MetaMask to **Creditcoin Testnet (chain ID 102031)**. Ensure the backend `RPC_URL` and `CHAIN_ID` match the app (e.g. testnet 102031). |
+| No wallet popup after clicking Create & Sign | Wallet not connected or session not active | Connect wallet and try again. |
+| User rejects the transaction | User clicked Reject in wallet | Click Create again and approve the transaction. |
+| "Transaction failed" or "rejected" in the app | Wrong network, insufficient gas, or RPC error | Switch wallet to **Creditcoin Testnet (chain ID 102031)**. Ensure the backend `RPC_URL` and `CHAIN_ID` match the app (e.g. testnet 102031). |
 | Transaction succeeds (tx hash shown) but new pool not in list | Indexer has not processed the block yet | Wait a few seconds and pull-to-refresh the pool list. Ensure the **indexer is running** (backend `npm run start:dev` starts it). |
 
 ## 2. Indexer must be running
@@ -27,6 +27,7 @@ Pools that exist **on-chain** appear in the app only after the **indexer** has s
 The app and backend are configured for **Creditcoin Testnet** (chain ID **102031**) by default. The wallet must be on the same network:
 
 - In MetaMask: add network **Creditcoin Testnet**, chain ID **102031**, RPC e.g. `https://rpc.cc3-testnet.creditcoin.network`.
+- In your wallet: add network **Creditcoin Testnet**, chain ID **102031**, RPC e.g. `https://rpc.cc3-testnet.creditcoin.network`.
 - The app now sends **chainId** in the transaction params so the wallet can switch or warn if the network is wrong.
 
 ## 4. Two types of “create” in the UI
@@ -106,7 +107,7 @@ Common reasons contribution fails:
 
 ## Summary checklist
 
-1. Wallet connected (MetaMask or WalletConnect).
+1. Wallet connected.
 2. Wallet on **Creditcoin Testnet (102031)**.
 3. User approves the transaction (does not reject).
 4. Backend and **indexer** are running; wait a few seconds and refresh the pool list after a successful tx.

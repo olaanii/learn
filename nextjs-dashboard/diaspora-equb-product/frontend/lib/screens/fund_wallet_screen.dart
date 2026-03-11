@@ -609,7 +609,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
                     context,
                     '2',
                     network.networkName,
-                    'Add network to MetaMask: RPC ${network.rpcUrl}, Chain ID ${network.chainId}',
+                    'Add this network to your wallet app: RPC ${network.rpcUrl}, Chain ID ${network.chainId}',
                   ),
                 ]);
               }),
@@ -698,7 +698,7 @@ class _FundWalletScreenState extends State<FundWalletScreen>
             icon: Icons.account_balance_wallet_outlined,
             title: 'Receive from Wallet',
             subtitle:
-                'Send tokens from MetaMask, Coinbase Wallet, or any EVM wallet to your Equb address below.',
+                'Send tokens from any EVM wallet (including Coinbase Wallet) to your Equb address below.',
             color: AppTheme.primaryColor,
           ),
           const SizedBox(height: 24),

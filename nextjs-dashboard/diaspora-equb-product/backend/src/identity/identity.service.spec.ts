@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { IdentityService } from './identity.service';
 import { Identity } from '../entities/identity.entity';
 import { Web3Service } from '../web3/web3.service';
@@ -29,6 +30,7 @@ describe('IdentityService', () => {
   };
 
   const mockNotifications = { create: jest.fn().mockResolvedValue({}) };
+  const mockJwtService = { sign: jest.fn().mockReturnValue('mock.jwt.token') };
 
   const mockIdentityRepo = {
     findOne: jest.fn(),
@@ -42,6 +44,7 @@ describe('IdentityService', () => {
         IdentityService,
         { provide: Web3Service, useValue: mockWeb3Service },
         { provide: NotificationsService, useValue: mockNotifications },
+        { provide: JwtService, useValue: mockJwtService },
         { provide: getRepositoryToken(Identity), useValue: mockIdentityRepo },
       ],
     }).compile();
@@ -64,7 +67,7 @@ describe('IdentityService', () => {
 
       const result = await service.bindWallet('0xHash', '0xWallet');
       expect(result.status).toBe('bound');
-      expect(result.walletAddress).toBe('0xWallet');
+      expect(result.walletAddress).toBe('0xwallet');
       expect(mockIdentityRepo.save).toHaveBeenCalled();
     });
 

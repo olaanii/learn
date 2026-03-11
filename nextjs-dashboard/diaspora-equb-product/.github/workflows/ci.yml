@@ -133,7 +133,8 @@ jobs:
         run: >
           flutter build apk --debug
           --dart-define=API_BASE_URL=https://equb-db.vercel.app/api
-          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          --dart-define=PRIVY_APP_ID=placeholder
+          --dart-define=PRIVY_APP_CLIENT_ID=placeholder
           --dart-define=CHAIN_ID=102031
           --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
 
@@ -141,7 +142,8 @@ jobs:
         run: >
           flutter build web --release
           --dart-define=API_BASE_URL=https://equb-db.vercel.app/api
-          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          --dart-define=PRIVY_APP_ID=placeholder
+          --dart-define=PRIVY_APP_CLIENT_ID=placeholder
           --dart-define=CHAIN_ID=102031
           --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
         continue-on-error: false

@@ -98,8 +98,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => _isSubmitting = true);
 
     AppSnackbarService.instance.info(
-      message: 'Opening MetaMask to confirm…',
-      dedupeKey: 'withdraw_metamask_opening',
+      message: 'Opening wallet to confirm…',
+      dedupeKey: 'withdraw_wallet_opening',
       duration: const Duration(seconds: 2),
     );
 

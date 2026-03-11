@@ -316,7 +316,7 @@ export class TokenService {
   }
 
   /**
-   * Get full transaction history for a wallet so it matches what MetaMask shows.
+    * Get full transaction history for a wallet so it matches wallet activity views.
    * Uses Blockscout API (all on-chain txs: native CTC, contract calls, failed/success).
    * Falls back to ERC-20 Transfer events only if Blockscout is unavailable.
    */
@@ -420,7 +420,7 @@ export class TokenService {
   }
 
   /**
-   * Fetch all transactions for an address from Blockscout (same data as MetaMask activity).
+    * Fetch all transactions for an address from Blockscout (same data as wallet activity views).
    * Includes native CTC transfers, contract calls, and failed txs.
    */
   private async getTransactionsFromBlockscout(

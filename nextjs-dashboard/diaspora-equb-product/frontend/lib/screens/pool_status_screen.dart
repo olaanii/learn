@@ -219,7 +219,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     if (!wallet.isConnected) {
       debugPrint('[Contribute] Wallet not connected, calling connect()...');
       AppSnackbarService.instance.info(
-        message: 'Connecting to MetaMask...',
+        message: 'Connecting wallet...',
         dedupeKey: 'pool_status_connecting_wallet',
         duration: const Duration(seconds: 2),
       );
@@ -230,7 +230,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       if (addr == null) {
         AppSnackbarService.instance.error(
           message: wallet.errorMessage ??
-              'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
+              'Wallet connection failed. Make sure your wallet is available and unlocked.',
           dedupeKey: 'pool_status_wallet_not_connected',
           duration: const Duration(seconds: 5),
         );
@@ -304,7 +304,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       debugPrint('[Contribute] FAILED: $err');
       AppSnackbarService.instance.error(
         message:
-            '$err\n\nMake sure you are a member of this equb, have enough $poolSymbol balance, and approve the transaction in MetaMask.',
+            '$err\n\nMake sure you are a member of this equb, have enough $poolSymbol balance, and approve the transaction in your wallet.',
         dedupeKey: 'pool_status_contribute_failed',
         duration: const Duration(seconds: 8),
       );
@@ -338,7 +338,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       if (addr == null) {
         AppSnackbarService.instance.error(
           message: wallet.errorMessage ??
-              'MetaMask connection failed. Make sure MetaMask is installed and unlocked.',
+              'Wallet connection failed. Make sure your wallet is available and unlocked.',
           dedupeKey: 'pool_status_wallet_not_connected_join',
           duration: const Duration(seconds: 5),
         );
@@ -348,7 +348,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
 
     setState(() => _isJoining = true);
     AppSnackbarService.instance.info(
-      message: 'Joining equb — confirm in MetaMask...',
+      message: 'Joining equb — confirm in wallet...',
       dedupeKey: 'pool_status_join_pending',
       duration: const Duration(seconds: 4),
     );
@@ -457,7 +457,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       final poolSym = _tokenSymbolFor(context);
       final label = 'Contribute $poolSym (Round $round)';
       const hint =
-          'Your wallet (MetaMask) will pop up to sign this transaction.';
+          'Your wallet will open to sign this transaction.';
 
       // Collateral gate: check if user has locked enough collateral for this pool
       final collateral = context.watch<CollateralProvider>();
