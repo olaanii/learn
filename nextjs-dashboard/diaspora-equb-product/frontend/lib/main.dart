@@ -33,7 +33,7 @@ Future<void> main() async {
   final firebaseAuthService = FirebaseAuthService();
   final profilePreferencesService = ProfilePreferencesService();
   final networkProvider = NetworkProvider();
-  final walletService = WalletService();
+  final walletService = WalletService(firebaseAuthService);
 
   await firebaseAuthService.initialize();
   await networkProvider.loadSavedNetwork();

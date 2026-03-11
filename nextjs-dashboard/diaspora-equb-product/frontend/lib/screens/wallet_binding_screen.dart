@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../providers/network_provider.dart';
 import '../services/wallet_service.dart';
 import '../config/theme.dart';
-import '../config/app_config.dart';
 import '../widgets/desktop_layout.dart';
 
 class WalletBindingScreen extends StatefulWidget {
@@ -61,7 +59,7 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
           const DesktopSectionTitle(
             title: 'Wallet Binding',
             subtitle:
-                'Bind one verified identity to one EVM wallet with WalletConnect or manual entry',
+                'Bind one verified identity to one Privy wallet or enter an address manually',
           ),
           const SizedBox(height: 18),
           Expanded(
@@ -122,12 +120,12 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Connect your EVM wallet to your Fayda identity via WalletConnect. '
-          'This creates a one-to-one binding that enables non-custodial transactions.',
+          'Create or restore your Privy embedded wallet, then bind it to your Fayda identity. '
+          'You can still enter an address manually for admin or recovery flows.',
           style: TextStyle(color: AppTheme.textSecondaryColor(context)),
         ),
         const SizedBox(height: 32),
-        if (AppConfig.walletConnectProjectId.isNotEmpty) ...[
+        if (wallet.isSupportedPlatform && wallet.hasPrivyConfiguration) ...[
           ElevatedButton.icon(
             onPressed: wallet.isConnecting || _isBinding
                 ? null
@@ -148,52 +146,11 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                 : const Icon(Icons.account_balance_wallet),
             label: Text(wallet.isConnecting
                 ? 'Connecting...'
-                : 'Connect with WalletConnect'),
+                : 'Connect Privy Wallet'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
-          if (wallet.pairingUri != null && wallet.pairingUri!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Text(
-                      'Scan with your wallet (${context.read<NetworkProvider>().networkName})',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardColor(context),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: QrImageView(
-                        data: wallet.pairingUri!,
-                        version: QrVersions.auto,
-                        size: 220,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Waiting for wallet approval...',
-                      style: TextStyle(
-                        color: AppTheme.textSecondaryColor(context),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
           TextButton(
             onPressed: () =>
@@ -202,8 +159,22 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
                 ? 'Hide manual entry'
                 : 'Enter address manually instead'),
           ),
+        ] else ...[
+          Text(
+            wallet.isSupportedPlatform
+                ? 'Add PRIVY_APP_ID and PRIVY_APP_CLIENT_ID to enable embedded wallets in this build.'
+                : 'Privy embedded wallets are only available on Android and iOS. Use manual entry on this platform.',
+            style: TextStyle(color: AppTheme.textSecondaryColor(context)),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => setState(() => _showManualEntry = true),
+            child: const Text('Enter address manually instead'),
+          ),
         ],
-        if (_showManualEntry || AppConfig.walletConnectProjectId.isEmpty) ...[
+        if (_showManualEntry ||
+            !wallet.isSupportedPlatform ||
+            !wallet.hasPrivyConfiguration) ...[
           const SizedBox(height: 16),
           Form(
             key: _formKey,
@@ -352,12 +323,8 @@ class _WalletBindingScreenState extends State<WalletBindingScreen> {
         const SizedBox(height: 12),
         _buildNoteRow(context, 'Target network', network.networkName),
         const SizedBox(height: 10),
-        _buildNoteRow(
-            context,
-            'WalletConnect',
-            AppConfig.walletConnectProjectId.isEmpty
-                ? 'Disabled'
-                : 'Configured'),
+        _buildNoteRow(context, 'Privy',
+          context.watch<WalletService>().hasPrivyConfiguration ? 'Configured' : 'Disabled'),
         const SizedBox(height: 10),
         _buildNoteRow(
             context, 'Binding model', 'One verified identity to one wallet'),

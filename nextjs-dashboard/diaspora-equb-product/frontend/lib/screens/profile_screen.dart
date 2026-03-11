@@ -74,12 +74,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     BuildContext context,
     AuthProvider auth,
     WalletService walletService,
-    _WalletPickerOption option,
   ) async {
     final previousBoundAddress = auth.walletAddress;
-    final method = option.resolveConnectionMethod(walletService);
 
-    await auth.connectWallet(method: method);
+    await auth.connectWallet();
     if (!mounted) {
       return false;
     }
@@ -107,23 +105,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return true;
   }
 
-  Future<void> _openWalletPicker(
+  Future<void> _connectPrivyWallet(
     BuildContext context,
     AuthProvider auth,
     WalletService walletService,
-    NetworkProvider network,
   ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return _WalletPickerDialog(
-          auth: auth,
-          walletService: walletService,
-          network: network,
-          onConnect: (option) =>
-              _connectAndAutoBindWallet(context, auth, walletService, option),
-        );
-      },
+    final connected = await _connectAndAutoBindWallet(
+      context,
+      auth,
+      walletService,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    if (!connected) {
+      AppSnackbarService.instance.error(
+        message: walletService.errorMessage ??
+            auth.errorMessage ??
+            'Privy wallet connection failed.',
+        dedupeKey: 'profile_privy_wallet_connect_failed',
+      );
+      return;
+    }
+
+    AppSnackbarService.instance.success(
+      message: 'Privy wallet connected.',
+      dedupeKey: 'profile_privy_wallet_connected',
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -544,14 +553,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     WalletService walletService,
     NetworkProvider network,
   ) {
-    final hasProjectId = walletService.hasWalletConnectProjectId;
-    final hasInjectedWallet = walletService.canUseInjectedProvider;
+    final hasPrivyConfig = walletService.hasPrivyConfiguration;
+    final isSupportedPlatform = walletService.isSupportedPlatform;
     final connected = walletService.isConnected;
     final wcAddress = walletService.walletAddress;
     final boundAddress = auth.walletAddress;
     final rememberedWallets = auth.rememberedWallets;
-    final onlyInjectedAvailable = hasInjectedWallet && !hasProjectId;
-    final noWalletRailAvailable = !hasInjectedWallet && !hasProjectId;
 
     return Container(
       width: double.infinity,
@@ -594,7 +601,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Manage which wallet is connected right now and which one is bound to your app identity on ${network.networkName}.',
+            'Manage your Privy wallet session and the wallet bound to your app identity on ${network.networkName}.',
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.textTertiaryColor(context),
@@ -632,20 +639,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? _shortenAddress(wcAddress)
                 : 'No wallet connected',
             description: connected && wcAddress != null
-                ? 'This wallet is active for signing on ${network.shortNetworkName}. New connections automatically bind to your profile.'
-                : 'Connect a browser wallet or WalletConnect-compatible wallet for signing on ${network.networkName}.',
+                ? 'This Privy wallet is active for signing on ${network.shortNetworkName}. New connections automatically bind to your profile.'
+                : 'Create or restore a Privy wallet for signing on ${network.networkName}.',
           ),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: walletService.isConnecting
+              onPressed: walletService.isConnecting ||
+                      !isSupportedPlatform ||
+                      !hasPrivyConfig
                   ? null
-                  : () => _openWalletPicker(
+                  : () => _connectPrivyWallet(
                         context,
                         auth,
                         walletService,
-                        network,
                       ),
               icon: walletService.isConnecting
                   ? const SizedBox(
@@ -655,29 +663,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     )
                   : Icon(
                       connected
-                          ? Icons.swap_horiz_rounded
+                          ? Icons.refresh_rounded
                           : Icons.account_balance_wallet_outlined,
                       size: 18,
                     ),
-              label: Text(connected ? 'Switch Wallet' : 'Connect Wallet'),
+              label: Text(connected
+                  ? 'Reconnect Privy Wallet'
+                  : 'Connect Privy Wallet'),
             ),
           ),
-          if (onlyInjectedAvailable || noWalletRailAvailable) ...[
+          if (!isSupportedPlatform || !hasPrivyConfig) ...[
             const SizedBox(height: 10),
             Text(
-              onlyInjectedAvailable
-                  ? 'MetaMask extension is the only live wallet path available in this session. Add WALLETCONNECT_PROJECT_ID to enable WalletConnect-powered choices.'
-                  : 'No wallet transport is available in this build yet. Install a browser wallet or configure WALLETCONNECT_PROJECT_ID to enable real WalletConnect pairing.',
+              !isSupportedPlatform
+                  ? 'Privy embedded wallets are only available on Android and iOS. Manual wallet binding remains available on web and desktop.'
+                  : 'Add PRIVY_APP_ID and PRIVY_APP_CLIENT_ID to enable embedded wallets in this build.',
               style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textTertiaryColor(context),
               ),
             ),
           ],
-          if (hasProjectId) ...[
+          if (hasPrivyConfig && isSupportedPlatform) ...[
             const SizedBox(height: 10),
             Text(
-              'WalletConnect, OKX Wallet, Binance Wallet, and Creditcoin wallet choices all use the same real WalletConnect pairing flow on ${network.shortNetworkName}.',
+              'Privy uses your signed-in app identity to restore the same embedded wallet session on ${network.shortNetworkName}.',
               style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textTertiaryColor(context),

@@ -457,7 +457,9 @@ class AuthProvider extends ChangeNotifier {
       // 2. Bind the wallet address from WalletConnect to the identity
       final response = await _api.bindWallet(_identityHash!, address);
       if (response['status'] == 'bound') {
-        await _applyAuthenticatedSession(response);
+        await _applyAuthenticatedSession(
+          _withPreferredWallet(response, address),
+        );
         await _rememberWallet(address);
       } else {
         _errorMessage = 'Wallet binding failed: ${response['status']}';
@@ -483,7 +485,9 @@ class AuthProvider extends ChangeNotifier {
     try {
       final response = await _api.bindWallet(_identityHash!, walletAddress);
       if (response['status'] == 'bound') {
-        await _applyAuthenticatedSession(response);
+        await _applyAuthenticatedSession(
+          _withPreferredWallet(response, walletAddress),
+        );
         await _rememberWallet(walletAddress);
       } else {
         _errorMessage = 'Wallet binding failed: ${response['status']}';
@@ -731,6 +735,17 @@ class AuthProvider extends ChangeNotifier {
         ? hex.substring(0, 64)
         : (hex + '0' * (64 - hex.length));
     return '0x$normalized';
+  }
+
+  Map<String, dynamic> _withPreferredWallet(
+    Map<String, dynamic> response,
+    String walletAddress,
+  ) {
+    return {
+      ...response,
+      'walletAddress': walletAddress,
+      'walletBindingStatus': response['walletBindingStatus'] ?? 'bound',
+    };
   }
 
   Future<void> _applyAuthenticatedSession(

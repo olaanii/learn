@@ -82,11 +82,17 @@ class AppConfig {
     defaultValue: false,
   );
 
-  /// WalletConnect project ID from https://cloud.walletconnect.com
-  /// Required for WalletConnect v2 pairing.
-  /// Override via --dart-define=WALLETCONNECT_PROJECT_ID=...
-  static const String walletConnectProjectId = String.fromEnvironment(
-    'WALLETCONNECT_PROJECT_ID',
+  /// Privy application ID from the Privy dashboard.
+  /// Override via --dart-define=PRIVY_APP_ID=...
+  static const String privyAppId = String.fromEnvironment(
+    'PRIVY_APP_ID',
+    defaultValue: '',
+  );
+
+  /// Privy client ID from the Privy dashboard.
+  /// Override via --dart-define=PRIVY_APP_CLIENT_ID=...
+  static const String privyAppClientId = String.fromEnvironment(
+    'PRIVY_APP_CLIENT_ID',
     defaultValue: '',
   );
 

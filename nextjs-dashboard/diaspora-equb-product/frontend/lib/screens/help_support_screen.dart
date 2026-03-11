@@ -32,7 +32,7 @@ class HelpSupportScreen extends StatelessWidget {
               eyebrow: 'Wallet setup',
               title: 'Wallet connection',
               body:
-                  'Wallet connection is optional during setup. You can connect MetaMask, Trust Wallet, or another WalletConnect-compatible wallet later from Profile.',
+                'Wallet connection is optional during setup. On mobile, you can create or restore a Privy embedded wallet later from Profile. Web and desktop can still use manual wallet binding where needed.',
               footer:
                   'Use Profile to manage connected wallets, bound wallets, and saved wallet slots.',
             ),

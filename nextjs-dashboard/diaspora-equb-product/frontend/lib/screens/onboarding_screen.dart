@@ -268,9 +268,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             iconBgColor: AppTheme.primaryColor.withValues(alpha: 0.12),
             iconColor: AppTheme.primaryColor,
             title: 'Sign in or sign up next',
-            subtitle: AppConfig.walletConnectProjectId.isEmpty
-                ? 'Email/password and Google sign-in come first. Wallet setup stays optional and can be added later from Profile.'
-                : 'Email/password and Google sign-in come first. Wallet setup stays optional and can be added later from Profile.',
+            subtitle:
+              'Email/password and Google sign-in come first. Wallet setup stays optional and can be added later from Profile.',
             trailing: Icon(
               Icons.arrow_forward_ios_rounded,
               size: 16,
