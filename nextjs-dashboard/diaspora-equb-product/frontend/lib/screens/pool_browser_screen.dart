@@ -387,9 +387,9 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                             controller: _searchController,
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
-                              hintText: 'Search by name, creator, or on-chain id',
-                              prefixIcon:
-                                  Icon(Icons.search_rounded, size: 20),
+                              hintText:
+                                  'Search by name, creator, or on-chain id',
+                              prefixIcon: Icon(Icons.search_rounded, size: 20),
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(
                                   vertical: 12, horizontal: 12),
@@ -400,7 +400,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                         SizedBox(
                           height: 46,
                           child: OutlinedButton.icon(
-                            onPressed: pool.isLoading ? null : () => pool.loadPools(),
+                            onPressed:
+                                pool.isLoading ? null : () => pool.loadPools(),
                             icon: const Icon(Icons.refresh_rounded, size: 18),
                             label: const Text('Refresh'),
                           ),
@@ -446,28 +447,28 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                 ),
               )
             else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Search equbs...',
-                        prefixIcon: Icon(Icons.search_rounded, size: 20),
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          hintText: 'Search equbs...',
+                          prefixIcon: Icon(Icons.search_rounded, size: 20),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 12),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  _buildFilterIconButton(context),
-                ],
+                    const SizedBox(width: 10),
+                    _buildFilterIconButton(context),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 10),
             _buildCategoryChips(horizontalPadding: desktop ? 24 : 20),
             Padding(
@@ -533,8 +534,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                                                     : 2;
                                             return GridView.builder(
                                               padding:
-                                                const EdgeInsets.fromLTRB(
-                                                  24, 0, 24, 24),
+                                                  const EdgeInsets.fromLTRB(
+                                                      24, 0, 24, 24),
                                               gridDelegate:
                                                   SliverGridDelegateWithFixedCrossAxisCount(
                                                 crossAxisCount: columns,
