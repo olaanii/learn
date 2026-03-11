@@ -947,6 +947,17 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                               ),
                             ),
                             const SizedBox(height: AppTheme.desktopSectionGap),
+                            _buildDesktopOverviewStrip(
+                              context,
+                              pool: pool,
+                              memberCount: memberCount,
+                              maxMembers: maxMembers,
+                              currentRound: currentRound,
+                              currentRoundStatus: currentRoundStatus,
+                              isPoolAdmin: isPoolAdmin,
+                              seasonComplete: seasonComplete,
+                            ),
+                            const SizedBox(height: AppTheme.desktopSectionGap),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1129,6 +1140,116 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
               minHeight: 6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopOverviewStrip(
+    BuildContext context, {
+    required Map<String, dynamic> pool,
+    required int memberCount,
+    required int maxMembers,
+    required int currentRound,
+    required String currentRoundStatus,
+    required bool isPoolAdmin,
+    required bool seasonComplete,
+  }) {
+    final onChainPoolId = pool['onChainPoolId']?.toString();
+    final occupancy = maxMembers > 0
+        ? '${((memberCount / maxMembers) * 100).round()}% full'
+        : 'Awaiting member target';
+    final statusLabel = currentRoundStatus.isEmpty
+        ? 'Pending'
+        : '${currentRoundStatus[0].toUpperCase()}${currentRoundStatus.substring(1)}';
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildDesktopOverviewMetric(
+            context,
+            icon: Icons.groups_rounded,
+            label: 'Members',
+            value: '$memberCount/$maxMembers',
+            detail: occupancy,
+          ),
+        ),
+        const SizedBox(width: AppTheme.desktopPanelGap),
+        Expanded(
+          child: _buildDesktopOverviewMetric(
+            context,
+            icon: Icons.autorenew_rounded,
+            label: 'Round Status',
+            value: 'Round $currentRound',
+            detail: statusLabel,
+          ),
+        ),
+        const SizedBox(width: AppTheme.desktopPanelGap),
+        Expanded(
+          child: _buildDesktopOverviewMetric(
+            context,
+            icon: isPoolAdmin
+                ? Icons.admin_panel_settings_outlined
+                : Icons.account_tree_outlined,
+            label: 'Workspace Access',
+            value: isPoolAdmin ? 'Creator Controls' : 'Member View',
+            detail: seasonComplete
+                ? 'Season complete'
+                : (onChainPoolId == null
+                    ? 'Awaiting on-chain sync'
+                    : 'Pool #$onChainPoolId'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopOverviewMetric(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required String detail,
+  }) {
+    return DesktopCardSection(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.buttonColor(context).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, size: 22, color: AppTheme.buttonColor(context)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
           ),
         ],

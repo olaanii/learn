@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
-import '../config/app_config.dart';
 import '../config/theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -277,7 +276,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             onTap: () async {
               await context.read<AuthProvider>().completeOnboarding();
-              if (!context.mounted) {
+              if (!mounted) {
                 return;
               }
               context.go('/auth');

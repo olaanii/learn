@@ -84,7 +84,7 @@ class _DesktopLandingScreenState extends State<DesktopLandingScreen> {
                                     children: [
                                       _HeroCopyPanel(key: _heroKey),
                                       const SizedBox(height: 14),
-                                      _HeroVisualPanel(
+                                      const _HeroVisualPanel(
                                         heroPreviewAsset: _heroPreviewAsset,
                                       ),
                                     ],
@@ -103,7 +103,7 @@ class _DesktopLandingScreenState extends State<DesktopLandingScreen> {
                                         const SizedBox(width: 14),
                                         Expanded(
                                           flex: 11,
-                                          child: _HeroVisualPanel(
+                                          child: const _HeroVisualPanel(
                                             heroPreviewAsset: _heroPreviewAsset,
                                           ),
                                         ),
@@ -464,9 +464,9 @@ class _HeroDeviceFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return const Stack(
       alignment: Alignment.center,
-      children: const [
+      children: [
         Positioned(
           left: 92,
           top: 36,
@@ -720,9 +720,9 @@ class _PhoneChartCard extends StatelessWidget {
                 ),
           ),
           const Spacer(),
-          Row(
+          const Row(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
+            children: [
               _MiniBar(height: 28),
               SizedBox(width: 8),
               _MiniBar(height: 44),
@@ -841,8 +841,8 @@ class _SecurityPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          Row(
-            children: const [
+          const Row(
+            children: [
               Expanded(
                 child: _FeatureTile(
                   icon: Icons.lock_rounded,
@@ -960,9 +960,9 @@ class _InsightsPanel extends StatelessWidget {
             child: _InsightsChart(),
           ),
           const SizedBox(height: 16),
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               _LegendStat(label: 'Collection', value: '42%'),
               _LegendStat(label: 'Payouts', value: '31%'),
               _LegendStat(label: 'Reserve', value: '27%'),
@@ -1012,11 +1012,11 @@ class _InsightsChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const Row(
       children: [
         Expanded(
           child: Stack(
-            children: const [
+            children: [
               Center(child: _ArcChart()),
               Positioned(
                   top: 36, left: 10, child: _ChartLabel(label: 'reserve')),

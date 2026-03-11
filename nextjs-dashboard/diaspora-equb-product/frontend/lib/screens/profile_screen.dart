@@ -52,7 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _bindWalletAddress(
-    BuildContext context,
     AuthProvider auth,
     String walletAddress,
   ) async {
@@ -93,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 connectedAddress.toLowerCase());
 
     if (shouldBind) {
-      await _bindWalletAddress(context, auth, connectedAddress);
+      await _bindWalletAddress(auth, connectedAddress);
       if (!mounted || auth.errorMessage != null) {
         return false;
       }
@@ -205,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    await _bindWalletAddress(context, auth, walletAddress);
+    await _bindWalletAddress(auth, walletAddress);
     if (!mounted || auth.errorMessage != null) {
       return;
     }
@@ -394,7 +393,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: DesktopContent(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              DesktopSectionTitle(
+                title: 'Profile',
+                subtitle:
+                    'Manage your account identity, wallet access, preferences, and desktop session health from one workspace.',
+                trailing: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color:
+                        AppTheme.textHintColor(context).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    network.shortNetworkName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondaryColor(context),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppTheme.desktopSectionGap),
+              _buildDesktopProfileOverviewStrip(
+                context,
+                auth: auth,
+                credit: credit,
+                wallet: wallet,
+                notifications: notifications,
+                network: network,
+              ),
+              const SizedBox(height: AppTheme.desktopSectionGap),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -587,6 +619,106 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildDesktopProfileOverviewStrip(
+    BuildContext context, {
+    required AuthProvider auth,
+    required CreditProvider credit,
+    required WalletProvider wallet,
+    required NotificationProvider notifications,
+    required NetworkProvider network,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildDesktopProfileMetric(
+            context,
+            icon: Icons.account_balance_wallet_outlined,
+            label: 'Wallet Balance',
+            value: '${wallet.balance} ${network.nativeSymbol}',
+            detail: auth.walletAddress == null
+                ? 'Bind a wallet to unlock full account controls'
+                : 'Active account balance on ${network.shortNetworkName}',
+          ),
+        ),
+        const SizedBox(width: AppTheme.desktopPanelGap),
+        Expanded(
+          child: _buildDesktopProfileMetric(
+            context,
+            icon: Icons.verified_user_outlined,
+            label: 'Credit Tier',
+            value: credit.eligibleTier > 0
+                ? 'Tier ${credit.eligibleTier}'
+                : 'Unrated',
+            detail: 'Score ${credit.score} · Max pool ${credit.maxPoolSize}',
+          ),
+        ),
+        const SizedBox(width: AppTheme.desktopPanelGap),
+        Expanded(
+          child: _buildDesktopProfileMetric(
+            context,
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            value: '${notifications.unreadCount} unread',
+            detail: notifications.unreadCount > 0
+                ? 'There are account actions waiting for review'
+                : 'Your desktop inbox is currently clear',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopProfileMetric(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required String detail,
+  }) {
+    return DesktopCardSection(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppTheme.buttonColor(context).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, size: 22, color: AppTheme.buttonColor(context)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1024,7 +1156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               FilledButton.tonal(
                 onPressed: isBound
                     ? null
-                    : () => _bindWalletAddress(context, auth, slot.address),
+                    : () => _bindWalletAddress(auth, slot.address),
                 child: Text(isBound ? 'Active app wallet' : 'Bind this wallet'),
               ),
               OutlinedButton(
@@ -1382,7 +1514,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           insights.summaryError ??
                               insights.joinedError ??
                               'Failed to load operations data.',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
                             color: AppTheme.negative,
                           ),

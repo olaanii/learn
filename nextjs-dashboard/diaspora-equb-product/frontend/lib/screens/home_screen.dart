@@ -745,7 +745,6 @@ class _HomeScreenState extends State<HomeScreen> {
     required double balanceNum,
     required int notifications,
   }) {
-    final mutedColor = AppTheme.textTertiaryColor(context);
     final heroBalance =
         _balanceVisible ? '\$${_formatBalance(balanceNum)}' : '••••••';
 
@@ -1604,7 +1603,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _DesktopLegendDot(
@@ -1621,74 +1620,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDesktopAppCard(BuildContext context) {
-    return DesktopCardSection(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primaryColor,
-                  AppTheme.secondaryColor,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset('assets/logo.png', fit: BoxFit.cover),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Open the mobile app',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Keep payouts and wallet checks visible even when you leave the desktop workspace.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.82),
-                        height: 1.55,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => context.go('/'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppTheme.primaryColor,
-                    ),
-                    child: const Text('Open Landing'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildQuickActions(context, forceGrid: true, compactCards: true),
         ],
       ),
     );
@@ -3356,103 +3287,6 @@ class _HomeActionData {
   });
 }
 
-class _DesktopOverviewStatCard extends StatelessWidget {
-  final double width;
-  final String title;
-  final String value;
-  final String detail;
-  final IconData icon;
-  final bool accent;
-
-  const _DesktopOverviewStatCard({
-    required this.width,
-    required this.title,
-    required this.value,
-    required this.detail,
-    required this.icon,
-    this.accent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final background = accent
-        ? const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppTheme.secondaryColor, AppTheme.primaryColor],
-          )
-        : null;
-
-    return SizedBox(
-      width: width,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: accent ? null : AppTheme.cardColor(context),
-          gradient: background,
-          borderRadius: BorderRadius.circular(22),
-          border: accent ? null : AppTheme.borderFor(context, opacity: 0.04),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: accent
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : AppTheme.textPrimaryColor(context),
-                        ),
-                  ),
-                ),
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: accent
-                        ? Colors.white.withValues(alpha: 0.16)
-                        : AppTheme.backgroundLight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 18,
-                    color: accent
-                        ? Colors.white
-                        : AppTheme.textPrimaryColor(context),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: accent
-                        ? Colors.white
-                        : AppTheme.textPrimaryColor(context),
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              detail,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: accent
-                        ? Colors.white.withValues(alpha: 0.82)
-                        : AppTheme.textTertiaryColor(context),
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _DesktopHeroMetricTile extends StatelessWidget {
   final String title;
   final String value;
@@ -3549,7 +3383,7 @@ class _DesktopArcGaugePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stroke = 26.0;
+    const stroke = 26.0;
     final rect = Rect.fromCircle(
       center: Offset(size.width / 2, size.height / 2),
       radius: math.min(size.width, size.height) / 2 - stroke / 2,

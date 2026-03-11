@@ -65,7 +65,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
     if (!mounted) return;
     setState(() => _saving = false);
-    Navigator.of(context).maybePop();
+    await Navigator.of(context).maybePop();
   }
 
   @override

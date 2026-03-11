@@ -6,7 +6,7 @@ class App extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return main_(classes: 'landing-shell', [
+    return const main_(classes: 'landing-shell', [
       header(classes: 'landing-header', [
         a(href: '/', classes: 'brand-card', [
           img(src: '/assets/logo.png', alt: 'Diaspora Equb logo'),
@@ -24,7 +24,7 @@ class App extends StatelessComponent {
       ]),
       section(
         classes: 'hero-grid',
-        attributes: const {'id': 'company'},
+        attributes: {'id': 'company'},
         [
           section(classes: 'panel hero-copy', [
             div(classes: 'eyebrow', [.text('Desktop-first savings workspace')]),
@@ -62,7 +62,7 @@ class App extends StatelessComponent {
       section(classes: 'content-grid', [
         section(
           classes: 'panel feature-panel',
-          attributes: const {'id': 'features'},
+          attributes: {'id': 'features'},
           [
             div(classes: 'section-label', [
               .text('Security and orchestration'),
@@ -98,7 +98,7 @@ class App extends StatelessComponent {
         ),
         aside(
           classes: 'panel insight-panel',
-          attributes: const {'id': 'insights'},
+          attributes: {'id': 'insights'},
           [
             div(classes: 'section-label', [.text('How it works')]),
             h2([.text('Three calmer steps to run an Equb round.')]),

@@ -75,6 +75,10 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (AppTheme.isDesktop(context)) {
+      return _buildDesktopScreen(context);
+    }
+
     final content = Column(
       children: [
         Padding(
@@ -83,30 +87,7 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Equbs', style: Theme.of(context).textTheme.headlineLarge),
-              GestureDetector(
-                onTap: () => _showCreateDialog(context),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.buttonColor(context),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add_rounded,
-                          size: 18, color: AppTheme.buttonTextColor(context)),
-                      const SizedBox(width: 4),
-                      Text('Create',
-                          style: TextStyle(
-                              color: AppTheme.buttonTextColor(context),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ),
+              _buildCreateButton(context),
             ],
           ),
         ),
@@ -138,18 +119,254 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
       ],
     );
 
-    if (AppTheme.isDesktop(context)) {
-      return DesktopContent(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-        child: content,
-      );
-    }
-
     return content;
   }
 
   bool get _hasActiveFilters =>
-      _selectedFrequency != 'All' || _selectedSort != 'Newest';
+      _selectedCategory != 'All' ||
+      _selectedFrequency != 'All' ||
+      _selectedSort != 'Newest';
+
+  Widget _buildDesktopScreen(BuildContext context) {
+    return DesktopContent(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DesktopSectionTitle(
+            title: 'Equbs',
+            subtitle:
+                'Browse live groups, monitor your memberships, and launch new Equbs from a desktop-first workspace.',
+            trailing: _buildCreateButton(context, large: true),
+          ),
+          const SizedBox(height: AppTheme.desktopSectionGap),
+          _buildDesktopOverviewStrip(context),
+          const SizedBox(height: AppTheme.desktopSectionGap),
+          Expanded(
+            child: DesktopCardSection(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Workspace',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.textHintColor(context)
+                                .withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            'Desktop browse mode',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondaryColor(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorColor: AppTheme.accentYellowDark,
+                      labelColor: AppTheme.textPrimaryColor(context),
+                      unselectedLabelColor: AppTheme.textTertiaryColor(context),
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      tabs: const [
+                        Tab(text: 'Browse Equbs'),
+                        Tab(text: 'My Equbs'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Divider(
+                    height: 1,
+                    color:
+                        AppTheme.textHintColor(context).withValues(alpha: 0.35),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildBrowseTab(context),
+                        _buildMyEqubsTab(context),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateButton(BuildContext context, {bool large = false}) {
+    return GestureDetector(
+      onTap: () => _showCreateDialog(context),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: large ? 18 : 14,
+          vertical: large ? 10 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: AppTheme.buttonColor(context),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.add_rounded,
+              size: large ? 20 : 18,
+              color: AppTheme.buttonTextColor(context),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Create Equb',
+              style: TextStyle(
+                color: AppTheme.buttonTextColor(context),
+                fontSize: large ? 14 : 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopOverviewStrip(BuildContext context) {
+    return Consumer2<PoolProvider, AuthProvider>(
+      builder: (context, pool, auth, _) {
+        final wallet = auth.walletAddress?.toLowerCase() ?? '';
+        final myPools = pool.pools.where((p) {
+          final membersList = p['members'] as List? ?? [];
+          final memberAddresses = membersList.map((e) {
+            if (e is Map) {
+              return (e['walletAddress'] ?? '').toString().toLowerCase();
+            }
+            return e.toString().toLowerCase();
+          }).toList();
+          final createdBy =
+              (p['createdBy'] ?? p['creator'] ?? '').toString().toLowerCase();
+          final treasury = (p['treasury'] ?? '').toString().toLowerCase();
+          return memberAddresses.contains(wallet) ||
+              createdBy == wallet ||
+              treasury == wallet;
+        }).length;
+        final activeCount = pool.pools
+            .where((p) => (p['status']?.toString() ?? 'pending') == 'active')
+            .length;
+
+        return Row(
+          children: [
+            Expanded(
+              child: _buildDesktopMetricTile(
+                context,
+                label: 'Visible Equbs',
+                value: '${pool.pools.length}',
+                detail: 'All groups currently loaded',
+                icon: Icons.grid_view_rounded,
+              ),
+            ),
+            const SizedBox(width: AppTheme.desktopPanelGap),
+            Expanded(
+              child: _buildDesktopMetricTile(
+                context,
+                label: 'Active Cycles',
+                value: '$activeCount',
+                detail: 'Pools currently in progress',
+                icon: Icons.timeline_rounded,
+              ),
+            ),
+            const SizedBox(width: AppTheme.desktopPanelGap),
+            Expanded(
+              child: _buildDesktopMetricTile(
+                context,
+                label: 'My Equbs',
+                value: '$myPools',
+                detail: 'Groups tied to your wallet',
+                icon: Icons.groups_rounded,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopMetricTile(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required String detail,
+    required IconData icon,
+  }) {
+    return DesktopCardSection(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppTheme.buttonColor(context).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: AppTheme.buttonColor(context), size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildBrowseTab(BuildContext context) {
     return Consumer<PoolProvider>(
@@ -158,6 +375,77 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
         final desktop = AppTheme.isDesktop(context);
         return Column(
           children: [
+            if (desktop)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: const InputDecoration(
+                              hintText: 'Search by name, creator, or on-chain id',
+                              prefixIcon:
+                                  Icon(Icons.search_rounded, size: 20),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          height: 46,
+                          child: OutlinedButton.icon(
+                            onPressed: pool.isLoading ? null : () => pool.loadPools(),
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Refresh'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildFilterIconButton(context),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDesktopBrowseStatusCard(
+                            context,
+                            title: 'Results',
+                            value: '${pools.length}',
+                            caption: _hasActiveFilters
+                                ? 'Matching the current desktop filters'
+                                : 'All available Equbs in view',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDesktopBrowseStatusCard(
+                            context,
+                            title: 'Sort',
+                            value: _selectedSort,
+                            caption: 'Applied across the current results',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDesktopBrowseStatusCard(
+                            context,
+                            title: 'Frequency',
+                            value: _selectedFrequency,
+                            caption: 'Filter scope for contribution cadence',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              )
+            else
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Row(
@@ -181,9 +469,12 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
               ),
             ),
             const SizedBox(height: 10),
-            _buildCategoryChips(),
+            _buildCategoryChips(horizontalPadding: desktop ? 24 : 20),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: desktop ? 24 : 20,
+                vertical: 8,
+              ),
               child: Row(
                 children: [
                   Text('${pools.length} equbs',
@@ -242,8 +533,8 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
                                                     : 2;
                                             return GridView.builder(
                                               padding:
-                                                  const EdgeInsets.fromLTRB(
-                                                      20, 0, 20, 20),
+                                                const EdgeInsets.fromLTRB(
+                                                  24, 0, 24, 24),
                                               gridDelegate:
                                                   SliverGridDelegateWithFixedCrossAxisCount(
                                                 crossAxisCount: columns,
@@ -603,15 +894,87 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
         result = result.where((p) => p['frequency'] == freqCode).toList();
       }
     }
+    result.sort(_comparePools);
     return result;
   }
 
-  Widget _buildCategoryChips() {
+  int _comparePools(Map<String, dynamic> a, Map<String, dynamic> b) {
+    switch (_selectedSort) {
+      case 'Most Members':
+        return _memberCountOf(b).compareTo(_memberCountOf(a));
+      case 'Highest Completion':
+        return _completionOf(b).compareTo(_completionOf(a));
+      case 'Contribution Amount':
+        return _contributionValueOf(b).compareTo(_contributionValueOf(a));
+      case 'Health Score':
+        return _healthScoreOf(b).compareTo(_healthScoreOf(a));
+      case 'Newest':
+      default:
+        return _recencyScoreOf(b).compareTo(_recencyScoreOf(a));
+    }
+  }
+
+  int _memberCountOf(Map<String, dynamic> pool) =>
+      ((pool['members'] as List?) ?? const []).length;
+
+  double _completionOf(Map<String, dynamic> pool) {
+    final maxMembers = (pool['maxMembers'] as num?)?.toDouble() ?? 0;
+    final currentRound = (pool['currentRound'] as num?)?.toDouble() ?? 0;
+    if (maxMembers <= 0) {
+      return 0;
+    }
+    return currentRound / maxMembers;
+  }
+
+  double _contributionValueOf(Map<String, dynamic> pool) {
+    final raw = pool['contributionAmount'];
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    return double.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  double _healthScoreOf(Map<String, dynamic> pool) {
+    final memberCount = _memberCountOf(pool).toDouble();
+    final maxMembers = (pool['maxMembers'] as num?)?.toDouble() ?? 0;
+    final fillRate = maxMembers > 0 ? memberCount / maxMembers : 0;
+    final completion = _completionOf(pool);
+    final status = pool['status']?.toString() ?? 'pending';
+    final statusBoost = status == 'active'
+        ? 0.2
+        : status == 'completed'
+            ? 0.1
+            : 0.0;
+    return (completion * 0.5) + (fillRate * 0.3) + statusBoost;
+  }
+
+  double _recencyScoreOf(Map<String, dynamic> pool) {
+    for (final key in ['createdAt', 'created_at', 'updatedAt', 'updated_at']) {
+      final value = pool[key];
+      if (value is num) {
+        return value.toDouble();
+      }
+      final parsed = DateTime.tryParse(value?.toString() ?? '');
+      if (parsed != null) {
+        return parsed.millisecondsSinceEpoch.toDouble();
+      }
+    }
+
+    final onChainId = pool['onChainPoolId'];
+    if (onChainId is num) {
+      return onChainId.toDouble();
+    }
+
+    final idValue = double.tryParse(pool['id']?.toString() ?? '');
+    return idValue ?? 0;
+  }
+
+  Widget _buildCategoryChips({double horizontalPadding = 20}) {
     return SizedBox(
       height: 34,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         itemCount: _categories.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (context, i) {
@@ -640,6 +1003,45 @@ class _PoolBrowserScreenState extends State<PoolBrowserScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildDesktopBrowseStatusCard(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required String caption,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.textHintColor(context).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: AppTheme.borderFor(context, opacity: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            caption,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
