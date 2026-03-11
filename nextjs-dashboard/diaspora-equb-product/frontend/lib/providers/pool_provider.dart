@@ -48,16 +48,19 @@ class PoolProvider extends ChangeNotifier {
       _pools = List<Map<String, dynamic>>.from(data);
       debugPrint('[PoolProvider] loadPools: ${_pools.length} pools loaded');
       for (final p in _pools) {
-        debugPrint('[PoolProvider]   id=${p['id']}, onChainPoolId=${p['onChainPoolId']}, status=${p['status']}, tier=${p['tier']}');
+        debugPrint(
+            '[PoolProvider]   id=${p['id']}, onChainPoolId=${p['onChainPoolId']}, status=${p['status']}, tier=${p['tier']}');
       }
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('401') || msg.contains('Unauthorized')) {
         _errorMessage = 'Session expired — please log in again';
-      } else if (msg.contains('SocketException') || msg.contains('Connection refused')) {
+      } else if (msg.contains('SocketException') ||
+          msg.contains('Connection refused')) {
         _errorMessage = 'Cannot reach server — check if backend is running';
       } else {
-        _errorMessage = 'Failed to load equbs: ${msg.length > 80 ? msg.substring(0, 80) : msg}';
+        _errorMessage =
+            'Failed to load equbs: ${msg.length > 80 ? msg.substring(0, 80) : msg}';
       }
       debugPrint('[PoolProvider] loadPools ERROR: $e');
     }
@@ -222,12 +225,10 @@ class PoolProvider extends ChangeNotifier {
       _errorMessage = switch (code) {
         'WINNER_BEFORE_CLOSE' =>
           'Close the active round before picking the winner.',
-        'ROUND_ALREADY_PICKED' =>
-          'Winner is already picked for this round.',
+        'ROUND_ALREADY_PICKED' => 'Winner is already picked for this round.',
         'SEASON_COMPLETE' =>
           'Season is complete. Configure next season to continue.',
-        'NOT_POOL_ADMIN' =>
-          'Only the pool admin can pick a winner.',
+        'NOT_POOL_ADMIN' => 'Only the pool admin can pick a winner.',
         'IDEMPOTENCY_REPLAY_CONFLICT' =>
           'Duplicate request conflict detected. Retry once.',
         _ => defaultMessage,
@@ -250,15 +251,18 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PoolProvider] buildAndSignJoinPool: poolId=$onChainPoolId, caller=$caller, walletAddr=${_walletService.walletAddress}');
+      debugPrint(
+          '[PoolProvider] buildAndSignJoinPool: poolId=$onChainPoolId, caller=$caller, walletAddr=${_walletService.walletAddress}');
       final unsignedTx = await _api.buildJoinPool(
         onChainPoolId,
         caller: caller,
       );
-      debugPrint('[PoolProvider] Join unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, chainId=${unsignedTx['chainId']}');
+      debugPrint(
+          '[PoolProvider] Join unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, chainId=${unsignedTx['chainId']}');
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
-      debugPrint('[PoolProvider] Join result: txHash=$txHash, error=${_walletService.errorMessage}');
+      debugPrint(
+          '[PoolProvider] Join result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
@@ -294,21 +298,26 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PoolProvider] buildAndSignContribute: poolId=$onChainPoolId, amount=$contributionAmount, token=$tokenAddress');
+      debugPrint(
+          '[PoolProvider] buildAndSignContribute: poolId=$onChainPoolId, amount=$contributionAmount, token=$tokenAddress');
       final unsignedTx = await _api.buildContribute(
         onChainPoolId: onChainPoolId,
         contributionAmount: contributionAmount,
         tokenAddress: tokenAddress,
       );
-      debugPrint('[PoolProvider] Got unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, gas=${unsignedTx['estimatedGas']}, chainId=${unsignedTx['chainId']}');
-      debugPrint('[PoolProvider] Wallet connected: ${_walletService.isConnected}, addr: ${_walletService.walletAddress}');
+      debugPrint(
+          '[PoolProvider] Got unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, gas=${unsignedTx['estimatedGas']}, chainId=${unsignedTx['chainId']}');
+      debugPrint(
+          '[PoolProvider] Wallet connected: ${_walletService.isConnected}, addr: ${_walletService.walletAddress}');
 
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
-      debugPrint('[PoolProvider] signAndSend result: txHash=$txHash, error=${_walletService.errorMessage}');
+      debugPrint(
+          '[PoolProvider] signAndSend result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
-        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected by wallet';
+        _errorMessage =
+            _walletService.errorMessage ?? 'Transaction rejected by wallet';
       } else if (poolId != null) {
         await loadPool(poolId);
       }
@@ -629,7 +638,8 @@ class PoolProvider extends ChangeNotifier {
         return null;
       }
 
-      final scheduleTx = Map<String, dynamic>.from(payload['scheduleTx'] as Map);
+      final scheduleTx =
+          Map<String, dynamic>.from(payload['scheduleTx'] as Map);
       final txHash = await _walletService.signAndSendTransaction(scheduleTx);
       _lastTxHash = txHash;
 

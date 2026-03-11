@@ -456,8 +456,7 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
       final round = pool['currentRound'] ?? 1;
       final poolSym = _tokenSymbolFor(context);
       final label = 'Contribute $poolSym (Round $round)';
-      const hint =
-          'Your wallet will open to sign this transaction.';
+      const hint = 'Your wallet will open to sign this transaction.';
 
       // Collateral gate: check if user has locked enough collateral for this pool
       final collateral = context.watch<CollateralProvider>();
@@ -793,7 +792,8 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
     final wallet = context.watch<WalletService>();
     final walletProvider = context.watch<WalletProvider>();
     final pool = pools.selectedPool;
-    final embeddedDesktop = widget.embeddedDesktop && AppTheme.isDesktop(context);
+    final embeddedDesktop =
+        widget.embeddedDesktop && AppTheme.isDesktop(context);
 
     return Container(
       decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
@@ -821,8 +821,10 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                       }
                     },
                     itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'payouts', child: Text('Payout Stream')),
-                      PopupMenuItem(value: 'governance', child: Text('Governance')),
+                      PopupMenuItem(
+                          value: 'payouts', child: Text('Payout Stream')),
+                      PopupMenuItem(
+                          value: 'governance', child: Text('Governance')),
                       PopupMenuItem(value: 'rules', child: Text('Rules')),
                     ],
                   ),
@@ -906,29 +908,39 @@ class _PoolStatusScreenState extends State<PoolStatusScreen> {
                           children: [
                             DesktopSectionTitle(
                               title: pool['name']?.toString() ?? 'Equb Status',
-                              subtitle: 'Round status, members, payouts, and management all stay inside the desktop workspace.',
+                              subtitle:
+                                  'Round status, members, payouts, and management all stay inside the desktop workspace.',
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
                                     onPressed: _loadPoolData,
-                                    icon: const Icon(Icons.refresh_rounded, size: 22),
+                                    icon: const Icon(Icons.refresh_rounded,
+                                        size: 22),
                                   ),
                                   PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                                    icon: const Icon(Icons.more_horiz_rounded,
+                                        size: 22),
                                     onSelected: (v) {
                                       if (v == 'payouts') _openPayoutStream();
                                       if (v == 'governance') {
-                                        context.push('/equb-governance/${widget.poolId}');
+                                        context.push(
+                                            '/equb-governance/${widget.poolId}');
                                       }
                                       if (v == 'rules') {
-                                        context.push('/equb-rules/${widget.poolId}');
+                                        context.push(
+                                            '/equb-rules/${widget.poolId}');
                                       }
                                     },
                                     itemBuilder: (_) => const [
-                                      PopupMenuItem(value: 'payouts', child: Text('Payout Stream')),
-                                      PopupMenuItem(value: 'governance', child: Text('Governance')),
-                                      PopupMenuItem(value: 'rules', child: Text('Rules')),
+                                      PopupMenuItem(
+                                          value: 'payouts',
+                                          child: Text('Payout Stream')),
+                                      PopupMenuItem(
+                                          value: 'governance',
+                                          child: Text('Governance')),
+                                      PopupMenuItem(
+                                          value: 'rules', child: Text('Rules')),
                                     ],
                                   ),
                                 ],

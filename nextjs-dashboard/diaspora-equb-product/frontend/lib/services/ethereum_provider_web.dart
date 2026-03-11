@@ -107,7 +107,8 @@ Future<void> switchInjectedChain({
         {'chainId': hexChainId}
       ],
     }.jsify();
-    final promise = ethereum.callMethod<JSPromise>('request'.toJS, switchParams);
+    final promise =
+        ethereum.callMethod<JSPromise>('request'.toJS, switchParams);
     await promise.toDart;
   } catch (e) {
     final message = _extractJsErrorMessage(e);

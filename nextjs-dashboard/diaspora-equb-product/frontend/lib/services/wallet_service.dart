@@ -44,9 +44,9 @@ class WalletService extends ChangeNotifier {
   bool get hasPrivyConfiguration =>
       AppConfig.privyAppId.trim().isNotEmpty &&
       AppConfig.privyAppClientId.trim().isNotEmpty;
-    bool get canUseInjectedProvider =>
+  bool get canUseInjectedProvider =>
       kIsWeb && injected_provider.hasInjectedProvider;
-    bool get isConnected => _walletAddress != null;
+  bool get isConnected => _walletAddress != null;
   String? get walletAddress => _walletAddress;
   bool get isConnecting => _isConnecting;
   String? get errorMessage => _errorMessage;

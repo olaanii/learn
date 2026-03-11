@@ -194,7 +194,8 @@ class CollateralProvider extends ChangeNotifier {
 
   // ─── Native CTC Collateral (backward compat) ──────────────────────────────
 
-  Future<String?> buildAndSignDeposit(String amount, {String? walletAddress}) async {
+  Future<String?> buildAndSignDeposit(String amount,
+      {String? walletAddress}) async {
     _isLoading = true;
     _errorMessage = null;
     _lastTxHash = null;
@@ -279,7 +280,8 @@ class CollateralProvider extends ChangeNotifier {
         final updated = List<Map<String, dynamic>>.from(_collaterals);
         for (var i = 0; i < updated.length; i++) {
           final c = Map<String, dynamic>.from(updated[i]);
-          final cur = double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
+          final cur =
+              double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
           c['lockedAmount'] = (cur + addAmount).toString();
           updated[i] = c;
         }

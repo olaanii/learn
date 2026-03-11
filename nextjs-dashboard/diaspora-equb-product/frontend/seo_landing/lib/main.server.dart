@@ -12,7 +12,8 @@ void main() {
       title: 'Diaspora Equb | Desktop-first Equb workspace',
       lang: 'en',
       meta: const {
-        'description': 'Diaspora Equb is a desktop-first workspace for monitoring Equb pools, reviewing contributions, and preparing payouts with clearer visibility.',
+        'description':
+            'Diaspora Equb is a desktop-first workspace for monitoring Equb pools, reviewing contributions, and preparing payouts with clearer visibility.',
         'viewport': 'width=device-width, initial-scale=1',
       },
       head: [
@@ -24,10 +25,15 @@ void main() {
         ),
         link(
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+          href:
+              'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
         ),
         link(rel: 'stylesheet', href: '/styles.css'),
-        link(rel: 'preload', as: 'image', href: '/assets/landing-mobile-preview.png'),
+        link(
+          rel: 'preload',
+          as: 'image',
+          href: '/assets/landing-mobile-preview.png',
+        ),
       ],
       body: const App(),
     ),

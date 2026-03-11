@@ -450,7 +450,8 @@ class WalletProvider extends ChangeNotifier {
 
   /// Load all wallet data (USDC, USDT, optional native tCTC/CTC, transactions, rates).
   /// Pass [nativeSymbol] (e.g. from NetworkProvider.nativeSymbol) to load native balance for pool status.
-  Future<void> loadAll(String walletAddress, {String? token, String? nativeSymbol}) async {
+  Future<void> loadAll(String walletAddress,
+      {String? token, String? nativeSymbol}) async {
     final tasks = <Future<void>>[
       loadBalance(walletAddress, token: 'USDC'),
       loadBalance(walletAddress, token: 'USDT'),
