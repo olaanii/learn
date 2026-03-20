@@ -2,46 +2,55 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // ── Modern Ethiopian Heritage — Light Mode ──
+  // ── Brand palette (canonical swatches) ──
 
-  static const Color backgroundLight = Color(0xFFF1FAEE); // Warm Cream
-  static const Color backgroundDark = Color(0xFFE4F0E0); // Slightly deeper cream (gradient end)
-  static const Color accentYellow = Color(0xFFD4AF37); // Ethiopian Gold
-  static const Color accentYellowDark = Color(0xFFF2C94C); // Soft Gold (dark mode accent)
-  static const Color cardWhite = Color(0xFFFFFFFF);
-  static const Color darkButton = Color(0xFF1B4332); // Deep Forest (light mode button)
+  static const Color paletteBlack = Color(0xFF000000);
+  static const Color palettePrussianBlue = Color(0xFF14213D);
+  static const Color paletteOrange = Color(0xFFFCA311);
+  static const Color paletteAlabaster = Color(0xFFE5E5E5);
+  static const Color paletteWhite = Color(0xFFFFFFFF);
 
-  static const Color textPrimary = Color(0xFF081C15); // Dark Forest
-  static const Color textSecondary = Color(0xFF4A6354); // Muted Forest
-  static const Color textTertiary = Color(0xFF7A9484); // Light Forest
-  static const Color textHint = Color(0xFFB5CCBE); // Warm hint
+  // ── Light mode ──
 
-  static const Color positive = Color(0xFF40916C); // Emerald Bright
-  static const Color negative = Color(0xFF9B2226); // Deep Red (heritage)
-  static const Color warningColor = Color(0xFFD4AF37); // Ethiopian Gold
+  static const Color backgroundLight = paletteWhite;
+  static const Color backgroundDark = paletteAlabaster;
+  static const Color accentYellow = paletteOrange;
+  static const Color accentYellowDark = paletteOrange;
+  static const Color cardWhite = paletteWhite;
+  static const Color darkButton = palettePrussianBlue;
 
-  static const Color primaryColor = Color(0xFF1B4332); // Deep Forest
-  static const Color secondaryColor = Color(0xFF2D6A4F); // Emerald
+  // Semantic aliases (same names as before for widgets); each line maps 1:1 to one palette* swatch.
+  static const Color textPrimary = paletteBlack;
+  static const Color textSecondary = palettePrussianBlue;
+  static const Color textTertiary = paletteOrange;
+  static const Color textHint = paletteAlabaster;
+
+  // UX semantics outside marketing swatch (accessible success / error)
+  static const Color positive = Color(0xFF2E7D32);
+  static const Color negative = Color(0xFFC62828);
+  static const Color warningColor = paletteOrange;
+
+  static const Color primaryColor = palettePrussianBlue;
+  static const Color secondaryColor = paletteOrange;
   static const Color successColor = positive;
   static const Color dangerColor = negative;
-  static const Color highlightRed = Color(0xFF9B2226); // Heritage accent for alerts
+  static const Color highlightRed = negative;
 
-  // ── Modern Ethiopian Heritage — Dark Mode ──
+  // ── Dark mode ──
 
-  static const Color darkBackground = Color(0xFF081C15); // Deep Forest Dark
-  static const Color _darkBackgroundEnd = Color(0xFF051210); // Deeper gradient end
-  static const Color darkCard = Color(0xFF0F2E24); // Soft Dark Green
-  static const Color darkSurface = Color(0xFF153228); // Dark green surface
-  static const Color darkTextPrimary = Color(0xFFE9F5EC); // Soft Light
-  static const Color darkTextSecondary = Color(0xFF8DB89A); // Muted light
-  static const Color darkTextTertiary = Color(0xFF5A7A66); // Dim green
-  static const Color darkBorder = Color(0xFF1C3D2E); // Dark border
+  static const Color darkBackground = paletteBlack;
+  static const Color _darkBackgroundEnd = palettePrussianBlue;
+  static const Color darkCard = palettePrussianBlue;
+  static const Color darkSurface = palettePrussianBlue;
+  static const Color darkTextPrimary = paletteWhite;
+  static const Color darkTextSecondary = paletteAlabaster;
+  static const Color darkTextTertiary = paletteOrange;
+  static const Color darkBorder = paletteAlabaster;
 
-  // Dark mode primary/secondary (brighter variants for contrast)
-  static const Color darkPrimary = Color(0xFF40916C); // Bright Emerald
-  static const Color darkSecondary = Color(0xFF52B788); // Light Emerald
-  static const Color darkAccent = Color(0xFFF2C94C); // Soft Gold
-  static const Color darkHighlight = Color(0xFFC44536); // Warm Red
+  static const Color darkPrimary = paletteOrange;
+  static const Color darkSecondary = paletteOrange;
+  static const Color darkAccent = paletteOrange;
+  static const Color darkHighlight = negative;
 
   static const double cardRadius = 24.0;
   static const double cardRadiusSmall = 16.0;
@@ -99,7 +108,7 @@ class AppTheme {
       _isDark(context) ? darkAccent : darkButton;
 
   static Color buttonTextColor(BuildContext context) =>
-      _isDark(context) ? darkBackground : Colors.white;
+      _isDark(context) ? darkBackground : cardWhite;
 
   static LinearGradient bgGradient(BuildContext context) =>
       _isDark(context) ? darkBackgroundGradient : backgroundGradient;
@@ -146,7 +155,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: darkButton, foregroundColor: Colors.white, elevation: 0,
+          backgroundColor: darkButton, foregroundColor: cardWhite, elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
           textStyle: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
