@@ -16,6 +16,7 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().required(),
   }),
   DATABASE_NAME: Joi.string().default('diaspora_equb'),
+  DATABASE_SSL: Joi.boolean().default(false),
 
   // JWT (SRS NFR-2: 32+ chars in production)
   JWT_SECRET: Joi.string().min(32).required(),
@@ -27,6 +28,11 @@ export const envValidationSchema = Joi.object({
     Joi.string().uri(),
   ).default(''),
   FAYDA_API_KEY: Joi.string().allow('').default(''),
+
+  // Firebase Auth (optional until configured)
+  FIREBASE_PROJECT_ID: Joi.string().allow('').default(''),
+  FIREBASE_CLIENT_EMAIL: Joi.string().allow('').default(''),
+  FIREBASE_PRIVATE_KEY: Joi.string().allow('').default(''),
 
   // Blockchain
   RPC_URL: Joi.string().uri().required(),

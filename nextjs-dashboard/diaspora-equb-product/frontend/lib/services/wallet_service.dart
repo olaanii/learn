@@ -1,423 +1,580 @@
-import 'package:flutter/foundation.dart'
-    show ChangeNotifier, debugPrint, kIsWeb;
-import 'package:reown_core/reown_core.dart' show PairingMetadata;
-import 'package:reown_sign/reown_sign.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../config/app_config.dart';
-import 'ethereum_provider_stub.dart'
-    if (dart.library.js_interop) 'ethereum_provider_web.dart' as eth_provider;
+import 'dart:convert';
 
-/// Service that manages WalletConnect v2 sessions for client-side TX signing.
-///
-/// Flow:
-/// 1. [connect] - Initiates a WalletConnect pairing. Returns a URI for QR code
-///    or deep-links to MetaMask mobile.
-/// 2. [signAndSendTransaction] - Takes an unsigned TX object (from the backend)
-///    and requests the connected wallet to sign & broadcast it.
-/// 3. [disconnect] - Ends the WalletConnect session.
+import 'package:flutter/foundation.dart'
+    show
+        ChangeNotifier,
+        TargetPlatform,
+        debugPrint,
+        defaultTargetPlatform,
+        kDebugMode,
+        kIsWeb;
+import 'package:privy_flutter/privy_flutter.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import '../config/app_config.dart';
+import 'firebase_auth_service.dart';
+import 'ethereum_provider_stub.dart'
+    if (dart.library.js_interop) 'ethereum_provider_web.dart'
+    as injected_provider;
+
+enum WalletConnectionMethod {
+  auto,
+  embedded,
+  injected,
+}
+
+/// Service that manages Privy custom-auth login and embedded wallet signing.
 class WalletService extends ChangeNotifier {
-  ReownSignClient? _signClient;
-  SessionData? _session;
+  WalletService([FirebaseAuthService? firebaseAuthService])
+      : _firebaseAuthService = firebaseAuthService ?? FirebaseAuthService();
+
+  final FirebaseAuthService _firebaseAuthService;
+
+  Privy? _privy;
+  PrivyUser? _privyUser;
+  EmbeddedEthereumWallet? _embeddedWallet;
   String? _walletAddress;
-  String? _pairingUri;
   bool _isConnecting = false;
   String? _errorMessage;
+  int _chainId = AppConfig.chainId;
 
-  // ─── Getters ────────────────────────────────────────────────────────────────
-
-  bool get isConnected =>
-      _walletAddress != null &&
-      (kIsWeb ? eth_provider.hasInjectedProvider : _session != null);
+  bool get isSupportedPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  bool get hasPrivyConfiguration =>
+      AppConfig.privyAppId.trim().isNotEmpty &&
+      AppConfig.privyAppClientId.trim().isNotEmpty;
+  bool get canUseInjectedProvider =>
+      kIsWeb && injected_provider.hasInjectedProvider;
+  bool get isConnected => _walletAddress != null;
   String? get walletAddress => _walletAddress;
-  String? get pairingUri => _pairingUri;
   bool get isConnecting => _isConnecting;
   String? get errorMessage => _errorMessage;
-  SessionData? get session => _session;
+  int get chainId => _chainId;
 
-  // ─── Initialization ─────────────────────────────────────────────────────────
-
-  /// Initialize the WalletConnect Web3App instance.
   Future<void> init() async {
-    if (_signClient != null) return;
+    if (_privy != null || !isSupportedPlatform) {
+      return;
+    }
 
-    const projectId = AppConfig.walletConnectProjectId;
-    if (projectId.isEmpty) {
+    if (!hasPrivyConfiguration) {
       debugPrint(
-        '[WalletService] No WalletConnect project ID configured. '
-        'Set WALLETCONNECT_PROJECT_ID via --dart-define.',
+        '[WalletService] Privy is not configured. '
+        'Set PRIVY_APP_ID and PRIVY_APP_CLIENT_ID via --dart-define.',
       );
       return;
     }
 
-    _signClient = await ReownSignClient.createInstance(
-      projectId: projectId,
-      metadata: const PairingMetadata(
-        name: 'Diaspora Equb',
-        description: 'Decentralized Rotating Savings on Creditcoin',
-        url: 'https://diaspora-equb.app',
-        icons: ['https://diaspora-equb.app/icon.png'],
+    _privy = Privy.init(
+      config: PrivyConfig(
+        appId: AppConfig.privyAppId,
+        appClientId: AppConfig.privyAppClientId,
+        logLevel: kDebugMode ? PrivyLogLevel.debug : PrivyLogLevel.none,
+        customAuthConfig: LoginWithCustomAuthConfig(
+          tokenProvider: () async {
+            if (!_firebaseAuthService.isConfigured ||
+                _firebaseAuthService.currentUser == null) {
+              return null;
+            }
+
+            try {
+              return await _firebaseAuthService.getIdToken(forceRefresh: true);
+            } catch (_) {
+              return null;
+            }
+          },
+        ),
       ),
     );
 
-    // Restore existing sessions
-    final sessions = _signClient!.sessions.getAll();
-    if (sessions.isNotEmpty) {
-      _session = sessions.first;
-      _extractWalletAddress();
+    await _hydrateExistingSession();
+  }
+
+  Future<void> setChainId(
+    int chainId, {
+    bool switchConnectedWallet = true,
+  }) async {
+    if (_chainId == chainId) return;
+
+    _chainId = chainId;
+    if (_walletAddress != null) {
       notifyListeners();
     }
-  }
 
-  // ─── Connect ────────────────────────────────────────────────────────────────
-
-  /// Connect to a wallet.
-  /// On web: uses the injected MetaMask browser extension (window.ethereum).
-  /// On mobile: uses WalletConnect v2 with deep-link to MetaMask.
-  Future<String?> connect() async {
-    // On web, prefer the injected MetaMask extension
-    if (kIsWeb && eth_provider.hasInjectedProvider) {
-      return _connectViaInjected();
+    if (!switchConnectedWallet || !isConnected) {
+      return;
     }
 
-    // Mobile: use WalletConnect
-    return _connectViaWalletConnect();
+    if (kIsWeb && canUseInjectedProvider) {
+      try {
+        await injected_provider.switchInjectedChain(
+          chainId: _chainId,
+          chainName: AppConfig.networkName,
+          rpcUrls: [AppConfig.rpcUrl],
+          symbol: AppConfig.nativeSymbol,
+          blockExplorerUrls: [AppConfig.explorerUrl],
+        );
+      } catch (e, st) {
+        _setWalletError(
+          operation: 'switch_chain',
+          error: e,
+          stackTrace: st,
+          flow: 'injected_web',
+        );
+        return;
+      }
+    }
+
+    _errorMessage = null;
+    notifyListeners();
   }
 
-  Future<String?> _connectViaInjected() async {
+  Future<String?> connect({
+    WalletConnectionMethod method = WalletConnectionMethod.auto,
+  }) async {
     _isConnecting = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final address = await eth_provider.connectViaInjectedProvider();
-      if (address != null) {
+      if (kIsWeb) {
+        if (method == WalletConnectionMethod.embedded) {
+          _setError(
+            'Privy embedded wallets are only available on Android and iOS.',
+          );
+          return null;
+        }
+
+        final address = await injected_provider.connectViaInjectedProvider();
+        if (address == null || address.trim().isEmpty) {
+          _setError(
+            'No injected web wallet found. Install/unlock a browser wallet or use manual wallet binding.',
+          );
+          return null;
+        }
+
+        _embeddedWallet = null;
         _walletAddress = address;
-        _isConnecting = false;
+        _errorMessage = null;
         notifyListeners();
-        debugPrint(
-            '[WalletService] Connected via MetaMask extension: $address');
         return address;
       }
-      _errorMessage = 'No accounts returned from MetaMask';
-    } catch (e) {
-      _errorMessage = 'MetaMask connection failed: $e';
-    }
 
-    _isConnecting = false;
-    notifyListeners();
-    return null;
-  }
-
-  Future<String?> _connectViaWalletConnect() async {
-    if (_signClient == null) await init();
-    if (_signClient == null) {
-      _errorMessage = 'WalletConnect not initialized. Check project ID.';
-      notifyListeners();
-      return null;
-    }
-
-    _isConnecting = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      const chainId = 'eip155:${AppConfig.chainId}';
-
-      final connectResponse = await _signClient!.connect(
-        optionalNamespaces: {
-          'eip155': const RequiredNamespace(
-            chains: [chainId],
-            methods: [
-              'eth_sendTransaction',
-              'eth_signTransaction',
-              'personal_sign',
-              'eth_sign',
-            ],
-            events: ['chainChanged', 'accountsChanged'],
-          ),
-        },
-      );
-
-      _pairingUri = connectResponse.uri?.toString();
-      notifyListeners();
-
-      if (_pairingUri != null) {
-        await _tryOpenWallet(_pairingUri!);
+      if (!isSupportedPlatform) {
+        _setError(
+          'Wallet connection is unavailable on this platform. Use manual wallet binding.',
+        );
+        return null;
       }
 
-      _session = await connectResponse.session.future;
-      _extractWalletAddress();
+      if (method == WalletConnectionMethod.injected) {
+        _setError('Injected wallets are only supported on web.');
+        return null;
+      }
 
-      _isConnecting = false;
-      _pairingUri = null;
-      notifyListeners();
+      if (!hasPrivyConfiguration) {
+        _setError(
+          'Privy is not configured. Add PRIVY_APP_ID and PRIVY_APP_CLIENT_ID to this build.',
+        );
+        return null;
+      }
 
-      return _walletAddress;
-    } catch (e) {
-      _errorMessage = 'Wallet connection failed: $e';
-      _isConnecting = false;
-      notifyListeners();
+      final wallet = await _ensureEmbeddedWallet();
+      return wallet?.address;
+    } catch (e, st) {
+      _setWalletError(
+        operation: 'connect',
+        error: e,
+        stackTrace: st,
+        flow: kIsWeb ? 'injected_web' : 'privy_embedded',
+      );
       return null;
+    } finally {
+      _isConnecting = false;
+      notifyListeners();
     }
   }
 
-  // ─── Sign & Send Transaction ────────────────────────────────────────────────
+  Future<void> _hydrateExistingSession() async {
+    final privy = _privy;
+    if (privy == null) {
+      return;
+    }
 
-  /// Takes an unsigned TX object (returned by the backend build/* endpoints)
-  /// and sends it to the connected wallet for signing and broadcasting.
-  ///
-  /// Returns the transaction hash on success, or null on failure.
+    final authState = await privy.getAuthState();
+    final user = authState.user;
+    if (user == null) {
+      return;
+    }
+
+    _privyUser = user;
+    await _refreshUser(ignoreFailures: true);
+    _selectEmbeddedWallet();
+  }
+
+  Future<EmbeddedEthereumWallet?> _ensureEmbeddedWallet() async {
+    await init();
+
+    final user = await _ensurePrivyUser();
+    if (user == null) {
+      return null;
+    }
+
+    await _refreshUser(ignoreFailures: true);
+    final existingWallet = _selectEmbeddedWallet();
+    if (existingWallet != null) {
+      return existingWallet;
+    }
+
+    final createResult = await user.createEthereumWallet();
+    switch (createResult) {
+      case Success<EmbeddedEthereumWallet>(:final value):
+        _embeddedWallet = value;
+        _walletAddress = value.address;
+        _errorMessage = null;
+        notifyListeners();
+        return value;
+      case Failure<EmbeddedEthereumWallet>(:final error):
+        _setError('Privy wallet creation failed: ${error.message}');
+        return null;
+    }
+  }
+
+  Future<PrivyUser?> _ensurePrivyUser() async {
+    final privy = _privy;
+    if (privy == null) {
+      _setError('Privy is not initialized for this device.');
+      return null;
+    }
+
+    final authState = await privy.getAuthState();
+    if (authState.user != null) {
+      _privyUser = authState.user;
+      return _privyUser;
+    }
+
+    if (_firebaseAuthService.currentUser == null) {
+      _setError(
+        'Sign in to your Diaspora Equb account before creating a Privy wallet.',
+      );
+      return null;
+    }
+
+    final loginResult = await privy.customAuth.loginWithCustomAccessToken();
+    switch (loginResult) {
+      case Success<PrivyUser>(:final value):
+        _privyUser = value;
+        _errorMessage = null;
+        notifyListeners();
+        return value;
+      case Failure<PrivyUser>(:final error):
+        _setError(
+          'Privy sign-in failed. Verify the dashboard custom auth setup '
+          'matches your Firebase tokens: ${error.message}',
+        );
+        return null;
+    }
+  }
+
+  Future<void> _refreshUser({bool ignoreFailures = false}) async {
+    final user = _privyUser;
+    if (user == null) {
+      return;
+    }
+
+    final refreshResult = await user.refresh();
+    switch (refreshResult) {
+      case Success<void>():
+        return;
+      case Failure<void>(:final error):
+        if (!ignoreFailures) {
+          _setError('Failed to refresh Privy wallet state: ${error.message}');
+        }
+    }
+  }
+
+  EmbeddedEthereumWallet? _selectEmbeddedWallet() {
+    final wallets = _privyUser?.embeddedEthereumWallets;
+    if (wallets == null || wallets.isEmpty) {
+      _embeddedWallet = null;
+      _walletAddress = null;
+      notifyListeners();
+      return null;
+    }
+
+    _embeddedWallet = wallets.first;
+    _walletAddress = _embeddedWallet!.address;
+    _errorMessage = null;
+    notifyListeners();
+    return _embeddedWallet;
+  }
+
   Future<String?> signAndSendTransaction(
     Map<String, dynamic> unsignedTx,
   ) async {
-    if (_walletAddress == null) {
-      _errorMessage = 'Wallet not connected';
-      notifyListeners();
+    try {
+      if (kIsWeb) {
+        final fromAddress = _walletAddress ?? await connect();
+        if (fromAddress == null) {
+          _setError('Wallet not connected');
+          return null;
+        }
+
+        final txHash = await injected_provider.sendTransactionViaInjected(
+          _buildTxParams(unsignedTx, fromAddress),
+        );
+        if (txHash == null || txHash.isEmpty) {
+          _setError('Transaction was not submitted by the wallet.');
+          return null;
+        }
+
+        _errorMessage = null;
+        notifyListeners();
+        return txHash;
+      }
+
+      final wallet = await _ensureEmbeddedWallet();
+      if (wallet == null || _walletAddress == null) {
+        _setError('Wallet not connected');
+        return null;
+      }
+
+      final request = EthereumRpcRequest.ethSendTransaction(
+        jsonEncode(_buildTxParams(unsignedTx, _walletAddress!)),
+      );
+      final result = await wallet.provider.request(request);
+
+      switch (result) {
+        case Success<EthereumRpcResponse>(:final value):
+          _errorMessage = null;
+          notifyListeners();
+          return value.data;
+        case Failure<EthereumRpcResponse>(:final error):
+          _setWalletError(
+            operation: 'send_transaction',
+            error: error,
+            flow: 'privy_embedded',
+          );
+          return null;
+      }
+    } catch (e, st) {
+      _setWalletError(
+        operation: 'send_transaction',
+        error: e,
+        stackTrace: st,
+        flow: kIsWeb ? 'injected_web' : 'privy_embedded',
+      );
       return null;
     }
+  }
 
+  Map<String, dynamic> _buildTxParams(
+    Map<String, dynamic> unsignedTx,
+    String from,
+  ) {
     final chainIdRaw = unsignedTx['chainId'];
     final chainIdHex = chainIdRaw != null
         ? _toHex(
-            chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString())
-        : _toHex(AppConfig.chainId.toString());
+            chainIdRaw is int ? chainIdRaw.toString() : chainIdRaw.toString(),
+          )
+        : _toHex(_chainId.toString());
 
     final valueHex = _toHex(unsignedTx['value'] ?? '0');
     final gasHex = _toHex(unsignedTx['estimatedGas'] ?? '300000');
 
-    final txParams = {
-      'from': _walletAddress,
+    return {
+      'from': from,
       'to': unsignedTx['to'],
       'data': unsignedTx['data'],
       'value': valueHex,
       'gas': gasHex,
       'chainId': chainIdHex,
     };
-
-    debugPrint('[WalletService] signAndSend TX params:');
-    debugPrint('  from: $_walletAddress');
-    debugPrint('  to: ${unsignedTx['to']}');
-    debugPrint('  value: ${unsignedTx['value']} → $valueHex');
-    debugPrint('  gas: ${unsignedTx['estimatedGas']} → $gasHex');
-    debugPrint('  chainId: $chainIdHex');
-    final dataStr = unsignedTx['data']?.toString() ?? '';
-    debugPrint('  data: ${dataStr.length > 10 ? '${dataStr.substring(0, 10)}...(${dataStr.length} chars)' : dataStr}');
-
-    // On web, use the injected provider
-    if (kIsWeb && eth_provider.hasInjectedProvider) {
-      debugPrint('[WalletService] Sending via MetaMask injected provider...');
-      try {
-        final txHash = await eth_provider.sendTransactionViaInjected(txParams);
-        if (txHash != null) {
-          debugPrint('[WalletService] TX sent via MetaMask extension: $txHash');
-          return txHash;
-        }
-        _errorMessage = 'Transaction rejected';
-        notifyListeners();
-        return null;
-      } catch (e) {
-        _errorMessage = _formatTxFailureMessage(e);
-        notifyListeners();
-        return null;
-      }
-    }
-
-    // Mobile: use WalletConnect
-    if (_signClient == null || _session == null) {
-      _errorMessage = 'Wallet not connected';
-      notifyListeners();
-      return null;
-    }
-
-    try {
-      const chainId = 'eip155:${AppConfig.chainId}';
-      await _tryOpenWallet(null);
-
-      final result = await _signClient!.request(
-        topic: _session!.topic,
-        chainId: chainId,
-        request: SessionRequestParams(
-          method: 'eth_sendTransaction',
-          params: [txParams],
-        ),
-      );
-
-      final txHash = result.toString();
-      debugPrint('[WalletService] TX sent: $txHash');
-      return txHash;
-    } catch (e) {
-      _errorMessage = _formatTxFailureMessage(e);
-      notifyListeners();
-      return null;
-    }
   }
 
-  /// Build user-facing message for a failed tx. If the error contains a 4-byte
-  /// selector (e.g. 0xb39d8e65), append a hint about contract revert / token approval.
-  static String _formatTxFailureMessage(Object e) {
-    var s = e.toString();
-    // JS interop can produce "[object Object]" — strip it for a cleaner message
-    if (s.contains('[object Object]')) {
-      s = s.replaceAll('[object Object]', '').trim();
-      if (s.isEmpty || s == 'Exception:') {
-        s = 'Transaction rejected or failed in wallet';
-      }
-    }
-    final base = 'Transaction failed: $s';
-    if (RegExp(r'0x[0-9a-fA-F]{8}').hasMatch(s)) {
-      return '$base\n(Contract reverted. For token pools, approve the token first; or check Blockscout for the revert reason.)';
-    }
-    return base;
-  }
-
-  /// Sign a personal message (e.g. for authentication).
   Future<String?> personalSign(String message) async {
-    if (_walletAddress == null) {
-      _errorMessage = 'Wallet not connected';
-      notifyListeners();
-      return null;
-    }
+    try {
+      if (kIsWeb) {
+        final address = _walletAddress ?? await connect();
+        if (address == null || address.isEmpty) {
+          _setError('Wallet not connected');
+          return null;
+        }
 
-    // On web, use the injected MetaMask extension
-    if (kIsWeb && eth_provider.hasInjectedProvider) {
-      try {
-        final sig = await eth_provider.personalSignViaInjected(
-            message, _walletAddress!);
-        if (sig != null) return sig;
-        _errorMessage = 'Signing rejected';
+        final signature =
+            await injected_provider.personalSignViaInjected(message, address);
+        if (signature == null || signature.isEmpty) {
+          _setError('Signing request was rejected by the wallet.');
+          return null;
+        }
+
+        _errorMessage = null;
         notifyListeners();
-        return null;
-      } catch (e) {
-        _errorMessage = 'Signing failed: $e';
-        notifyListeners();
+        return signature;
+      }
+
+      final wallet = await _ensureEmbeddedWallet();
+      if (wallet == null || _walletAddress == null) {
+        _setError('Wallet not connected');
         return null;
       }
-    }
 
-    // Mobile: use WalletConnect
-    if (_signClient == null || _session == null) {
-      _errorMessage = 'Wallet not connected';
-      notifyListeners();
-      return null;
-    }
-
-    try {
-      const chainId = 'eip155:${AppConfig.chainId}';
       final hexMessage =
           '0x${message.codeUnits.map((c) => c.toRadixString(16).padLeft(2, '0')).join()}';
+      final request =
+          EthereumRpcRequest.personalSign(hexMessage, _walletAddress!);
+      final result = await wallet.provider.request(request);
 
-      // On mobile: open wallet first so it is in foreground when the sign request is sent
-      await _tryOpenWallet(null);
-      // Give the wallet app time to come to foreground and be ready to receive the request
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      final result = await _signClient!.request(
-        topic: _session!.topic,
-        chainId: chainId,
-        request: SessionRequestParams(
-          method: 'personal_sign',
-          params: [hexMessage, _walletAddress],
-        ),
+      switch (result) {
+        case Success<EthereumRpcResponse>(:final value):
+          _errorMessage = null;
+          notifyListeners();
+          return value.data;
+        case Failure<EthereumRpcResponse>(:final error):
+          _setWalletError(
+            operation: 'personal_sign',
+            error: error,
+            flow: 'privy_embedded',
+          );
+          return null;
+      }
+    } catch (e, st) {
+      _setWalletError(
+        operation: 'personal_sign',
+        error: e,
+        stackTrace: st,
+        flow: kIsWeb ? 'injected_web' : 'privy_embedded',
       );
-
-      return result.toString();
-    } catch (e) {
-      _errorMessage = 'Signing failed: $e';
-      notifyListeners();
       return null;
     }
   }
 
-  // ─── Disconnect ─────────────────────────────────────────────────────────────
+  String _normalizeWalletErrorMessage(Object error) {
+    final raw = error.toString().trim();
+    if (raw.isEmpty || raw == '[object Object]') {
+      return 'Unknown wallet error';
+    }
+
+    if (raw.startsWith('Exception: ')) {
+      return raw.substring('Exception: '.length).trim();
+    }
+
+    return raw;
+  }
+
+  String _classifyWalletError(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('4001') ||
+        lower.contains('user rejected') ||
+        lower.contains('rejected') ||
+        lower.contains('denied') ||
+        lower.contains('cancelled')) {
+      return 'rejected';
+    }
+    if (lower.contains('wallet is locked') ||
+        lower.contains('unlock') ||
+        lower.contains('authentication needed')) {
+      return 'locked_wallet';
+    }
+    if (lower.contains('insufficient funds')) {
+      return 'insufficient_funds';
+    }
+    if (lower.contains('execution reverted') ||
+        lower.contains('revert') ||
+        RegExp(r'0x[0-9a-fA-F]{8}').hasMatch(message)) {
+      return 'revert';
+    }
+    return 'unknown';
+  }
+
+  String _friendlyWalletError(
+    String operation,
+    String kind,
+    String rawMessage,
+  ) {
+    switch (kind) {
+      case 'rejected':
+        return 'Wallet request rejected.';
+      case 'locked_wallet':
+        return 'Wallet is locked. Unlock it and retry.';
+      case 'insufficient_funds':
+        return 'Insufficient funds to complete this transaction.';
+      case 'revert':
+        return 'Transaction reverted by contract. Check pool state and token approvals.';
+      default:
+        return 'Wallet $operation failed: $rawMessage';
+    }
+  }
+
+  void _setWalletError({
+    required String operation,
+    required Object error,
+    StackTrace? stackTrace,
+    required String flow,
+  }) {
+    final message = _normalizeWalletErrorMessage(error);
+    final kind = _classifyWalletError(message);
+    _errorMessage = _friendlyWalletError(operation, kind, message);
+    notifyListeners();
+
+    Sentry.captureException(
+      error,
+      stackTrace: stackTrace,
+      withScope: (scope) {
+        scope.setTag('wallet.operation', operation);
+        scope.setTag('wallet.error_kind', kind);
+        scope.setTag('wallet.flow', flow);
+        scope.setTag('wallet.platform', kIsWeb ? 'web' : 'mobile');
+        scope.setContexts('wallet_error', {
+          'walletAddress': _walletAddress,
+          'walletErrorMessage': message,
+        });
+      },
+    );
+  }
 
   Future<void> disconnect() async {
-    if (_signClient != null && _session != null) {
+    final privy = _privy;
+    if (privy != null && !kIsWeb) {
       try {
-        await _signClient!.disconnect(
-          topic: _session!.topic,
-          reason: const ReownSignError(
-            code: 6000,
-            message: 'User disconnected',
-          ),
-        );
+        await privy.logout();
       } catch (_) {
-        // Ignore disconnect errors
+        // Ignore logout failures and clear local state regardless.
       }
     }
 
-    _session = null;
+    _embeddedWallet = null;
+    _privyUser = null;
     _walletAddress = null;
-    _pairingUri = null;
+    _errorMessage = null;
     notifyListeners();
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  void _extractWalletAddress() {
-    if (_session == null) return;
-
-    // Extract the first account from the session namespaces
-    final accounts = _session!.namespaces['eip155']?.accounts ?? [];
-    if (accounts.isNotEmpty) {
-      // Account format: "eip155:102031:0xABC..."
-      final parts = accounts.first.split(':');
-      if (parts.length >= 3) {
-        _walletAddress = parts[2];
-      }
-    }
+  void _setError(String message) {
+    _errorMessage = message;
+    notifyListeners();
   }
 
-  /// Convert a decimal string to hex string with 0x prefix.
   String _toHex(String decimalOrHex) {
     if (decimalOrHex.startsWith('0x')) return decimalOrHex;
 
-    // Integer strings (e.g. gas, chainId, wei values)
     final intValue = BigInt.tryParse(decimalOrHex);
     if (intValue != null) {
       return '0x${intValue.toRadixString(16)}';
     }
 
-    // Decimal strings (e.g. "2.000000000000000000" native CTC amount)
-    // are interpreted as 18-decimal units and converted to wei.
     final looksDecimal = decimalOrHex.contains('.');
     if (looksDecimal) {
       try {
         final wei = EtherAmountEx.parseUnits(decimalOrHex, 18);
         return '0x${wei.toRadixString(16)}';
       } catch (_) {
-        // fall through to zero for malformed values
+        // Fall through to zero for malformed values.
       }
     }
 
     final value = BigInt.zero;
     return '0x${value.toRadixString(16)}';
-  }
-
-  /// Try to open MetaMask or another wallet via deep link.
-  /// On web, MetaMask is a browser extension — deep links don't apply and
-  /// would navigate the tab to about:blank, so we skip them entirely.
-  Future<void> _tryOpenWallet(String? uri) async {
-    if (kIsWeb) return;
-
-    try {
-      if (uri != null) {
-        final encodedUri = Uri.encodeComponent(uri);
-        final deepLink = Uri.parse('metamask://wc?uri=$encodedUri');
-        final launched =
-            await launchUrl(deepLink, mode: LaunchMode.externalApplication);
-        if (launched) return;
-        final universalLink =
-            Uri.parse('https://link.metamask.io/wc?uri=$encodedUri');
-        await launchUrl(universalLink, mode: LaunchMode.externalApplication);
-      } else {
-        await launchUrl(
-          Uri.parse('metamask://'),
-          mode: LaunchMode.externalApplication,
-        );
-      }
-    } catch (_) {
-      // Deep link not available; user can scan QR code or open wallet manually
-    }
   }
 }
 

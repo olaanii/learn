@@ -90,7 +90,8 @@ npx vercel --prod
 On first run, link to project **e-equb** if asked. Ensure in **Settings → Environment Variables** you have at least:
 
 - `API_BASE_URL` = backend API URL from step 2 (e.g. `https://api.yourdomain.com/api` or `http://YOUR_SERVER_IP:3002/api`)
-- `WALLETCONNECT_PROJECT_ID`
+- `PRIVY_APP_ID`
+- `PRIVY_APP_CLIENT_ID`
 - `CHAIN_ID` = `102031`
 - `RPC_URL` = `https://rpc.cc3-testnet.creditcoin.network`
 

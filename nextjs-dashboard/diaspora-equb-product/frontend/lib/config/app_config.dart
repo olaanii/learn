@@ -1,23 +1,38 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-  static const String _apiBaseUrlRaw = String.fromEnvironment(
+  static const String _apiBaseUrlFromEnv = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://equb-db.vercel.app/api',
+    defaultValue: '',
   );
 
-  /// Backend API base URL. In release builds, if the baked-in value is localhost (e.g. old build),
-  /// we use production URL so deployed app works without rebuild.
+  /// API base URL priority:
+  /// 1) `--dart-define=API_BASE_URL=...`
+  /// 2) Web default (`/api`) for same-origin deployments
+  /// 3) Non-web release fallback (`equb-db`)
+  /// 4) Local dev fallback
   static String get apiBaseUrl {
-    if (kReleaseMode && _apiBaseUrlRaw.contains('localhost')) {
-      return 'https://equb-db.vercel.app/api';
+    final configured = _apiBaseUrlFromEnv.trim();
+    if (configured.isNotEmpty) {
+      return _normalizeApiBaseUrl(configured);
     }
-    return _apiBaseUrlRaw;
+    if (kIsWeb) {
+      return _normalizeApiBaseUrl('/api');
+    }
+    if (kReleaseMode) {
+      return _normalizeApiBaseUrl('https://equb-db.vercel.app/api');
+    }
+    return _normalizeApiBaseUrl('http://localhost:3001/api');
   }
 
-  /// Creditcoin RPC endpoint. Override via --dart-define=RPC_URL=...
-  /// Testnet: https://rpc.cc3-testnet.creditcoin.network  (102031)
-  /// Mainnet: https://mainnet3.creditcoin.network          (102030)
+  static String _normalizeApiBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || trimmed.endsWith('/')) {
+      return trimmed;
+    }
+    return '$trimmed/';
+  }
+
   static const String rpcUrl = String.fromEnvironment(
     'RPC_URL',
     defaultValue: 'https://rpc.cc3-testnet.creditcoin.network',
@@ -67,11 +82,17 @@ class AppConfig {
     defaultValue: false,
   );
 
-  /// WalletConnect project ID from https://cloud.walletconnect.com
-  /// Required for WalletConnect v2 pairing.
-  /// Override via --dart-define=WALLETCONNECT_PROJECT_ID=...
-  static const String walletConnectProjectId = String.fromEnvironment(
-    'WALLETCONNECT_PROJECT_ID',
+  /// Privy application ID from the Privy dashboard.
+  /// Override via --dart-define=PRIVY_APP_ID=...
+  static const String privyAppId = String.fromEnvironment(
+    'PRIVY_APP_ID',
+    defaultValue: '',
+  );
+
+  /// Privy client ID from the Privy dashboard.
+  /// Override via --dart-define=PRIVY_APP_CLIENT_ID=...
+  static const String privyAppClientId = String.fromEnvironment(
+    'PRIVY_APP_CLIENT_ID',
     defaultValue: '',
   );
 

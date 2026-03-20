@@ -3,12 +3,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 async function main() {
+  const expectedTestnetChainId = 102031;
+  const allowMainnetDeploy = process.env.ALLOW_MAINNET_DEPLOY === 'true';
+  if (
+    network.config.chainId !== expectedTestnetChainId &&
+    !allowMainnetDeploy
+  ) {
+    throw new Error(
+      `Refusing to deploy on chain ${network.config.chainId}. Use creditcoinTestnet (102031), or set ALLOW_MAINNET_DEPLOY=true if you intentionally want a non-testnet deploy.`,
+    );
+  }
+
   const [deployer] = await ethers.getSigners();
   console.log('Deploying contracts with account:', deployer.address);
   console.log('Network:', network.name);
 
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log('Account balance:', ethers.formatEther(balance), 'CTC\n');
+
+  if (network.config.chainId === expectedTestnetChainId) {
+    console.log('Safety check: deploying to Creditcoin TESTNET (102031)');
+  }
 
   // 1. Deploy IdentityRegistry
   console.log('--- Deploying IdentityRegistry ---');

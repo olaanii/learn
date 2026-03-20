@@ -74,7 +74,7 @@ class CollateralProvider extends ChangeNotifier {
   // ─── ERC-20 Token Collateral (USDC / USDT) ────────────────────────────────
 
   /// Deposit USDC/USDT as collateral:
-  /// 1. Backend builds ERC-20 transfer TX -> user signs via MetaMask
+  /// 1. Backend builds ERC-20 transfer TX -> user signs via wallet
   /// 2. After TX confirmed, backend records it in DB
   Future<String?> buildAndSignDepositToken({
     required String amount,
@@ -88,7 +88,7 @@ class CollateralProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage = 'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _isLoading = false;
         notifyListeners();
         return null;
@@ -194,7 +194,8 @@ class CollateralProvider extends ChangeNotifier {
 
   // ─── Native CTC Collateral (backward compat) ──────────────────────────────
 
-  Future<String?> buildAndSignDeposit(String amount, {String? walletAddress}) async {
+  Future<String?> buildAndSignDeposit(String amount,
+      {String? walletAddress}) async {
     _isLoading = true;
     _errorMessage = null;
     _lastTxHash = null;
@@ -257,7 +258,7 @@ class CollateralProvider extends ChangeNotifier {
     }
   }
 
-  // ─── Legacy DB Methods (kept for dev/test without WalletConnect) ────────────
+  // ─── Legacy DB Methods (kept for dev/test without wallet signing) ────────────
 
   Future<bool> lockCollateral({
     required String walletAddress,
@@ -279,7 +280,8 @@ class CollateralProvider extends ChangeNotifier {
         final updated = List<Map<String, dynamic>>.from(_collaterals);
         for (var i = 0; i < updated.length; i++) {
           final c = Map<String, dynamic>.from(updated[i]);
-          final cur = double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
+          final cur =
+              double.tryParse(c['lockedAmount']?.toString() ?? '0') ?? 0;
           c['lockedAmount'] = (cur + addAmount).toString();
           updated[i] = c;
         }

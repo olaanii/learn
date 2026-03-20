@@ -126,7 +126,8 @@ echo        cd frontend
 echo        flutter build apk --release --split-per-abi ^
 echo          --dart-define=API_BASE_URL=http://localhost:3001/api ^
 echo          --dart-define=DEV_BYPASS_FAYDA=true ^
-echo          --dart-define=WALLETCONNECT_PROJECT_ID=your_id
+echo          --dart-define=PRIVY_APP_ID=your_privy_app_id ^
+echo          --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id
 echo.
 echo   To rerun smoke tests:
 echo     scripts\smoke-test.bat

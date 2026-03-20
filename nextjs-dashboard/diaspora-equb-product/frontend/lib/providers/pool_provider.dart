@@ -48,16 +48,19 @@ class PoolProvider extends ChangeNotifier {
       _pools = List<Map<String, dynamic>>.from(data);
       debugPrint('[PoolProvider] loadPools: ${_pools.length} pools loaded');
       for (final p in _pools) {
-        debugPrint('[PoolProvider]   id=${p['id']}, onChainPoolId=${p['onChainPoolId']}, status=${p['status']}, tier=${p['tier']}');
+        debugPrint(
+            '[PoolProvider]   id=${p['id']}, onChainPoolId=${p['onChainPoolId']}, status=${p['status']}, tier=${p['tier']}');
       }
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('401') || msg.contains('Unauthorized')) {
         _errorMessage = 'Session expired — please log in again';
-      } else if (msg.contains('SocketException') || msg.contains('Connection refused')) {
+      } else if (msg.contains('SocketException') ||
+          msg.contains('Connection refused')) {
         _errorMessage = 'Cannot reach server — check if backend is running';
       } else {
-        _errorMessage = 'Failed to load equbs: ${msg.length > 80 ? msg.substring(0, 80) : msg}';
+        _errorMessage =
+            'Failed to load equbs: ${msg.length > 80 ? msg.substring(0, 80) : msg}';
       }
       debugPrint('[PoolProvider] loadPools ERROR: $e');
     }
@@ -81,9 +84,9 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── On-Chain TX Builder Methods (WalletConnect signing) ────────────────────
+  // ─── On-Chain TX Builder Methods (wallet signing) ───────────────────────────
 
-  /// Build a create-pool TX from the backend, then sign & send via WalletConnect.
+  /// Build a create-pool TX from the backend, then sign & send via wallet.
   ///
   /// [token] - Optional ERC-20 token address for contributions.
   ///           Pass null or zero address for native CTC pools.
@@ -109,7 +112,7 @@ class PoolProvider extends ChangeNotifier {
         token: token,
       );
 
-      // 2. Sign and send via WalletConnect
+      // 2. Sign and send via wallet
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
 
@@ -222,12 +225,10 @@ class PoolProvider extends ChangeNotifier {
       _errorMessage = switch (code) {
         'WINNER_BEFORE_CLOSE' =>
           'Close the active round before picking the winner.',
-        'ROUND_ALREADY_PICKED' =>
-          'Winner is already picked for this round.',
+        'ROUND_ALREADY_PICKED' => 'Winner is already picked for this round.',
         'SEASON_COMPLETE' =>
           'Season is complete. Configure next season to continue.',
-        'NOT_POOL_ADMIN' =>
-          'Only the pool admin can pick a winner.',
+        'NOT_POOL_ADMIN' => 'Only the pool admin can pick a winner.',
         'IDEMPOTENCY_REPLAY_CONFLICT' =>
           'Duplicate request conflict detected. Retry once.',
         _ => defaultMessage,
@@ -238,7 +239,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a join-pool TX from the backend, then sign & send via WalletConnect.
+  /// Build a join-pool TX from the backend, then sign & send via wallet.
   /// Refreshes pool list on success so UI updates in real time.
   Future<String?> buildAndSignJoinPool(
     int onChainPoolId, {
@@ -250,15 +251,18 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PoolProvider] buildAndSignJoinPool: poolId=$onChainPoolId, caller=$caller, walletAddr=${_walletService.walletAddress}');
+      debugPrint(
+          '[PoolProvider] buildAndSignJoinPool: poolId=$onChainPoolId, caller=$caller, walletAddr=${_walletService.walletAddress}');
       final unsignedTx = await _api.buildJoinPool(
         onChainPoolId,
         caller: caller,
       );
-      debugPrint('[PoolProvider] Join unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, chainId=${unsignedTx['chainId']}');
+      debugPrint(
+          '[PoolProvider] Join unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, chainId=${unsignedTx['chainId']}');
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
-      debugPrint('[PoolProvider] Join result: txHash=$txHash, error=${_walletService.errorMessage}');
+      debugPrint(
+          '[PoolProvider] Join result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
         _errorMessage = _walletService.errorMessage ?? 'Transaction rejected';
@@ -277,7 +281,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a contribute TX from the backend, then sign & send via WalletConnect.
+  /// Build a contribute TX from the backend, then sign & send via wallet.
   ///
   /// For ERC-20 pools, pass [tokenAddress] so the backend returns value=0.
   /// The caller should ensure approval is done first via [buildAndSignApproveToken].
@@ -294,21 +298,26 @@ class PoolProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[PoolProvider] buildAndSignContribute: poolId=$onChainPoolId, amount=$contributionAmount, token=$tokenAddress');
+      debugPrint(
+          '[PoolProvider] buildAndSignContribute: poolId=$onChainPoolId, amount=$contributionAmount, token=$tokenAddress');
       final unsignedTx = await _api.buildContribute(
         onChainPoolId: onChainPoolId,
         contributionAmount: contributionAmount,
         tokenAddress: tokenAddress,
       );
-      debugPrint('[PoolProvider] Got unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, gas=${unsignedTx['estimatedGas']}, chainId=${unsignedTx['chainId']}');
-      debugPrint('[PoolProvider] Wallet connected: ${_walletService.isConnected}, addr: ${_walletService.walletAddress}');
+      debugPrint(
+          '[PoolProvider] Got unsigned TX: to=${unsignedTx['to']}, value=${unsignedTx['value']}, gas=${unsignedTx['estimatedGas']}, chainId=${unsignedTx['chainId']}');
+      debugPrint(
+          '[PoolProvider] Wallet connected: ${_walletService.isConnected}, addr: ${_walletService.walletAddress}');
 
       final txHash = await _walletService.signAndSendTransaction(unsignedTx);
       _lastTxHash = txHash;
-      debugPrint('[PoolProvider] signAndSend result: txHash=$txHash, error=${_walletService.errorMessage}');
+      debugPrint(
+          '[PoolProvider] signAndSend result: txHash=$txHash, error=${_walletService.errorMessage}');
 
       if (txHash == null) {
-        _errorMessage = _walletService.errorMessage ?? 'Transaction rejected by wallet';
+        _errorMessage =
+            _walletService.errorMessage ?? 'Transaction rejected by wallet';
       } else if (poolId != null) {
         await loadPool(poolId);
       }
@@ -325,7 +334,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build an ERC-20 approve TX and sign via WalletConnect.
+  /// Build an ERC-20 approve TX and sign via wallet.
   /// Must be signed BEFORE contributing to an ERC-20 pool.
   Future<String?> buildAndSignApproveToken({
     required String tokenAddress,
@@ -381,7 +390,7 @@ class PoolProvider extends ChangeNotifier {
     );
   }
 
-  /// Build a close-round TX from the backend, then sign & send via WalletConnect.
+  /// Build a close-round TX from the backend, then sign & send via wallet.
   Future<String?> buildAndSignCloseRound(int onChainPoolId) async {
     _isLoading = true;
     _errorMessage = null;
@@ -408,7 +417,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  /// Build a schedule-stream TX from the backend, then sign & send via WalletConnect.
+  /// Build a schedule-stream TX from the backend, then sign & send via wallet.
   Future<String?> buildAndSignScheduleStream({
     required int onChainPoolId,
     required String beneficiary,
@@ -629,7 +638,8 @@ class PoolProvider extends ChangeNotifier {
         return null;
       }
 
-      final scheduleTx = Map<String, dynamic>.from(payload['scheduleTx'] as Map);
+      final scheduleTx =
+          Map<String, dynamic>.from(payload['scheduleTx'] as Map);
       final txHash = await _walletService.signAndSendTransaction(scheduleTx);
       _lastTxHash = txHash;
 
@@ -657,7 +667,7 @@ class PoolProvider extends ChangeNotifier {
     }
   }
 
-  // ─── Legacy DB Methods (kept for dev/test without WalletConnect) ────────────
+  // ─── Legacy DB Methods (kept for dev/test without wallet signing) ───────────
 
   Future<bool> joinPool(String poolId, String walletAddress) async {
     try {

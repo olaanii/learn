@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../services/app_snackbar_service.dart';
+import '../widgets/desktop_layout.dart';
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
@@ -17,6 +18,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   String _currency = 'USDC';
+
+  Color _softSurfaceColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkSurface
+          : AppTheme.backgroundLight;
+
+  Color _softBorderColor(BuildContext context) =>
+      AppTheme.textHintColor(context).withValues(alpha: 0.45);
+
+  Color _softAccentColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.textHintColor(context).withValues(alpha: 0.18)
+          : const Color(0xFFE4F0E0);
 
   @override
   void dispose() {
@@ -49,9 +63,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             Container(
               width: 36,
               height: 36,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFB5CCBE),
+                color: AppTheme.textHintColor(context).withValues(alpha: 0.3),
               ),
               clipBehavior: Clip.antiAlias,
               child: Image.network(
@@ -77,39 +91,92 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            const SizedBox(height: 4),
-            // White card panel
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppTheme.cardColor(context),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
-                  ),
-                  boxShadow: AppTheme.cardShadowFor(context),
-                ),
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                  child: Consumer<WalletProvider>(
-                    builder: (context, wallet, _) {
-                      final amountStr = _amountController.text;
-                      final usdAmount = double.tryParse(amountStr) ?? 0;
-                      final eurRate = wallet.rates['EUR'] ?? 0.95;
-                      final eurAmount = usdAmount * eurRate;
-                      final now = TimeOfDay.now();
-                      final timeStr =
-                          '${now.hourOfPeriod.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.period == DayPeriod.am ? 'AM' : 'PM'}';
+        body: Consumer<WalletProvider>(
+          builder: (context, wallet, _) {
+            final amountStr = _amountController.text;
+            final usdAmount = double.tryParse(amountStr) ?? 0;
+            final eurRate = wallet.rates['EUR'] ?? 0.95;
+            final eurAmount = usdAmount * eurRate;
+            final now = TimeOfDay.now();
+            final timeStr =
+                '${now.hourOfPeriod.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.period == DayPeriod.am ? 'AM' : 'PM'}';
 
-                      return Column(
+            return AppTheme.isDesktop(context)
+                ? _buildDesktopBody(
+                    context,
+                    walletAddr,
+                    wallet,
+                    usdAmount,
+                    eurAmount,
+                    timeStr,
+                  )
+                : Column(
+                    children: [
+                      const SizedBox(height: 4),
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AppTheme.cardColor(context),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(28),
+                            ),
+                            boxShadow: AppTheme.cardShadowFor(context),
+                          ),
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                            child: _buildReceiveFlow(
+                              context,
+                              walletAddr,
+                              wallet,
+                              usdAmount,
+                              eurAmount,
+                              timeStr,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopBody(
+    BuildContext context,
+    String? walletAddr,
+    WalletProvider wallet,
+    double usdAmount,
+    double eurAmount,
+    String timeStr,
+  ) {
+    return DesktopContent(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const DesktopSectionTitle(
+            title: 'Receive Funds',
+            subtitle:
+                'Share your wallet address and prepare a clean payment request for clients',
+          ),
+          const SizedBox(height: 18),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: DesktopCardSection(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
                         children: [
-                          // Your wallet address card
                           _buildWalletAddressCard(context, walletAddr),
                           const SizedBox(height: 16),
-                          // Client pays card
                           _buildAmountCard(
                             context,
                             label: 'Client pays',
@@ -119,12 +186,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             time: timeStr,
                           ),
                           const SizedBox(height: 12),
-                          // Arrow down
                           Container(
                             width: 36,
                             height: 36,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE4F0E0),
+                            decoration: BoxDecoration(
+                              color: _softAccentColor(context),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -134,7 +200,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          // You receive card
                           _buildAmountCard(
                             context,
                             label: 'You receive',
@@ -143,45 +208,158 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                 : '€0.00',
                             time: timeStr,
                           ),
-                          const SizedBox(height: 20),
-                          // Exchange rate
-                          Builder(
-                            builder: (context) {
-                              final eur =
-                                  wallet.rates['EUR']?.toStringAsFixed(2) ??
-                                      '0.95';
-                              final gbp =
-                                  wallet.rates['GBP']?.toStringAsFixed(2) ??
-                                      '0.79';
-                              return Text(
-                                '1 USD = EUR $eur • GBP $gbp',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w400,
-                                  color: AppTheme.textTertiaryColor(context),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 28),
-                          // Action buttons
-                          _buildActionButtons(context, walletAddr),
-                          const SizedBox(height: 32),
-                          // Amount input
-                          _buildAmountInput(context),
-                          const SizedBox(height: 20),
-                          // Reference ID input
-                          _buildReferenceInput(context),
                         ],
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: AppTheme.desktopPanelGap),
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    children: [
+                      DesktopCardSection(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Request Details',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Add the amount, optional reference, and quick-share actions.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 18),
+                            _buildAmountInput(context),
+                            const SizedBox(height: 18),
+                            _buildReferenceInput(context),
+                            const SizedBox(height: 22),
+                            _buildActionButtons(context, walletAddr),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.desktopSectionGap),
+                      DesktopCardSection(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Rates Snapshot',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildRateRow(
+                              context,
+                              'USD to EUR',
+                              wallet.rates['EUR']?.toStringAsFixed(2) ?? '0.95',
+                            ),
+                            const SizedBox(height: 10),
+                            _buildRateRow(
+                              context,
+                              'USD to GBP',
+                              wallet.rates['GBP']?.toStringAsFixed(2) ?? '0.79',
+                            ),
+                            const SizedBox(height: 10),
+                            _buildRateRow(
+                                context, 'Selected currency', _currency),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildReceiveFlow(
+    BuildContext context,
+    String? walletAddr,
+    WalletProvider wallet,
+    double usdAmount,
+    double eurAmount,
+    String timeStr,
+  ) {
+    final eur = wallet.rates['EUR']?.toStringAsFixed(2) ?? '0.95';
+    final gbp = wallet.rates['GBP']?.toStringAsFixed(2) ?? '0.79';
+
+    return Column(
+      children: [
+        _buildWalletAddressCard(context, walletAddr),
+        const SizedBox(height: 16),
+        _buildAmountCard(
+          context,
+          label: 'Client pays',
+          amount:
+              usdAmount > 0 ? '\$${usdAmount.toStringAsFixed(2)}' : '\$0.00',
+          time: timeStr,
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: _softAccentColor(context),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 22,
+            color: AppTheme.textPrimaryColor(context),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildAmountCard(
+          context,
+          label: 'You receive',
+          amount: usdAmount > 0 ? '€${eurAmount.toStringAsFixed(2)}' : '€0.00',
+          time: timeStr,
+        ),
+        const SizedBox(height: 20),
+        Text(
+          '1 USD = EUR $eur • GBP $gbp',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: AppTheme.textTertiaryColor(context),
+          ),
+        ),
+        const SizedBox(height: 28),
+        _buildActionButtons(context, walletAddr),
+        const SizedBox(height: 32),
+        _buildAmountInput(context),
+        const SizedBox(height: 20),
+        _buildReferenceInput(context),
+      ],
+    );
+  }
+
+  Widget _buildRateRow(BuildContext context, String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppTheme.textTertiaryColor(context),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryColor(context),
+          ),
+        ),
+      ],
     );
   }
 
@@ -201,9 +379,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1FAEE),
+          color: _softSurfaceColor(context),
           borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+          border: Border.all(color: _softBorderColor(context), width: 1),
         ),
         child: Row(
           children: [
@@ -260,8 +438,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFFF1FAEE),
+        color: _softSurfaceColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        border: Border.all(color: _softBorderColor(context)),
       ),
       child: Column(
         children: [
@@ -285,20 +464,23 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.6),
+                        color: AppTheme.textPrimaryColor(context)
+                            .withValues(alpha: 0.6),
                       ),
                     ),
                     Container(
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.08),
+                        color: AppTheme.textPrimaryColor(context)
+                            .withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.content_copy_rounded,
                         size: 16,
-                        color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.5),
+                        color: AppTheme.textPrimaryColor(context)
+                            .withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -323,7 +505,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.45),
+                      color: AppTheme.textPrimaryColor(context)
+                          .withValues(alpha: 0.45),
                     ),
                   ),
                 ),
@@ -339,7 +522,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildActionItem(context, Icons.qr_code_scanner_rounded, 'Scan QR', () {}),
+        _buildActionItem(
+            context, Icons.qr_code_scanner_rounded, 'Scan QR', () {}),
         _buildActionItem(context, Icons.share_outlined, 'Share', () {
           if (walletAddr != null) {
             Clipboard.setData(ClipboardData(text: walletAddr));
@@ -355,7 +539,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
-  Widget _buildActionItem(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+  Widget _buildActionItem(
+      BuildContext context, IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -366,11 +551,13 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.textPrimaryColor(context).withValues(alpha: 0.12),
+                color:
+                    AppTheme.textPrimaryColor(context).withValues(alpha: 0.12),
                 width: 1.5,
               ),
             ),
-            child: Icon(icon, size: 22, color: AppTheme.textPrimaryColor(context)),
+            child:
+                Icon(icon, size: 22, color: AppTheme.textPrimaryColor(context)),
           ),
           const SizedBox(height: 10),
           Text(
@@ -390,9 +577,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1FAEE),
+        color: _softSurfaceColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+        border: Border.all(color: _softBorderColor(context), width: 1),
       ),
       child: Row(
         children: [
@@ -460,9 +647,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1FAEE),
+        color: _softSurfaceColor(context),
         borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+        border: Border.all(color: _softBorderColor(context), width: 1),
       ),
       child: TextField(
         controller: _referenceController,

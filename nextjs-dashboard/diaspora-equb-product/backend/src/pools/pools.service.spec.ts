@@ -17,6 +17,7 @@ import { IdempotencyKey } from '../entities/idempotency-key.entity';
 import { Web3Service } from '../web3/web3.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RulesService } from '../rules/rules.service';
+import { EventsGateway } from '../websocket/events.gateway';
 import { DataSource } from 'typeorm';
 import { createHash } from 'crypto';
 
@@ -82,6 +83,15 @@ describe('PoolsService', () => {
     upsertRulesFromChain: jest.fn().mockResolvedValue({}),
   };
 
+  const mockEventsGateway = {
+    emitWinnerRandomizing: jest.fn(),
+    emitWinnerPicked: jest.fn(),
+    emitContributionReceived: jest.fn(),
+    emitRoundClosed: jest.fn(),
+    emitPayoutSent: jest.fn(),
+    emitMemberJoined: jest.fn(),
+  };
+
   const mockDataSource = {
     transaction: jest.fn(),
   };
@@ -100,6 +110,7 @@ describe('PoolsService', () => {
         { provide: Web3Service, useValue: mockWeb3Service },
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: RulesService, useValue: mockRulesService },
+        { provide: EventsGateway, useValue: mockEventsGateway },
         { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();

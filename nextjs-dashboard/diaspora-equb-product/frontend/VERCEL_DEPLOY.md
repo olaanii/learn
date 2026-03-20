@@ -1,12 +1,24 @@
-# Deploy e-Equb (Flutter web) to Vercel
+# Deploy e-Equb to Vercel
 
-Deploy this app to your Vercel project so it replaces the previous deployment and appears as **e-Equb**.
+Deploy this app to your Vercel project so it ships as a hybrid web deployment:
+
+- `/` is a statically rendered Jaspr landing page for SEO.
+- `/app` is the authenticated Flutter web application.
 
 ---
 
-## Flutter web: backend URL + WalletConnect
+## Frontend split: Jaspr landing + Flutter app
 
-The app is configured to talk to the backend at **`https://equb-db.vercel.app/api`** (set in `vercel.json`). WalletConnect is included when you set `WALLETCONNECT_PROJECT_ID` in Vercel.
+The repository now builds two frontends from the `frontend` folder:
+
+- `seo_landing/` builds the public landing page with Jaspr into `build/jaspr`.
+- Flutter builds the app into `build/web`, and the Vercel build script mounts it at `/app`.
+
+The final deploy output is assembled into `build/site`.
+
+## Flutter web: backend URL + Privy
+
+The app is configured to talk to the backend at **`https://equb-db.vercel.app/api`** (set in `vercel.json`). Privy wallet auth is enabled when you set `PRIVY_APP_ID` and `PRIVY_APP_CLIENT_ID` in Vercel.
 
 **1. Environment variables (Vercel dashboard)**  
 In your **frontend** project: **Settings → Environment Variables**. Add for **Production** (and Preview if you want):
@@ -14,11 +26,23 @@ In your **frontend** project: **Settings → Environment Variables**. Add for **
 | Name | Value |
 |------|--------|
 | `API_BASE_URL` | `https://equb-db.vercel.app/api` *(optional: already in vercel.json)* |
-| `WALLETCONNECT_PROJECT_ID` | Your project ID from [WalletConnect Cloud](https://cloud.walletconnect.com) (e.g. `10aaa86fb2c0d5a86ee20ce532834485`) |
+| `PRIVY_APP_ID` | Your app ID from the Privy dashboard |
+| `PRIVY_APP_CLIENT_ID` | Your app client ID from the Privy dashboard |
+| `FIREBASE_API_KEY` | Firebase web app API key |
+| `FIREBASE_APP_ID` | Firebase web app ID |
+| `FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
+| `FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_AUTH_DOMAIN` | Usually `your-project.firebaseapp.com` |
+| `FIREBASE_STORAGE_BUCKET` | Usually `your-project.firebasestorage.app` or `.appspot.com` |
+| `GOOGLE_WEB_CLIENT_ID` | Google web OAuth client ID used for sign-in |
+| `FIREBASE_MEASUREMENT_ID` | Optional |
+| `FIREBASE_ANDROID_CLIENT_ID` | Optional |
+| `FIREBASE_IOS_CLIENT_ID` | Optional |
+| `FIREBASE_IOS_BUNDLE_ID` | Optional |
 
 **2. Deploy**
 
-- **From Git:** push to the connected branch; Vercel builds from `vercel.json` and `scripts/vercel_build.sh` (which uses `API_BASE_URL` and `WALLETCONNECT_PROJECT_ID` in the Flutter build).
+- **From Git:** push to the connected branch; Vercel builds from `vercel.json` and `scripts/vercel_build.sh` (which uses `API_BASE_URL`, `PRIVY_APP_ID`, and `PRIVY_APP_CLIENT_ID` in the Flutter build).
 - **From CLI (frontend folder):**
   ```bash
   cd frontend
@@ -26,7 +50,7 @@ In your **frontend** project: **Settings → Environment Variables**. Add for **
   ```
   If you hit the file-count limit: `npx vercel --prod --archive=tgz`
 
-**Result:** Flutter web build uses `https://equb-db.vercel.app/api` for all API calls and includes your WalletConnect project ID for wallet pairing.
+**Result:** Flutter web build uses `https://equb-db.vercel.app/api` for all API calls, includes your Privy app credentials for wallet auth, and loads Firebase auth configuration securely from Vercel env variables passed into Flutter at build time.
 
 ---
 
@@ -110,12 +134,24 @@ In **Settings → Environment Variables**, add these for **Production** (and opt
 | Vercel name               | What to use / copy from |
 |---------------------------|-------------------------|
 | `API_BASE_URL`            | See **“How to set API_BASE_URL”** below. |
-| `WALLETCONNECT_PROJECT_ID`| From your root `.env`: `WALLETCONNECT_PROJECT_ID` (e.g. `10aaa86fb2c0d5a86ee20ce532834485`). |
+| `PRIVY_APP_ID`           | From your root `.env`: `PRIVY_APP_ID`. |
+| `PRIVY_APP_CLIENT_ID`    | From your root `.env`: `PRIVY_APP_CLIENT_ID`. |
 | `CHAIN_ID`                | From `.env`: `CHAIN_ID` → use `102031` (testnet) or `102030` (mainnet). |
 | `RPC_URL`                 | From `.env`: `RPC_URL` → e.g. `https://rpc.cc3-testnet.creditcoin.network`. |
 | `SENTRY_DSN`              | From `.env`: `SENTRY_DSN` (optional; leave empty to disable). |
+| `FIREBASE_API_KEY`        | From your Firebase web app config. Store only in Vercel env, not in git. |
+| `FIREBASE_APP_ID`         | From your Firebase web app config. |
+| `FIREBASE_MESSAGING_SENDER_ID` | From your Firebase web app config. |
+| `FIREBASE_PROJECT_ID`     | Firebase project ID. |
+| `FIREBASE_AUTH_DOMAIN`    | Usually `your-project.firebaseapp.com`. |
+| `FIREBASE_STORAGE_BUCKET` | Usually `your-project.firebasestorage.app` or `.appspot.com`. |
+| `GOOGLE_WEB_CLIENT_ID`    | Google web OAuth client ID for browser sign-in. |
+| `FIREBASE_MEASUREMENT_ID` | Optional. |
+| `FIREBASE_ANDROID_CLIENT_ID` | Optional. |
+| `FIREBASE_IOS_CLIENT_ID`  | Optional. |
+| `FIREBASE_IOS_BUNDLE_ID`  | Optional. |
 
-These are passed into the Flutter build via `--dart-define` in `vercel.json`.
+These are passed into the Flutter build by `scripts/vercel_build.sh` via `--dart-define` at deploy time. This keeps Firebase configuration env-backed and out of source control.
 
 ### How to set `API_BASE_URL`
 
@@ -140,10 +176,17 @@ These are passed into the Flutter build via `--dart-define` in `vercel.json`.
 
 From your project root `.env` you can use:
 
-- `WALLETCONNECT_PROJECT_ID` → same name in Vercel, same value.
+- `PRIVY_APP_ID` → same name in Vercel, same value.
+- `PRIVY_APP_CLIENT_ID` → same name in Vercel, same value.
 - `CHAIN_ID` → same name in Vercel, same value (e.g. `102031`).
 - `RPC_URL` → same name in Vercel, same value (e.g. `https://rpc.cc3-testnet.creditcoin.network`).
 - `SENTRY_DSN` → same name in Vercel, same value or leave empty.
+
+For Firebase, do not rely on committing generated config or secrets. Instead:
+
+- Keep Firebase values in your local root `.env` for local development if needed.
+- Add the same Firebase values manually in the Vercel project Environment Variables UI for Production and Preview.
+- Let the Vercel build script inject them into Flutter as dart-defines during the build.
 
 `API_BASE_URL` is **not** in your backend `.env`; it’s the URL **of** the backend that the frontend calls, so you set it in Vercel to wherever that backend is hosted (see above).
 
@@ -194,7 +237,7 @@ Deploy the backend on a platform that runs Node + PostgreSQL (e.g. Railway, Rend
 
 - Deploy the frontend to Vercel as above.
 - Set **`API_BASE_URL`** in Vercel to the backend API URL from step 2 (e.g. `https://your-app.railway.app/api`).
-- Set `WALLETCONNECT_PROJECT_ID`, `CHAIN_ID`, `RPC_URL` (same network as contracts). Redeploy.
+- Set `PRIVY_APP_ID`, `PRIVY_APP_CLIENT_ID`, `CHAIN_ID`, `RPC_URL` (same network as contracts). Redeploy.
 
 Result: users open the Vercel URL; the app calls the backend at `API_BASE_URL`; backend and wallets use the chain where contracts are deployed.
 
@@ -209,7 +252,7 @@ Update root `.env` (and backend env) with the addresses printed or in `contracts
 
 **Frontend (Vercel CLI):**
 1. Install and log in: `npm install -g vercel` then `vercel login`.
-2. In Vercel project **Settings → Environment Variables**, add `API_BASE_URL`, `WALLETCONNECT_PROJECT_ID`, `CHAIN_ID`, `RPC_URL`, `SENTRY_DSN` (or they are used from the project when you deploy).
+2. In Vercel project **Settings → Environment Variables**, add `API_BASE_URL`, `PRIVY_APP_ID`, `PRIVY_APP_CLIENT_ID`, `CHAIN_ID`, `RPC_URL`, `SENTRY_DSN` (or they are used from the project when you deploy).
 3. From the **frontend** directory:
    ```bash
    cd nextjs-dashboard/diaspora-equb-product/frontend

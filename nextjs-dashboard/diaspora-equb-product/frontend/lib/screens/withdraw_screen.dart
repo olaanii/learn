@@ -98,8 +98,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => _isSubmitting = true);
 
     AppSnackbarService.instance.info(
-      message: 'Opening MetaMask to confirm…',
-      dedupeKey: 'withdraw_metamask_opening',
+      message: 'Opening wallet to confirm…',
+      dedupeKey: 'withdraw_wallet_opening',
       duration: const Duration(seconds: 2),
     );
 
@@ -234,15 +234,17 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE9F5EC),
+                      color: AppTheme.positive.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF52B788)),
+                      border: Border.all(
+                        color: AppTheme.positive.withValues(alpha: 0.28),
+                      ),
                     ),
                     child: Text(
                       _txResult!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF1B4332),
+                        color: AppTheme.textPrimaryColor(context),
                       ),
                     ),
                   ),
@@ -283,9 +285,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1FAEE),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppTheme.darkSurface
+            : AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+        border: Border.all(color: AppTheme.textHintColor(context), width: 1),
       ),
       child: TextField(
         controller: controller,
@@ -319,9 +323,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1FAEE),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppTheme.darkSurface
+              : AppTheme.backgroundLight,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+          border: Border.all(color: AppTheme.textHintColor(context), width: 1),
         ),
         child: Row(
           children: [
@@ -357,9 +363,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1FAEE),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppTheme.darkSurface
+              : AppTheme.backgroundLight,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+          border: Border.all(color: AppTheme.textHintColor(context), width: 1),
         ),
         child: Row(
           children: [
@@ -405,9 +413,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1FAEE),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppTheme.darkSurface
+            : AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFB5CCBE), width: 1),
+        border: Border.all(color: AppTheme.textHintColor(context), width: 1),
       ),
       child: TextField(
         controller: _amountController,

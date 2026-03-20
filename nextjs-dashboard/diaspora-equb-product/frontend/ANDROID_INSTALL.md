@@ -40,7 +40,7 @@ Replace `YOUR_STORE_PASSWORD` and `YOUR_KEY_PASSWORD` with the passwords you set
 **3. Rebuild the APK** (from `frontend`):
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://equb-db.vercel.app/api --dart-define=WALLETCONNECT_PROJECT_ID=10aaa86fb2c0d5a86ee20ce532834485 --dart-define=CHAIN_ID=102031 --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
+flutter build apk --release --dart-define=API_BASE_URL=https://equb-db.vercel.app/api --dart-define=PRIVY_APP_ID=your_privy_app_id --dart-define=PRIVY_APP_CLIENT_ID=your_privy_app_client_id --dart-define=CHAIN_ID=102031 --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
 ```
 
 **4. Install the new APK** on the phone (copy `build/app/outputs/flutter-apk/app-release.apk` and open it, or use `adb install`).

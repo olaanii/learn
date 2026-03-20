@@ -23,16 +23,6 @@ class ApiClient {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Ensure baseUrl always ends with a slash so Dio appends paths properly
-        if (!options.baseUrl.endsWith('/')) {
-           options.baseUrl = '${options.baseUrl}/';
-        }
-        
-        // Remove leading slash from path to prevent Dio from treating it as absolute
-        if (options.path.startsWith('/')) {
-          options.path = options.path.substring(1);
-        }
-        
         final token = await _storage.read(key: _tokenKey);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -64,6 +54,13 @@ class ApiClient {
   }
 
   // ── Auth ──────────────────────────────────────
+  Future<Map<String, dynamic>> firebaseSession(String idToken) async {
+    final response = await _dio.post('auth/firebase/session', data: {
+      'idToken': idToken,
+    });
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> verifyFayda(String token) async {
     try {
       final response =
@@ -71,7 +68,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in verifyFayda: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in verifyFayda: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -85,7 +83,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in walletChallenge: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in walletChallenge: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -105,7 +104,8 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in walletVerify: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in walletVerify: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
@@ -119,18 +119,78 @@ class ApiClient {
       return response.data;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('DIO EXCEPTION in devLogin: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
+        debugPrint(
+            'DIO EXCEPTION in devLogin: ${e.response?.statusCode} ${e.response?.data} | url: ${e.requestOptions.uri}');
       }
       rethrow;
     }
   }
 
+  // ── Security ──────────────────────────────────
+  Future<Map<String, dynamic>> get2FAStatus() async {
+    final response = await _dio.get('security/2fa/status');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> setup2FA() async {
+    final response = await _dio.post('security/2fa/setup');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> verify2FA(String code) async {
+    final response = await _dio.post('security/2fa/verify', data: {
+      'code': code,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> disable2FA() async {
+    final response = await _dio.delete('security/2fa');
+    return response.data;
+  }
+
+  Future<List<dynamic>> listTrustedDevices() async {
+    final response = await _dio.get('security/devices');
+    return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> registerTrustedDevice({
+    required String fingerprint,
+    String? userAgent,
+  }) async {
+    final response = await _dio.post('security/devices/register', data: {
+      'fingerprint': fingerprint,
+      if (userAgent != null && userAgent.isNotEmpty) 'userAgent': userAgent,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> revokeTrustedDevice(String deviceId) async {
+    final response = await _dio.delete('security/devices/$deviceId');
+    return response.data;
+  }
+
   // ── Identity ──────────────────────────────────
-  Future<Map<String, dynamic>> bindWallet(
+  Future<Map<String, dynamic>> bindWalletChallenge(
       String identityHash, String walletAddress) async {
-    final response = await _dio.post('wallet/bind', data: {
+    final response = await _dio.post('wallet/bind/challenge', data: {
       'identityHash': identityHash,
       'walletAddress': walletAddress,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> bindWalletVerify({
+    required String identityHash,
+    required String walletAddress,
+    required String message,
+    required String signature,
+  }) async {
+    final response = await _dio.post('wallet/bind/verify', data: {
+      'identityHash': identityHash,
+      'walletAddress': walletAddress,
+      'message': message,
+      'signature': signature,
     });
     return response.data;
   }
@@ -314,7 +374,8 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getEligibleWinners(String poolId) async {
-    final response = await _dio.get('pools/$poolId/rounds/active/eligible-winners');
+    final response =
+        await _dio.get('pools/$poolId/rounds/active/eligible-winners');
     return response.data;
   }
 
@@ -402,8 +463,7 @@ class ApiClient {
     required String tokenSymbol,
     required String txHash,
   }) async {
-    final response =
-        await _dio.post('collateral/deposit-token/confirm', data: {
+    final response = await _dio.post('collateral/deposit-token/confirm', data: {
       'walletAddress': walletAddress,
       'amount': amount,
       'tokenSymbol': tokenSymbol,
@@ -557,6 +617,28 @@ class ApiClient {
   Future<List<dynamic>> getSupportedTokens() async {
     final response = await _dio.get('token/supported');
     return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTokenAllowance({
+    required String walletAddress,
+    required String spender,
+    required String token,
+    String? tokenAddress,
+    String? requiredAmountRaw,
+  }) async {
+    final response = await _dio.get(
+      'token/allowance',
+      queryParameters: {
+        'walletAddress': walletAddress,
+        'spender': spender,
+        'token': token,
+        if (tokenAddress != null && tokenAddress.isNotEmpty)
+          'tokenAddress': tokenAddress,
+        if (requiredAmountRaw != null && requiredAmountRaw.isNotEmpty)
+          'requiredAmountRaw': requiredAmountRaw,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   // ── Equb Rules ──────────────────────────────
@@ -749,7 +831,8 @@ class ApiClient {
     return response.data;
   }
 
-  Future<Map<String, dynamic>> getProposal(String poolId, String proposalId) async {
+  Future<Map<String, dynamic>> getProposal(
+      String poolId, String proposalId) async {
     final response = await _dio.get('pools/$poolId/proposals/$proposalId');
     return Map<String, dynamic>.from(response.data as Map);
   }
@@ -815,31 +898,54 @@ class ApiClient {
   Future<Map<String, dynamic>> getSwapQuote({
     required String fromToken,
     required String toToken,
-    required String amount,
+    required String amountIn,
   }) async {
     final response = await _dio.post('swap/quote', data: {
       'fromToken': fromToken,
       'toToken': toToken,
-      'amount': amount,
+      'amountIn': amountIn,
     });
-    return response.data;
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   Future<Map<String, dynamic>> buildSwapTx({
     required String fromToken,
     required String toToken,
-    required String amount,
+    required String amountInRaw,
+    required String minAmountOutRaw,
   }) async {
     final response = await _dio.post('swap/build-tx', data: {
       'fromToken': fromToken,
       'toToken': toToken,
-      'amount': amount,
+      'amountInRaw': amountInRaw,
+      'minAmountOutRaw': minAmountOutRaw,
     });
-    return response.data;
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
-  Future<List<dynamic>> getSwapHistory() async {
-    final response = await _dio.get('swap/history');
+  Future<Map<String, dynamic>> buildSwapApprovalTx({
+    required String fromToken,
+    required String amountInRaw,
+  }) async {
+    final response = await _dio.post('swap/build-approval', data: {
+      'fromToken': fromToken,
+      'amountInRaw': amountInRaw,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getSwapStatus() async {
+    final response = await _dio.get('swap/status');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<List<dynamic>> getSwapHistory({String? wallet}) async {
+    final response = await _dio.get(
+      'swap/history',
+      queryParameters: {
+        if (wallet != null && wallet.isNotEmpty) 'wallet': wallet,
+      },
+    );
     final data = response.data;
     if (data is List) return data;
     return [];

@@ -4,7 +4,7 @@ import 'dart:js_interop_unsafe';
 bool get hasInjectedProvider => globalContext.has('ethereum');
 
 /// Extract a human-readable message from a JS error object.
-/// MetaMask errors are typically `{ code: number, message: string, data?: { message } }`.
+/// Injected EVM wallet errors are typically `{ code: number, message: string, data?: { message } }`.
 String _extractJsErrorMessage(Object e) {
   try {
     if (e is JSObject) {
@@ -85,5 +85,61 @@ Future<String?> sendTransactionViaInjected(Map<String, dynamic> tx) async {
     return (result as JSString).toDart;
   } catch (e) {
     throw Exception(_extractJsErrorMessage(e));
+  }
+}
+
+Future<void> switchInjectedChain({
+  required int chainId,
+  required String chainName,
+  required List<String> rpcUrls,
+  required String symbol,
+  required List<String> blockExplorerUrls,
+}) async {
+  if (!hasInjectedProvider) return;
+
+  final ethereum = globalContext['ethereum'] as JSObject;
+  final hexChainId = '0x${chainId.toRadixString(16)}';
+
+  try {
+    final switchParams = {
+      'method': 'wallet_switchEthereumChain',
+      'params': [
+        {'chainId': hexChainId}
+      ],
+    }.jsify();
+    final promise =
+        ethereum.callMethod<JSPromise>('request'.toJS, switchParams);
+    await promise.toDart;
+  } catch (e) {
+    final message = _extractJsErrorMessage(e);
+    final knownMissingChain = message.contains('4902') ||
+        message.toLowerCase().contains('unrecognized chain');
+    if (!knownMissingChain) {
+      throw Exception(message);
+    }
+
+    final addParams = {
+      'method': 'wallet_addEthereumChain',
+      'params': [
+        {
+          'chainId': hexChainId,
+          'chainName': chainName,
+          'rpcUrls': rpcUrls,
+          'nativeCurrency': {
+            'name': symbol,
+            'symbol': symbol,
+            'decimals': 18,
+          },
+          'blockExplorerUrls': blockExplorerUrls,
+        }
+      ],
+    }.jsify();
+
+    try {
+      final promise = ethereum.callMethod<JSPromise>('request'.toJS, addParams);
+      await promise.toDart;
+    } catch (addError) {
+      throw Exception(_extractJsErrorMessage(addError));
+    }
   }
 }

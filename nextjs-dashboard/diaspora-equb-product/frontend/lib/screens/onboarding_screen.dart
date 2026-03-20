@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/auth_provider.dart';
-import '../config/app_config.dart';
 import '../config/theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -13,8 +14,6 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
-  final _faydaTokenController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
   int _currentPage = 0;
 
   static const _totalPages = 4;
@@ -22,7 +21,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _pageController.dispose();
-    _faydaTokenController.dispose();
     super.dispose();
   }
 
@@ -62,8 +60,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       context,
                       icon: Icons.people_alt_rounded,
                       title: 'Join Trusted Equb\nSavings Circles',
-                      body:
-                          'Equb is a centuries-old Ethiopian tradition where '
+                      body: 'Equb is a centuries-old Ethiopian tradition where '
                           'a trusted group pools money and takes turns '
                           'receiving the full pot. Now it lives on-chain — '
                           'open to the diaspora worldwide.',
@@ -81,8 +78,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       context,
                       icon: Icons.trending_up_rounded,
                       title: 'Build Credit,\nClimb Tiers',
-                      body:
-                          'Complete rounds on time to grow your on-chain '
+                      body: 'Complete rounds on time to grow your on-chain '
                           'credit score. Higher tiers unlock larger pools '
                           'and lower collateral requirements.',
                     ),
@@ -106,7 +102,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       decoration: BoxDecoration(
                         color: isActive
                             ? AppTheme.buttonColor(context)
-                            : AppTheme.textTertiaryColor(context).withValues(alpha: 0.35),
+                            : AppTheme.textTertiaryColor(context)
+                                .withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     );
@@ -187,7 +184,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ],
             ),
-            child: Icon(icon, size: 44, color: AppTheme.buttonTextColor(context)),
+            child:
+                Icon(icon, size: 44, color: AppTheme.buttonTextColor(context)),
           ),
           const SizedBox(height: 36),
           Text(
@@ -212,12 +210,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // ─── Slide 4: wallet connect + auth ──────────────────────────────────
+  // ─── Slide 4: onboarding handoff ─────────────────────────────────────
 
   Widget _buildConnectSlide() {
-    final auth = context.watch<AuthProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Column(
@@ -247,7 +242,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 16),
 
           Text(
-            'Connect & Verify',
+            'Finish Onboarding',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.w800,
@@ -257,7 +252,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Link your wallet and verify your identity\nto start participating in Equb circles.',
+            'Create your account or sign in next. Wallet connection becomes optional and can be managed later from your profile.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppTheme.textSecondaryColor(context),
@@ -265,75 +260,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
           ),
           const SizedBox(height: 24),
-
-          // Error banner
-          if (auth.errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.dangerColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline_rounded,
-                        size: 18, color: AppTheme.dangerColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        auth.errorMessage!,
-                        style: const TextStyle(
-                            color: AppTheme.dangerColor, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Wallet Connection Card ──
           _buildOptionCard(
             context: context,
-            isDark: isDark,
-            icon: Icons.account_balance_wallet_rounded,
-            iconBgColor: AppTheme.accentYellow,
-            iconColor: AppTheme.textPrimary,
-            title: 'Connect Wallet',
-            subtitle: 'MetaMask or WalletConnect — you keep full custody.',
+            isDark: Theme.of(context).brightness == Brightness.dark,
+            icon: Icons.login_rounded,
+            iconBgColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+            iconColor: AppTheme.primaryColor,
+            title: 'Sign in or sign up next',
+            subtitle:
+                'Email/password and Google sign-in come first. Wallet setup stays optional and can be added later from Profile.',
             trailing: Icon(
               Icons.arrow_forward_ios_rounded,
               size: 16,
               color: AppTheme.textTertiaryColor(context),
             ),
-            isLoading: auth.status == AuthStatus.loading,
-            onTap: auth.status == AuthStatus.loading
-                ? null
-                : () => auth.loginWithWalletOnly(),
+            onTap: () async {
+              await context.read<AuthProvider>().completeOnboarding();
+              if (!mounted) {
+                return;
+              }
+              context.go('/auth');
+            },
           ),
-          const SizedBox(height: 12),
-
-          // ── Fayda e-ID Card ──
-          _buildFaydaSection(auth, isDark),
-
-          // Dev bypass
-          if (AppConfig.devBypassFayda) ...[
-            const SizedBox(height: 16),
-            _buildOptionCard(
-              context: context,
-              isDark: isDark,
-              icon: Icons.developer_mode,
-              iconBgColor: AppTheme.dangerColor.withValues(alpha: 0.12),
-              iconColor: AppTheme.dangerColor,
-              title: 'Dev: Skip to Test User',
-              subtitle: 'Bypass verification for local testing.',
-              isLoading: auth.status == AuthStatus.loading,
-              onTap: auth.status == AuthStatus.loading
-                  ? null
-                  : () => auth.skipFaydaForTesting(),
-            ),
-          ],
           const SizedBox(height: 8),
         ],
       ),
@@ -417,157 +365,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               const SizedBox(width: 8),
               trailing,
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Fayda e-ID form (collapsed inside slide 4) ─────────────────────
-
-  Widget _buildFaydaSection(AuthProvider auth, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.cardColor(context),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadiusSmall),
-        border: Border.all(
-          color: AppTheme.textHintColor(context).withValues(alpha: 0.18),
-        ),
-        boxShadow: AppTheme.subtleShadowFor(context),
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.fingerprint_rounded,
-                    size: 24,
-                    color: isDark ? AppTheme.darkPrimary : AppTheme.primaryColor,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fayda e-ID Verification',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimaryColor(context),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Full identity verification with national ID.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textTertiaryColor(context),
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _faydaTokenController,
-              decoration: InputDecoration(
-                hintText: 'Enter your Fayda token',
-                prefixIcon: Icon(
-                  Icons.vpn_key_rounded,
-                  size: 18,
-                  color: AppTheme.textTertiaryColor(context),
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: isDark ? AppTheme.darkCard : AppTheme.backgroundLight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppTheme.textHintColor(context).withValues(alpha: 0.25),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                      color: AppTheme.buttonColor(context), width: 1.5),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              ),
-              style: TextStyle(
-                fontSize: 14,
-                color: AppTheme.textPrimaryColor(context),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your Fayda token';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: auth.status == AuthStatus.loading
-                    ? null
-                    : () async {
-                        if (_formKey.currentState!.validate()) {
-                          await auth.verifyFayda(
-                              _faydaTokenController.text.trim());
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.buttonColor(context),
-                  foregroundColor: AppTheme.buttonTextColor(context),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                  padding: EdgeInsets.zero,
-                ),
-                child: auth.status == AuthStatus.loading
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.buttonTextColor(context),
-                        ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.verified_user_rounded, size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Verify with Fayda',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
           ],
         ),
       ),

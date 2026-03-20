@@ -13,12 +13,20 @@ import * as path from 'path';
  *   TEST_USDT_ADDRESS=0x...
  */
 async function main() {
+  const expectedTestnetChainId = 102031;
+  if (network.config.chainId !== expectedTestnetChainId) {
+    throw new Error(
+      `Refusing to deploy test tokens on chain ${network.config.chainId}. This script is testnet-only and must run on creditcoinTestnet (102031).`,
+    );
+  }
+
   const [deployer] = await ethers.getSigners();
   console.log('Deploying test tokens with account:', deployer.address);
   console.log('Network:', network.name, '(chain', network.config.chainId, ')');
 
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log('Account balance:', ethers.formatEther(balance), 'CTC\n');
+  console.log('Safety check: deploying test tokens to Creditcoin TESTNET (102031)');
 
   if (balance === 0n) {
     console.error(

@@ -46,6 +46,41 @@ export class TokenController {
     );
   }
 
+  @Get('allowance')
+  @ApiOperation({ summary: 'Get ERC-20 allowance for a spender' })
+  @ApiQuery({ name: 'walletAddress', description: 'EVM wallet address' })
+  @ApiQuery({ name: 'spender', description: 'Spender contract address' })
+  @ApiQuery({
+    name: 'token',
+    required: false,
+    description: 'Token symbol (USDC, USDT)',
+  })
+  @ApiQuery({
+    name: 'tokenAddress',
+    required: false,
+    description: 'ERC-20 contract address (overrides symbol lookup)',
+  })
+  @ApiQuery({
+    name: 'requiredAmountRaw',
+    required: false,
+    description: 'Optional raw amount to compare against allowance',
+  })
+  getAllowance(
+    @Query('walletAddress') walletAddress: string,
+    @Query('spender') spender: string,
+    @Query('token') token?: string,
+    @Query('tokenAddress') tokenAddress?: string,
+    @Query('requiredAmountRaw') requiredAmountRaw?: string,
+  ) {
+    return this.tokenService.getAllowance(
+      walletAddress,
+      spender,
+      token || 'USDC',
+      tokenAddress,
+      requiredAmountRaw,
+    );
+  }
+
   @Get('transactions')
   @ApiOperation({ summary: 'Get recent token transactions for a wallet' })
   @ApiQuery({ name: 'walletAddress', description: 'EVM wallet address' })

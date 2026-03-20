@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
 import '../config/theme.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -13,6 +15,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
   late Animation<double> _scaleAnim;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -34,6 +37,22 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
     _controller.forward();
+    _scheduleTransition();
+  }
+
+  void _scheduleTransition() {
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+
+    Future<void>.delayed(const Duration(milliseconds: 2200), () {
+      if (!mounted || _navigated) {
+        return;
+      }
+      _navigated = true;
+      context.go('/onboarding');
+    });
   }
 
   @override

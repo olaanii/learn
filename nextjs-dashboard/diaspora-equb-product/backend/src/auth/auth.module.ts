@@ -7,8 +7,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { FaydaService } from './fayda.service';
+import { FirebaseAdminService } from './firebase-admin.service';
 import { JwtStrategy } from './jwt.strategy';
 import { Identity } from '../entities/identity.entity';
+import { WalletChallenge } from '../entities/wallet-challenge.entity';
 
 @Module({
   imports: [
@@ -24,10 +26,10 @@ import { Identity } from '../entities/identity.entity';
         },
       }),
     }),
-    TypeOrmModule.forFeature([Identity]),
+    TypeOrmModule.forFeature([Identity, WalletChallenge]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, FaydaService, JwtStrategy],
+  providers: [AuthService, FaydaService, FirebaseAdminService, JwtStrategy],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

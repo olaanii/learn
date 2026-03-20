@@ -17,10 +17,12 @@ Vercel does not run Postgres. Use a hosted Postgres and set **one** of:
 2. Create a **new project** (e.g. “e-equb-backend”), choose region, and create the project.
 3. On the project **Dashboard**, open the **Connection details** (or “Connection string”) section.
 4. Copy the **connection string**. It looks like:
-   ```text
-   postgresql://USER:PASSWORD@ep-xxx-xxx.region.aws.neon.tech/neondb?sslmode=require
-   ```
-   Use this as **DATABASE_URL** in your Vercel backend project (Environment Variables). If Neon shows separate host/port/user/password, you can use those as **DATABASE_HOST**, **DATABASE_PORT**, **DATABASE_USERNAME**, **DATABASE_PASSWORD**, **DATABASE_NAME** instead.
+
+  ```text
+  postgresql://USER:PASSWORD@ep-xxx-xxx.region.aws.neon.tech/neondb?sslmode=require
+  ```  
+
+  Use this as **DATABASE_URL** in your Vercel backend project (Environment Variables). If Neon shows separate host/port/user/password, you can use those as **DATABASE_HOST**, **DATABASE_PORT**, **DATABASE_USERNAME**, **DATABASE_PASSWORD**, **DATABASE_NAME** instead.
 5. (Optional) Run your migrations against this DB once (e.g. from your machine with `DATABASE_URL` set, run `npm run migration:run` from the backend folder).
 
 Create the database and run migrations locally against that DB (or from CI) before deploying. On Vercel the app uses `migrationsRun: true` in production if you rely on that.
@@ -39,7 +41,7 @@ Create the database and run migrations locally against that DB (or from CI) befo
 In the backend project **Settings → Environment Variables**, add (for **Production** and optionally Preview):
 
 | Name | Required | Example / note |
-|------|----------|----------------|
+| ---- | -------- | -------------- |
 | **DATABASE_URL** or **DATABASE_*** | Yes | Postgres URL or host/port/user/password/database |
 | **JWT_SECRET** | Yes | 32+ characters |
 | **RPC_URL** | Yes | e.g. `https://rpc.cc3-testnet.creditcoin.network` |
@@ -56,19 +58,36 @@ In the backend project **Settings → Environment Variables**, add (for **Produc
 | **ACHIEVEMENT_BADGE_ADDRESS** | No | … |
 | **TEST_USDC_ADDRESS** / **TEST_USDT_ADDRESS** | No | If you use test tokens |
 | **FAYDA_API_URL** / **FAYDA_API_KEY** | No | For identity; leave empty for mock |
+| **FIREBASE_PROJECT_ID** | Yes for Firebase auth | `e-equbdigital` |
+| **FIREBASE_CLIENT_EMAIL** | Yes for Firebase auth | From Firebase service account |
+| **FIREBASE_PRIVATE_KEY** | Yes for Firebase auth | Full private key, preserve newlines |
 | **SENTRY_DSN** | No | Optional error tracking |
 | **NODE_ENV** | No | `production` |
 
 Copy values from your root `.env` (contract addresses, RPC, JWT, etc.). Set **CORS_ORIGINS** to your frontend origin (e.g. the Vercel frontend URL).
 
+For Firebase email/password and Google sign-in to work in production, the backend Vercel project must have all three Firebase Admin variables:
+
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+
+Vercel environment variable formatting for `FIREBASE_PRIVATE_KEY`:
+
+- Paste the full key exactly as one value.
+- If you store it with escaped newlines like `\n`, the backend already converts them back to real newlines at runtime.
+- The values should match the Firebase service account for the same project as the frontend app, currently `e-equbdigital`.
+
 ## 4. Deploy
 
 - **From Git**: push to the connected branch; Vercel builds and deploys.
 - **From CLI** (from the **backend** directory):
+
   ```bash
   cd nextjs-dashboard/diaspora-equb-product/backend
   npx vercel --prod
   ```
+
   Link to the backend project when prompted. Ensure **Root Directory** for this project is the `backend` folder (or deploy from inside `backend` so the project root is correct).
 
 ## 5. API URL for the frontend

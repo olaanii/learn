@@ -112,7 +112,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
+          flutter-version: '3.41.4'
           channel: stable
 
       - name: Get dependencies
@@ -132,16 +132,20 @@ jobs:
       - name: Build APK (debug)
         run: >
           flutter build apk --debug
-          --dart-define=API_BASE_URL=https://rpc.cc3-testnet.creditcoin.network
-          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          --dart-define=API_BASE_URL=https://equb-db.vercel.app/api
+          --dart-define=PRIVY_APP_ID=placeholder
+          --dart-define=PRIVY_APP_CLIENT_ID=placeholder
           --dart-define=CHAIN_ID=102031
+          --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
 
       - name: Build Web (release – verifies Vercel build)
         run: >
-          flutter build web --release --web-renderer canvaskit
-          --dart-define=API_BASE_URL=https://rpc.cc3-testnet.creditcoin.network
-          --dart-define=WALLETCONNECT_PROJECT_ID=placeholder
+          flutter build web --release
+          --dart-define=API_BASE_URL=https://equb-db.vercel.app/api
+          --dart-define=PRIVY_APP_ID=placeholder
+          --dart-define=PRIVY_APP_CLIENT_ID=placeholder
           --dart-define=CHAIN_ID=102031
+          --dart-define=RPC_URL=https://rpc.cc3-testnet.creditcoin.network
         continue-on-error: false
 
   # ── Docker Build ─────────────────────────────────────

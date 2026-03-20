@@ -11,15 +11,26 @@ class SwapQuoteDto {
 class BuildSwapTxDto {
   fromToken: string;
   toToken: string;
-  amountIn: string;
-  minAmountOut: string;
+  amountInRaw: string;
+  minAmountOutRaw: string;
+}
+
+class BuildSwapApprovalDto {
+  fromToken: string;
+  amountInRaw: string;
 }
 
 @ApiTags('Swap')
 @ApiBearerAuth()
-@Controller('api/swap')
+@Controller('swap')
 export class SwapController {
   constructor(private readonly swapService: SwapService) {}
+
+  @Get('status')
+  @ApiOperation({ summary: 'Get swap router readiness and supported tokens' })
+  async getStatus() {
+    return this.swapService.getStatus();
+  }
 
   @Post('quote')
   @ApiOperation({ summary: 'Get swap quote with price impact and fee' })
@@ -33,9 +44,15 @@ export class SwapController {
     return this.swapService.buildSwapTx(
       dto.fromToken,
       dto.toToken,
-      dto.amountIn,
-      dto.minAmountOut,
+      dto.amountInRaw,
+      dto.minAmountOutRaw,
     );
+  }
+
+  @Post('build-approval')
+  @ApiOperation({ summary: 'Build unsigned approval transaction for token-to-CTC swaps' })
+  async buildSwapApproval(@Body() dto: BuildSwapApprovalDto) {
+    return this.swapService.buildApprovalTx(dto.fromToken, dto.amountInRaw);
   }
 
   @Get('reserves')

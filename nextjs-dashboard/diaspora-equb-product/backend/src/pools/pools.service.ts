@@ -647,7 +647,7 @@ export class PoolsService implements OnModuleInit {
 
   /**
    * Build unsigned TX to create a new Equb pool on-chain.
-   * The user signs this with their wallet via WalletConnect.
+    * The user signs this with their connected wallet.
    * All pools use native CTC/tCTC exclusively.
    */
   async buildCreatePool(

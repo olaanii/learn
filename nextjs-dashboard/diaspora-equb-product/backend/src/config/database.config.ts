@@ -8,12 +8,14 @@ export const getDatabaseConfig = (
   const isProduction =
     configService.get<string>('NODE_ENV') === 'production';
   const databaseUrl = configService.get<string>('DATABASE_URL', '');
+  const databaseSsl = configService.get<boolean>('DATABASE_SSL', isProduction);
 
   const base = {
     autoLoadEntities: true,
     synchronize: !isProduction,
     migrationsRun: isProduction,
     migrations: [join(__dirname, '..', 'migrations', '*{.ts,.js}')],
+    ssl: databaseSsl ? { rejectUnauthorized: false } : false,
     logging: !isProduction,
   };
 

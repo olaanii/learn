@@ -235,8 +235,88 @@ export class TokenService {
     }
   }
 
+  async getAllowance(
+    walletAddress: string,
+    spender: string,
+    tokenSymbol: string = 'USDC',
+    tokenAddress?: string,
+    requiredAmountRaw?: string,
+  ): Promise<{
+    walletAddress: string;
+    spender: string;
+    token: string;
+    symbol: string;
+    tokenAddress: string;
+    allowance: string;
+    allowanceRaw: string;
+    decimals: number;
+    hasSufficientAllowance: boolean;
+  }> {
+    const zeroAddress = '0x0000000000000000000000000000000000000000';
+    let resolvedTokenAddress = tokenAddress;
+    let symbol = tokenSymbol.toUpperCase();
+    let decimals = 6;
+
+    if (!resolvedTokenAddress || resolvedTokenAddress.toLowerCase() === zeroAddress) {
+      resolvedTokenAddress = this.getTokenAddress(tokenSymbol);
+    }
+
+    try {
+      const contract = new ethers.Contract(
+        resolvedTokenAddress,
+        [
+          'function allowance(address owner, address spender) view returns (uint256)',
+          'function decimals() view returns (uint8)',
+          'function symbol() view returns (string)',
+        ],
+        this.web3Service.getProvider(),
+      );
+
+      const [allowance, onChainDecimals, onChainSymbol] = await Promise.all([
+        contract.allowance(walletAddress, spender),
+        contract.decimals().catch(() => decimals),
+        contract.symbol().catch(() => symbol),
+      ]);
+
+      decimals = Number(onChainDecimals);
+      symbol = (onChainSymbol || symbol).toString().toUpperCase();
+      const allowanceRaw = allowance.toString();
+      const required =
+        requiredAmountRaw != null && /^\d+$/.test(requiredAmountRaw)
+            ? BigInt(requiredAmountRaw)
+            : 0n;
+
+      return {
+        walletAddress,
+        spender,
+        token: symbol,
+        symbol,
+        tokenAddress: resolvedTokenAddress,
+        allowance: ethers.formatUnits(allowance, decimals),
+        allowanceRaw,
+        decimals,
+        hasSufficientAllowance: BigInt(allowanceRaw) >= required,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch allowance for ${walletAddress} on ${resolvedTokenAddress}: ${error.message}`,
+      );
+      return {
+        walletAddress,
+        spender,
+        token: symbol,
+        symbol,
+        tokenAddress: resolvedTokenAddress,
+        allowance: '0',
+        allowanceRaw: '0',
+        decimals,
+        hasSufficientAllowance: false,
+      };
+    }
+  }
+
   /**
-   * Get full transaction history for a wallet so it matches what MetaMask shows.
+    * Get full transaction history for a wallet so it matches wallet activity views.
    * Uses Blockscout API (all on-chain txs: native CTC, contract calls, failed/success).
    * Falls back to ERC-20 Transfer events only if Blockscout is unavailable.
    */
@@ -340,7 +420,7 @@ export class TokenService {
   }
 
   /**
-   * Fetch all transactions for an address from Blockscout (same data as MetaMask activity).
+    * Fetch all transactions for an address from Blockscout (same data as wallet activity views).
    * Includes native CTC transfers, contract calls, and failed txs.
    */
   private async getTransactionsFromBlockscout(

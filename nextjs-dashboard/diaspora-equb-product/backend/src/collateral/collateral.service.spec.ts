@@ -24,7 +24,7 @@ describe('CollateralService', () => {
     getCollateralVault: jest.fn().mockReturnValue(mockCollateralVault),
     getProvider: jest.fn().mockReturnValue({}),
     getDeployerSigner: jest.fn().mockReturnValue({
-      address: '0xDeployer',
+      address: '0x3000000000000000000000000000000000000003',
     }),
     buildUnsignedTx: jest.fn((to, data, value, gas) => ({
       to,
@@ -37,8 +37,8 @@ describe('CollateralService', () => {
 
   const mockConfigService = {
     get: jest.fn((key: string, defaultVal?: string) => {
-      if (key === 'TEST_USDC_ADDRESS') return '0xUSDC';
-      if (key === 'TEST_USDT_ADDRESS') return '0xUSDT';
+      if (key === 'TEST_USDC_ADDRESS') return '0x1000000000000000000000000000000000000001';
+      if (key === 'TEST_USDT_ADDRESS') return '0x2000000000000000000000000000000000000002';
       return defaultVal;
     }),
   };
@@ -93,9 +93,11 @@ describe('CollateralService', () => {
 
   describe('buildDepositToken', () => {
     it('should return unsigned TX for ERC-20 token deposit', async () => {
+      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
+
       const result = await service.buildDepositToken('100', 'USDC');
-      expect(result.to).toBe('0xUSDC');
-      expect(result.tokenAddress).toBe('0xUSDC');
+      expect(result.to).toBe('0x1000000000000000000000000000000000000001');
+      expect(result.tokenAddress).toBe('0x1000000000000000000000000000000000000001');
     });
   });
 
@@ -124,6 +126,7 @@ describe('CollateralService', () => {
   describe('releaseTokenCollateral', () => {
     it('should throw NotFoundException if no collateral exists', async () => {
       mockCollateralRepo.findOne.mockResolvedValue(null);
+      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
       await expect(
         service.releaseTokenCollateral('0xUser', '100', 'USDC'),
       ).rejects.toThrow(NotFoundException);
@@ -135,6 +138,7 @@ describe('CollateralService', () => {
         lockedAmount: '50',
         availableBalance: '0',
       });
+      jest.spyOn(service as any, 'getTokenDecimals').mockResolvedValue(6);
       await expect(
         service.releaseTokenCollateral('0xUser', '100', 'USDC'),
       ).rejects.toThrow(BadRequestException);

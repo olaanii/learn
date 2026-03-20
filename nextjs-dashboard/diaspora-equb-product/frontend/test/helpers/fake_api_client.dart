@@ -13,7 +13,8 @@ class FakeApiClient extends ApiClient {
   bool verifyFaydaShouldThrow = false;
 
   Map<String, dynamic> walletChallengeResponse = {
-    'message': 'Sign this message to log in to Diaspora Equb.\n\nWallet: 0xFake\nNonce: abc123\nTimestamp: 2026-01-01T00:00:00Z',
+    'message':
+        'Sign this message to log in to Diaspora Equb.\n\nWallet: 0xFake\nNonce: abc123\nTimestamp: 2026-01-01T00:00:00Z',
     'nonce': 'abc123',
   };
 
@@ -93,9 +94,14 @@ class FakeApiClient extends ApiClient {
     'value': '1000',
     'chainId': 102031,
   };
-  Map<String, dynamic> fromCreationTxResponse = {'id': 'pool-1', 'status': 'active'};
+  Map<String, dynamic> fromCreationTxResponse = {
+    'id': 'pool-1',
+    'status': 'active'
+  };
   Map<String, dynamic> closeActiveRoundResponse = {'status': 'closed'};
-  Map<String, dynamic> pickWinnerResponse = {'winner': {'wallet': '0xWinner'}};
+  Map<String, dynamic> pickWinnerResponse = {
+    'winner': {'wallet': '0xWinner'}
+  };
   bool poolApiShouldThrow = false;
 
   @override
@@ -145,7 +151,10 @@ class FakeApiClient extends ApiClient {
 
   @override
   Future<Map<String, dynamic>> getEligibleWinners(String poolId) async {
-    return {'eligible': ['0xMember1', '0xMember2'], 'roundNumber': 1};
+    return {
+      'eligible': ['0xMember1', '0xMember2'],
+      'roundNumber': 1
+    };
   }
 
   @override
@@ -180,6 +189,62 @@ class FakeApiClient extends ApiClient {
     'value': '0',
     'chainId': 102031,
   };
+  Map<String, dynamic> swapStatusResponse = {
+    'routerConfigured': true,
+    'routerAddress': '0x6a14Da606EE13B706B60370E501120AcB47b29d8',
+    'nativeSymbol': 'tCTC',
+    'supportedTokens': [
+      {
+        'symbol': 'USDC',
+        'address': '0xE7737c6152917b14eC82C81De4cA1C8851B995d1',
+      },
+      {
+        'symbol': 'USDT',
+        'address': '0xF8F273671D2CeBF9d2B5cF130c5aCFF1943826d7',
+      },
+    ],
+  };
+  Map<String, dynamic> swapQuoteResponse = {
+    'amountIn': '10',
+    'amountInRaw': '10000000',
+    'estimatedOutput': '9.9',
+    'estimatedOutputRaw': '9900000000000000000',
+    'priceImpactPct': '0.42',
+    'fee': '0.03',
+    'feeRaw': '30000',
+    'inputDecimals': 6,
+    'outputDecimals': 18,
+  };
+  Map<String, dynamic> swapApprovalTxResponse = {
+    'to': '0xE7737c6152917b14eC82C81De4cA1C8851B995d1',
+    'data': '0xApprove',
+    'value': '0',
+    'chainId': 102031,
+    'estimatedGas': '120000',
+  };
+  Map<String, dynamic> swapBuildTxResponse = {
+    'to': '0x6a14Da606EE13B706B60370E501120AcB47b29d8',
+    'data': '0xSwap',
+    'value': '0',
+    'chainId': 102031,
+    'estimatedGas': '300000',
+  };
+  Map<String, dynamic> tokenAllowanceResponse = {
+    'walletAddress': '0xFakeWallet',
+    'spender': '0x6a14Da606EE13B706B60370E501120AcB47b29d8',
+    'token': 'USDC',
+    'symbol': 'USDC',
+    'tokenAddress': '0xE7737c6152917b14eC82C81De4cA1C8851B995d1',
+    'allowance': '0',
+    'allowanceRaw': '0',
+    'decimals': 6,
+    'hasSufficientAllowance': false,
+  };
+  List<Map<String, dynamic>> swapHistoryResponse = [];
+  int buildSwapApprovalCallCount = 0;
+  int buildSwapTxCallCount = 0;
+  int tokenAllowanceCallCount = 0;
+  bool swapApiShouldThrow = false;
   bool walletApiShouldThrow = false;
 
   @override
@@ -236,5 +301,62 @@ class FakeApiClient extends ApiClient {
     String network = 'ERC-20',
   }) async {
     return buildTransferResponse;
+  }
+
+  // ── Swap ────────────────────────────────────────────────────────────────
+  @override
+  Future<Map<String, dynamic>> getSwapStatus() async {
+    if (swapApiShouldThrow) throw Exception('Swap status failed');
+    return swapStatusResponse;
+  }
+
+  @override
+  Future<Map<String, dynamic>> getSwapQuote({
+    required String fromToken,
+    required String toToken,
+    required String amountIn,
+  }) async {
+    if (swapApiShouldThrow) throw Exception('Swap quote failed');
+    return swapQuoteResponse;
+  }
+
+  @override
+  Future<Map<String, dynamic>> buildSwapApprovalTx({
+    required String fromToken,
+    required String amountInRaw,
+  }) async {
+    buildSwapApprovalCallCount++;
+    if (swapApiShouldThrow) throw Exception('Swap approval build failed');
+    return swapApprovalTxResponse;
+  }
+
+  @override
+  Future<Map<String, dynamic>> buildSwapTx({
+    required String fromToken,
+    required String toToken,
+    required String amountInRaw,
+    required String minAmountOutRaw,
+  }) async {
+    buildSwapTxCallCount++;
+    if (swapApiShouldThrow) throw Exception('Swap tx build failed');
+    return swapBuildTxResponse;
+  }
+
+  @override
+  Future<List<dynamic>> getSwapHistory({String? wallet}) async {
+    return swapHistoryResponse;
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTokenAllowance({
+    required String walletAddress,
+    required String spender,
+    required String token,
+    String? tokenAddress,
+    String? requiredAmountRaw,
+  }) async {
+    tokenAllowanceCallCount++;
+    if (swapApiShouldThrow) throw Exception('Allowance lookup failed');
+    return tokenAllowanceResponse;
   }
 }

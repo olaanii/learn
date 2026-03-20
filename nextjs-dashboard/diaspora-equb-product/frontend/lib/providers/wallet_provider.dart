@@ -158,7 +158,7 @@ class WalletProvider extends ChangeNotifier {
 
   // ─── Wallet Signing Methods ─────────────────────────────────────────────────
 
-  /// Get an unsigned TX from the backend, then sign & send it via WalletConnect.
+  /// Get an unsigned TX from the backend, then sign & send it via the connected wallet.
   /// Returns the TX hash on success, or null on failure.
   Future<String?> signAndSend(Map<String, dynamic> unsignedTx) async {
     _startLoading();
@@ -167,8 +167,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Please connect via WalletConnect.';
+        _errorMessage = 'Wallet not connected. Please connect your wallet.';
         _stopLoading();
         return null;
       }
@@ -223,8 +222,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _stopLoading();
         return null;
       }
@@ -255,8 +253,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _stopLoading();
         return null;
       }
@@ -292,8 +289,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _stopLoading();
         return null;
       }
@@ -361,7 +357,7 @@ class WalletProvider extends ChangeNotifier {
     }
   }
 
-  /// Build unsigned transfer TX, then sign and send via WalletConnect (MetaMask).
+  /// Build unsigned transfer TX, then sign and send via the connected wallet.
   /// Returns the transaction hash on success, or null on failure.
   Future<String?> buildAndSignTransfer({
     required String from,
@@ -375,8 +371,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _stopLoading();
         return null;
       }
@@ -401,7 +396,7 @@ class WalletProvider extends ChangeNotifier {
     }
   }
 
-  /// Build unsigned withdraw TX, then sign and send via WalletConnect (MetaMask).
+  /// Build unsigned withdraw TX, then sign and send via the connected wallet.
   /// Returns the transaction hash on success, or null on failure.
   Future<String?> buildAndSignWithdraw({
     required String from,
@@ -416,8 +411,7 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       if (!_walletService.isConnected) {
-        _errorMessage =
-            'Wallet not connected. Connect via WalletConnect to sign.';
+        _errorMessage = 'Wallet not connected. Connect your wallet to sign.';
         _stopLoading();
         return null;
       }
@@ -456,7 +450,8 @@ class WalletProvider extends ChangeNotifier {
 
   /// Load all wallet data (USDC, USDT, optional native tCTC/CTC, transactions, rates).
   /// Pass [nativeSymbol] (e.g. from NetworkProvider.nativeSymbol) to load native balance for pool status.
-  Future<void> loadAll(String walletAddress, {String? token, String? nativeSymbol}) async {
+  Future<void> loadAll(String walletAddress,
+      {String? token, String? nativeSymbol}) async {
     final tasks = <Future<void>>[
       loadBalance(walletAddress, token: 'USDC'),
       loadBalance(walletAddress, token: 'USDT'),

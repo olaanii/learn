@@ -38,13 +38,13 @@ describe('TokenController', () => {
 
       const result = await controller.getBalance('0xWallet', 'USDC');
       expect(result.balance).toBe('100.0');
-      expect(mockTokenService.getBalance).toHaveBeenCalledWith('0xWallet', 'USDC');
+      expect(mockTokenService.getBalance).toHaveBeenCalledWith('0xWallet', 'USDC', undefined);
     });
 
     it('should default to USDC if no token specified', async () => {
       mockTokenService.getBalance.mockResolvedValue({ balance: '50.0', symbol: 'USDC' });
       await controller.getBalance('0xWallet', undefined);
-      expect(mockTokenService.getBalance).toHaveBeenCalledWith('0xWallet', 'USDC');
+      expect(mockTokenService.getBalance).toHaveBeenCalledWith('0xWallet', 'USDC', undefined);
     });
   });
 
