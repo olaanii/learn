@@ -1,0 +1,3 @@
+haa a = 10
+haa b = 4
+maxxansi(a + b * 2)
