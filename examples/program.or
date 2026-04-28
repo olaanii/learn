@@ -1,0 +1,10 @@
+haa x: lakkoofsa = 5
+haa y: lakkoofsa = 3
+
+hojii ida(a: lakkoofsa, b: lakkoofsa) -> lakkoofsa:
+    deebi'i a + b
+
+yoo x > y:
+    maxxansi(ida(x, y))
+yookaan:
+    maxxansi(0)

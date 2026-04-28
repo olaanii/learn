@@ -1,0 +1,7 @@
+haa x = 0
+hanga x < 4:
+    yoo x == 2:
+        maxxansi(99)
+    yookaan:
+        maxxansi(x)
+    x = x + 1

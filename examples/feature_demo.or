@@ -1,0 +1,9 @@
+hojii ida(a: lakkoofsa, b: lakkoofsa) -> lakkoofsa:
+    deebi'i a + b
+
+haa tarree = [1, 2, 3]
+irra n keessa tarree:
+    yoo (n > 1) ta'e:
+        maxxansi(ida(n, 10))
+    yoo hin ta'in:
+        maxxansi(n)
